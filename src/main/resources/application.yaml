@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: study_tour
+  # springboot配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/study_tour
+    username: root
+    password: "123456"
+  servlet:
+    multipart:
+      # 文件上传限额配置
+      max-file-size: 10MB
+      max-request-size: 100MB
+
+# mybatis配置
+mybatis:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+
+# 阿里云OSS参数配置化
+aliyun:
+  oss:
+    endpoint: https://oss-cn-beijing.aliyuncs.com
+    bucketName: springbootweb-mybatis-tlias
+    region: cn-beijing
+
+#spring事务管理日志
+logging:
+  level:
+    org.springframework.jdbc.support.JdbcTransactionManager: debug

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.ChatSessionMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.ChatSession"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into chat_sessions
+        (project_id, user_account_id, leader_account_id)
+        values
+        (#{projectId}, #{userAccountId}, #{leaderAccountId})
+    </insert>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from chat_sessions where id = #{id}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.ChatSession">
+        update chat_sessions
+        set project_id = #{projectId},
+            user_account_id = #{userAccountId},
+            leader_account_id = #{leaderAccountId}
+        where id = #{id}
+    </update>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.ChatSession">
+        select id, project_id, user_account_id, leader_account_id, created_at
+        from chat_sessions
+        where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.ChatSession">
+        select id, project_id, user_account_id, leader_account_id, created_at
+        from chat_sessions
+    </select>
+
+</mapper>

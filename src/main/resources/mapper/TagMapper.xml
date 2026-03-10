@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.TagMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Tag"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into tags
+        (name, type)
+        values
+        (#{name}, #{type})
+    </insert>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from tags where id = #{id}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Tag">
+        update tags
+        set name = #{name},
+            type = #{type}
+        where id = #{id}
+    </update>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Tag">
+        select id, name, type, created_at
+        from tags
+        where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Tag">
+        select id, name, type, created_at
+        from tags
+    </select>
+
+</mapper>

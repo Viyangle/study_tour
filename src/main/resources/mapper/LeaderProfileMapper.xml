@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.LeaderProfileMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.LeaderProfile">
+        insert into leader_profiles
+        (account_id, intro, years_of_exp, base_region_code, total_rating, rating_count)
+        values
+        (#{accountId}, #{intro}, #{yearsOfExp}, #{baseRegionCode}, #{totalRating}, #{ratingCount})
+    </insert>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from leader_profiles where account_id = #{accountId}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.LeaderProfile">
+        update leader_profiles
+        set intro = #{intro},
+            years_of_exp = #{yearsOfExp},
+            base_region_code = #{baseRegionCode},
+            total_rating = #{totalRating},
+            rating_count = #{ratingCount}
+        where account_id = #{accountId}
+    </update>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.LeaderProfile">
+        select account_id, intro, years_of_exp, base_region_code, total_rating, rating_count
+        from leader_profiles
+        where account_id = #{accountId}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.LeaderProfile">
+        select account_id, intro, years_of_exp, base_region_code, total_rating, rating_count
+        from leader_profiles
+    </select>
+
+</mapper>

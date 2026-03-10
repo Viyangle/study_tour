@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.AccountTagPrefMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.AccountTagPref">
+        insert into account_tag_prefs
+        (account_id, tag_id, weight)
+        values
+        (#{accountId}, #{tagId}, #{weight})
+    </insert>
+
+    <delete id="deleteById">
+        delete from account_tag_prefs
+        where account_id = #{accountId} and tag_id = #{tagId}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.AccountTagPref">
+        update account_tag_prefs
+        set weight = #{weight}
+        where account_id = #{accountId} and tag_id = #{tagId}
+    </update>
+
+    <select id="selectById" resultType="com.viyangle.study_tour.pojo.AccountTagPref">
+        select account_id, tag_id, weight
+        from account_tag_prefs
+        where account_id = #{accountId} and tag_id = #{tagId}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.AccountTagPref">
+        select account_id, tag_id, weight
+        from account_tag_prefs
+    </select>
+
+</mapper>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.ReviewTagScoreMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.ReviewTagScore">
+        insert into review_tag_scores
+        (review_id, tag_id, score)
+        values
+        (#{reviewId}, #{tagId}, #{score})
+    </insert>
+
+    <delete id="deleteById">
+        delete from review_tag_scores
+        where review_id = #{reviewId} and tag_id = #{tagId}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.ReviewTagScore">
+        update review_tag_scores
+        set score = #{score}
+        where review_id = #{reviewId} and tag_id = #{tagId}
+    </update>
+
+    <select id="selectById" resultType="com.viyangle.study_tour.pojo.ReviewTagScore">
+        select review_id, tag_id, score
+        from review_tag_scores
+        where review_id = #{reviewId} and tag_id = #{tagId}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.ReviewTagScore">
+        select review_id, tag_id, score
+        from review_tag_scores
+    </select>
+
+</mapper>
