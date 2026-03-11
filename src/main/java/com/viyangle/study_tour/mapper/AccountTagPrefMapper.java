@@ -13,7 +13,7 @@ public interface AccountTagPrefMapper {
 
     int deleteById(@Param("accountId") Long accountId, @Param("tagId") Long tagId);
 
-    int updateById(AccountTagPref accountTagPref);
+    int deleteByAccountId(Long accountId);
 
     AccountTagPref selectById(@Param("accountId") Long accountId, @Param("tagId") Long tagId);
 

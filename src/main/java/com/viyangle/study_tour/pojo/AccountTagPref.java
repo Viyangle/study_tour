@@ -10,5 +10,4 @@ import lombok.NoArgsConstructor;
 public class AccountTagPref {
     private Long accountId;
     private Long tagId;
-    private Integer weight;
 }

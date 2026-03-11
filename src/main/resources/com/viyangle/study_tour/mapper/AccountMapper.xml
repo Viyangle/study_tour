@@ -40,4 +40,16 @@
         from accounts
     </select>
 
+    <select id="selectByPhoneAndPassword" resultType="com.viyangle.study_tour.pojo.Account">
+        select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
+        from accounts
+        where phone = #{phone} and password_hash = #{passwordHash}
+    </select>
+    <select id="selectByUsername" resultType="java.lang.Boolean">
+         select exists(select 1 from accounts where username = #{username})
+    </select>
+    <select id="selectByPhone" resultType="java.lang.Boolean">
+        select exists(select 1 from accounts where phone = #{phone})
+    </select>
+
 </mapper>

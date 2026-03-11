@@ -13,8 +13,6 @@ public interface RouteTagMapper {
 
     int deleteById(@Param("routeId") Long routeId, @Param("tagId") Long tagId);
 
-    int updateById(RouteTag routeTag);
-
     RouteTag selectById(@Param("routeId") Long routeId, @Param("tagId") Long tagId);
 
     List<RouteTag> selectAll();

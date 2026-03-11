@@ -6,30 +6,28 @@
 
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.AccountTagPref">
         insert into account_tag_prefs
-        (account_id, tag_id, weight)
+        (account_id, tag_id)
         values
-        (#{accountId}, #{tagId}, #{weight})
+        (#{accountId}, #{tagId})
     </insert>
 
     <delete id="deleteById">
         delete from account_tag_prefs
         where account_id = #{accountId} and tag_id = #{tagId}
     </delete>
-
-    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.AccountTagPref">
-        update account_tag_prefs
-        set weight = #{weight}
-        where account_id = #{accountId} and tag_id = #{tagId}
-    </update>
+    <delete id="deleteByAccountId">
+        delete from account_tag_prefs
+        where account_id = #{accountId}
+    </delete>
 
     <select id="selectById" resultType="com.viyangle.study_tour.pojo.AccountTagPref">
-        select account_id, tag_id, weight
+        select account_id, tag_id
         from account_tag_prefs
         where account_id = #{accountId} and tag_id = #{tagId}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.AccountTagPref">
-        select account_id, tag_id, weight
+        select account_id, tag_id
         from account_tag_prefs
     </select>
 

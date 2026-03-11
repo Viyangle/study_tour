@@ -10,8 +10,6 @@ import lombok.NoArgsConstructor;
 public class LeaderProfile {
     private Long accountId;
     private String intro;
-    private Integer yearsOfExp;
-    private String baseRegionCode;
     private Integer totalRating;
     private Integer ratingCount;
 }

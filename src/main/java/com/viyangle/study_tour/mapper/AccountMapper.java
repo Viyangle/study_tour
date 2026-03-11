@@ -17,5 +17,11 @@ public interface AccountMapper {
 
     Account selectById(@Param("id") Long id);
 
+    Account selectByPhoneAndPassword(@Param("phone") String phone, @Param("passwordHash") String passwordHash);
+
     List<Account> selectAll();
+
+    boolean selectByUsername();
+
+    boolean selectByPhone();
 }

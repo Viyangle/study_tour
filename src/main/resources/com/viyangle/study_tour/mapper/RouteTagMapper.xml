@@ -6,9 +6,9 @@
 
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.RouteTag">
         insert into route_tags
-        (route_id, tag_id, weight)
+        (route_id, tag_id)
         values
-        (#{routeId}, #{tagId}, #{weight})
+        (#{routeId}, #{tagId})
     </insert>
 
     <delete id="deleteById">
@@ -16,20 +16,14 @@
         where route_id = #{routeId} and tag_id = #{tagId}
     </delete>
 
-    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.RouteTag">
-        update route_tags
-        set weight = #{weight}
-        where route_id = #{routeId} and tag_id = #{tagId}
-    </update>
-
     <select id="selectById" resultType="com.viyangle.study_tour.pojo.RouteTag">
-        select route_id, tag_id, weight
+        select route_id, tag_id
         from route_tags
         where route_id = #{routeId} and tag_id = #{tagId}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.RouteTag">
-        select route_id, tag_id, weight
+        select route_id, tag_id
         from route_tags
     </select>
 
