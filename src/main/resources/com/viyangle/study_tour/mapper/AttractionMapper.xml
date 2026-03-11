@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.AttractionMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Attraction"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into attractions
+        (name, type, location, region_code, description, recommended_duration)
+        values
+        (#{name}, #{type}, #{location}, #{regionCode}, #{description}, #{recommendedDuration})
+    </insert>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from attractions where id = #{id}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Attraction">
+        update attractions
+        set name = #{name},
+            type = #{type},
+            location = #{location},
+            region_code = #{regionCode},
+            description = #{description},
+            recommended_duration = #{recommendedDuration}
+        where id = #{id}
+    </update>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Attraction">
+        select id, name, type, location, region_code, description, recommended_duration, created_at, updated_at
+        from attractions
+        where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Attraction">
+        select id, name, type, location, region_code, description, recommended_duration, created_at, updated_at
+        from attractions
+    </select>
+
+</mapper>

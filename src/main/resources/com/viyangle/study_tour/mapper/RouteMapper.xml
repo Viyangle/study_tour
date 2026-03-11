@@ -7,34 +7,23 @@
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Route"
             useGeneratedKeys="true" keyProperty="id">
         insert into routes
-        (creator_account_id, title, region_code, days, outline, detail_json)
+        (creator_account_id)
         values
-        (#{creatorAccountId}, #{title}, #{regionCode}, #{days}, #{outline}, #{detailJson})
+        (#{creatorAccountId})
     </insert>
 
     <delete id="deleteById" parameterType="java.lang.Long">
         delete from routes where id = #{id}
     </delete>
 
-    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Route">
-        update routes
-        set creator_account_id = #{creatorAccountId},
-            title = #{title},
-            region_code = #{regionCode},
-            days = #{days},
-            outline = #{outline},
-            detail_json = #{detailJson}
-        where id = #{id}
-    </update>
-
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, creator_account_id, title, region_code, days, outline, detail_json, created_at
+        select id, creator_account_id, created_at
         from routes
         where id = #{id}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, creator_account_id, title, region_code, days, outline, detail_json, created_at
+        select id, creator_account_id, created_at
         from routes
     </select>
 

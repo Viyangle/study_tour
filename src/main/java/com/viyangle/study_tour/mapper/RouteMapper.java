@@ -13,8 +13,6 @@ public interface RouteMapper {
 
     int deleteById(@Param("id") Long id);
 
-    int updateById(Route route);
-
     Route selectById(@Param("id") Long id);
 
     List<Route> selectAll();

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.RouteAttractionMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.RouteAttraction"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into route_attractions
+        (route_id, attraction_id, visit_order, visit_time, recommended_duration, notes)
+        values
+        (#{routeId}, #{attractionId}, #{visitOrder}, #{visitTime}, #{recommendedDuration}, #{notes})
+    </insert>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from route_attractions where id = #{id}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.RouteAttraction">
+        update route_attractions
+        set route_id = #{routeId},
+            attraction_id = #{attractionId},
+            visit_order = #{visitOrder},
+            visit_time = #{visitTime},
+            recommended_duration = #{recommendedDuration},
+            notes = #{notes}
+        where id = #{id}
+    </update>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.RouteAttraction">
+        select id, route_id, attraction_id, visit_order, visit_time, recommended_duration, notes, created_at
+        from route_attractions
+        where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.RouteAttraction">
+        select id, route_id, attraction_id, visit_order, visit_time, recommended_duration, notes, created_at
+        from route_attractions
+    </select>
+
+</mapper>
