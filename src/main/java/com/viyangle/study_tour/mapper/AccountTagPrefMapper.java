@@ -18,4 +18,6 @@ public interface AccountTagPrefMapper {
     AccountTagPref selectById(@Param("accountId") Long accountId, @Param("tagId") Long tagId);
 
     List<AccountTagPref> selectAll();
+
+    List<AccountTagPref> selectByAccountId(Long id);
 }

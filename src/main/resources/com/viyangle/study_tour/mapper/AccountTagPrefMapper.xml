@@ -30,5 +30,10 @@
         select account_id, tag_id
         from account_tag_prefs
     </select>
+    <select id="selectByAccountId" resultType="com.viyangle.study_tour.pojo.AccountTagPref">
+        select account_id, tag_id
+        from account_tag_prefs
+        where account_id = #{accountId}
+    </select>
 
 </mapper>

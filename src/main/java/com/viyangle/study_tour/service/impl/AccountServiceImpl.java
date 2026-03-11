@@ -61,4 +61,19 @@ public class AccountServiceImpl implements AccountService {
             leaderProfileMapper.updateById(new LeaderProfile(accountId, intro, null, null));
         }
     }
+
+    @Override
+    public Account getById(Long id) {
+        return accountMapper.selectById(id);
+    }
+
+    @Override
+    public List<AccountTagPref> getTagPrefs(Long id) {
+        return accountTagPrefMapper.selectByAccountId(id);
+    }
+
+    @Override
+    public LeaderProfile getLeaderProfile(Long id) {
+        return leaderProfileMapper.selectById(id);
+    }
 }

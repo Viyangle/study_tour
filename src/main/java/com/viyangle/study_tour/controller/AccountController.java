@@ -17,16 +17,30 @@ public class AccountController {
 
     @Autowired
     private AccountService accountService;
-    @PostMapping("/tagPrefs")
-    public Result changeTagPrefs(@RequestBody List<AccountTagPref> accountTagPrefs) {
+    @GetMapping("/{id}")
+    public Result getById(@PathVariable Long id){
+        return Result.success(accountService.getById(id));
+    }
+
+    @GetMapping("/{id}/tagPrefs")
+    public Result getTagPrefs(@PathVariable Long id){
+        return Result.success(accountService.getTagPrefs(id));
+    }
+
+    @GetMapping("/{id}/leaderProfile")
+    public Result getLeaderProfile(@PathVariable Long id){
+        return Result.success(accountService.getLeaderProfile(id));
+    }
+    @PostMapping("/{id}/tagPrefs")
+    public Result changeTagPrefs(@PathVariable Long id, @RequestBody List<AccountTagPref> accountTagPrefs) {
         log.info("修改用户标签偏好");
         accountService.changeTagPrefs(accountTagPrefs);
         return Result.success();
     }
-    @PostMapping("/intro")
-    public Result changeIntro(@RequestBody LeaderProfile leaderProfile) {
+    @PostMapping("/{id}/intro")
+    public Result changeIntro(@PathVariable Long id, @RequestBody String intro) {
         log.info("修改领队简介");
-        accountService.changeIntro(leaderProfile.getAccountId(), leaderProfile.getIntro());
+        accountService.changeIntro(id, intro);
         return Result.success();
     }
 }
