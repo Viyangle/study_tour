@@ -1,5 +1,6 @@
 package com.viyangle.study_tour.mapper;
 
+import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.ProjectMember;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -18,4 +19,6 @@ public interface ProjectMemberMapper {
     ProjectMember selectById(@Param("id") Long id);
 
     List<ProjectMember> selectAll();
+
+    List<ProjectMember> selectByProjectId(Long id);
 }

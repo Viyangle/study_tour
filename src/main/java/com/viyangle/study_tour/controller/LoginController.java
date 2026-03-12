@@ -20,9 +20,13 @@ public class LoginController {
     @PostMapping
     public Result login(@RequestBody Account account){
         log.info("用户登录, {}", account);
+        //TODO: BCrypt
+
         Account a = accountService.login(account);
 
         if (a != null){
+            //TODO: jwt token
+
             return Result.success(a);
         }
 

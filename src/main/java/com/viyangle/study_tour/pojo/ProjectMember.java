@@ -13,7 +13,6 @@ public class ProjectMember {
     private Long id;
     private Long projectId;
     private Long accountId;
-    private String memberRole;
     private String joinStatus;
     private LocalDateTime joinedAt;
 }

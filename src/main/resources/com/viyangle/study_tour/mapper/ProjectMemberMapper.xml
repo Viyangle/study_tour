@@ -7,9 +7,9 @@
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.ProjectMember"
             useGeneratedKeys="true" keyProperty="id">
         insert into project_members
-        (project_id, account_id, member_role, join_status)
+        (project_id, account_id, join_status)
         values
-        (#{projectId}, #{accountId}, #{memberRole}, #{joinStatus})
+        (#{projectId}, #{accountId}, #{joinStatus})
     </insert>
 
     <delete id="deleteById" parameterType="java.lang.Long">
@@ -20,20 +20,24 @@
         update project_members
         set project_id = #{projectId},
             account_id = #{accountId},
-            member_role = #{memberRole},
             join_status = #{joinStatus}
         where id = #{id}
     </update>
 
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.ProjectMember">
-        select id, project_id, account_id, member_role, join_status, joined_at
+        select id, project_id, account_id, join_status, joined_at
         from project_members
         where id = #{id}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.ProjectMember">
-        select id, project_id, account_id, member_role, join_status, joined_at
+        select id, project_id, account_id, join_status, joined_at
         from project_members
+    </select>
+    <select id="selectByProjectId" resultType="com.viyangle.study_tour.pojo.ProjectMember">
+        select id, project_id, account_id, join_status, joined_at
+        from project_members
+        where project_id = #{projectId}
     </select>
 
 </mapper>

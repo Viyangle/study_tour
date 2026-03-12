@@ -13,7 +13,7 @@ import java.util.List;
 
 @Slf4j
 @RestController
-@RequestMapping("/attraction")
+@RequestMapping("/attractions")
 public class AttractionController {
 
     @Autowired

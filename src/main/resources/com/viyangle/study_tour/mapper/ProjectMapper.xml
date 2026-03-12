@@ -18,14 +18,32 @@
 
     <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Project">
         update projects
-        set route_id = #{routeId},
-            owner_account_id = #{ownerAccountId},
-            leader_account_id = #{leaderAccountId},
-            title = #{title},
-            departure_date = #{departureDate},
-            max_members = #{maxMembers},
-            current_members = #{currentMembers},
-            status = #{status}
+        <set>
+            <if test="routeId != null">
+                route_id = #{routeId},
+            </if>
+            <if test="ownerAccountId != null">
+                owner_account_id = #{ownerAccountId},
+            </if>
+            <if test="leaderAccountId != null">
+                leader_account_id = #{leaderAccountId},
+            </if>
+            <if test="title != null">
+                title = #{title},
+            </if>
+            <if test="departureDate != null">
+                departure_date = #{departureDate},
+            </if>
+            <if test="maxMembers != null">
+                max_members = #{maxMembers},
+            </if>
+            <if test="currentMembers != null">
+                current_members = #{currentMembers},
+            </if>
+            <if test="status != null">
+                status = #{status},
+            </if>
+        </set>
         where id = #{id}
     </update>
 

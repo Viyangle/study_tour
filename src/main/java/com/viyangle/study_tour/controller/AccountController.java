@@ -12,7 +12,7 @@ import java.util.List;
 
 @Slf4j
 @RestController
-@RequestMapping("/account")
+@RequestMapping("/accounts")
 public class AccountController {
 
     @Autowired
@@ -41,9 +41,9 @@ public class AccountController {
         return Result.success();
     }
     @PostMapping("/{id}/intro")
-    public Result changeIntro(@PathVariable Long id, @RequestBody String intro) {
+    public Result changeIntro(@PathVariable Long id, @RequestBody LeaderProfile leaderProfile) {
         log.info("修改领队简介: {}", id);
-        accountService.changeIntro(id, intro);
+        accountService.changeIntro(id, leaderProfile.getIntro());
         return Result.success();
     }
 }

@@ -12,7 +12,7 @@ import java.util.List;
 
 @Slf4j
 @RestController
-@RequestMapping("/route")
+@RequestMapping("/routes")
 public class RouteController {
 
     @Autowired
