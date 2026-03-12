@@ -11,6 +11,5 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class Route {
     private Long id;
-    private Long creatorAccountId;
     private LocalDateTime createdAt;
 }

@@ -37,5 +37,10 @@
         select id, route_id, attraction_id, visit_order, visit_time, recommended_duration, notes, created_at
         from route_attractions
     </select>
+    <select id="selectByRouteId" resultType="com.viyangle.study_tour.pojo.RouteAttraction">
+        select id, route_id, attraction_id, visit_order, visit_time, recommended_duration, notes, created_at
+        from route_attractions
+        where route_id = #{routeId}
+    </select>
 
 </mapper>

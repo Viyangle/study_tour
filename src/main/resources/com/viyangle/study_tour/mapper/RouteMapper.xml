@@ -6,10 +6,7 @@
 
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Route"
             useGeneratedKeys="true" keyProperty="id">
-        insert into routes
-        (creator_account_id)
-        values
-        (#{creatorAccountId})
+        insert into routes(created_at) VALUES (now())
     </insert>
 
     <delete id="deleteById" parameterType="java.lang.Long">
@@ -17,13 +14,13 @@
     </delete>
 
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, creator_account_id, created_at
+        select id, created_at
         from routes
         where id = #{id}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, creator_account_id, created_at
+        select id, created_at
         from routes
     </select>
 

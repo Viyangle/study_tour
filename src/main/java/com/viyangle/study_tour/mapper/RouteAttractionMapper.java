@@ -18,4 +18,6 @@ public interface RouteAttractionMapper {
     RouteAttraction selectById(@Param("id") Long id);
 
     List<RouteAttraction> selectAll();
+
+    List<RouteAttraction> selectByRouteId(Long id);
 }

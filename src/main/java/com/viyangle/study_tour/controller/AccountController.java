@@ -19,27 +19,30 @@ public class AccountController {
     private AccountService accountService;
     @GetMapping("/{id}")
     public Result getById(@PathVariable Long id){
+        log.info("获取用户: {}", id);
         return Result.success(accountService.getById(id));
     }
 
     @GetMapping("/{id}/tagPrefs")
     public Result getTagPrefs(@PathVariable Long id){
+        log.info("获取用户标签偏好: {}", id);
         return Result.success(accountService.getTagPrefs(id));
     }
 
     @GetMapping("/{id}/leaderProfile")
     public Result getLeaderProfile(@PathVariable Long id){
+        log.info("获取领队简介: {}", id);
         return Result.success(accountService.getLeaderProfile(id));
     }
     @PostMapping("/{id}/tagPrefs")
     public Result changeTagPrefs(@PathVariable Long id, @RequestBody List<AccountTagPref> accountTagPrefs) {
-        log.info("修改用户标签偏好");
+        log.info("修改用户标签偏好: {}", id);
         accountService.changeTagPrefs(accountTagPrefs);
         return Result.success();
     }
     @PostMapping("/{id}/intro")
     public Result changeIntro(@PathVariable Long id, @RequestBody String intro) {
-        log.info("修改领队简介");
+        log.info("修改领队简介: {}", id);
         accountService.changeIntro(id, intro);
         return Result.success();
     }
