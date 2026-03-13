@@ -1,5 +1,6 @@
 package com.viyangle.study_tour.controller;
 
+import com.viyangle.study_tour.pojo.Account;
 import com.viyangle.study_tour.pojo.AccountTagPref;
 import com.viyangle.study_tour.pojo.LeaderProfile;
 import com.viyangle.study_tour.pojo.Result;
@@ -44,6 +45,13 @@ public class AccountController {
     public Result changeIntro(@PathVariable Long id, @RequestBody LeaderProfile leaderProfile) {
         log.info("修改领队简介: {}", id);
         accountService.changeIntro(id, leaderProfile.getIntro());
+        return Result.success();
+    }
+    @PostMapping("/{id}/avatar")
+    public Result changeAvatar(@PathVariable Long id, @RequestBody Account account) {
+        log.info("修改用户头像: {}", id);
+        account.setId(id);
+        accountService.changeAvatar(account);
         return Result.success();
     }
 }

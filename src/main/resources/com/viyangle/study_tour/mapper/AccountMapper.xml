@@ -18,14 +18,16 @@
 
     <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Account">
         update accounts
-        set role = #{role},
-            username = #{username},
-            phone = #{phone},
-            password_hash = #{passwordHash},
-            region_code = #{regionCode},
-            avatar_url = #{avatarUrl},
-            status = #{status},
-            updated_at = #{updatedAt}
+        <set>
+            <if test="role != null">role = #{role},</if>
+            <if test="username != null">username = #{username},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="passwordHash != null">password_hash = #{passwordHash},</if>
+            <if test="regionCode != null">region_code = #{regionCode},</if>
+            <if test="avatarUrl != null">avatar_url = #{avatarUrl},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updatedAt != null">updated_at = #{updatedAt},</if>
+        </set>
         where id = #{id}
     </update>
 
