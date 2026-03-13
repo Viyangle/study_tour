@@ -176,7 +176,7 @@ curl -X POST "http://10.6.86.86/upload" \
 
 - 文件为空，或表单字段名不是 `image`
 - OSS 凭证未配置（环境变量 `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET`）
-- 文件超限（单文件 `10MB`，总请求 `100MB`）
+- 文件超限（单文件 `1MB`，总请求 `10MB`）
 
 ### 4.6 修改用户头像（avatarUrl）
 
