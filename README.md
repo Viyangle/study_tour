@@ -175,9 +175,9 @@
 
 请求字段：
 
-- `role`：用户角色，当前代码中常见值为 `LEADER`
+- `role`：用户角色，为`USER`或`LEADER`
 - `username`：用户名
-- `phone`：手机号
+- `phone`：手机号，需唯一
 - `passwordHash`：密码字段，当前实际仍是明文比对，尚未做 BCrypt/JWT
 - `regionCode`：地区编码
 
@@ -191,88 +191,6 @@
 }
 ```
 
-## 5. 鍔熻兘琛ュ厖锛氭枃浠朵笂浼犱笌 AI 瑙勫垝璺嚎
-
-### 5.1 鏂囦欢涓婁紶锛圤SS锛?
-
-- 鏂规硶锛歚POST`
-- 璺緞锛歚/upload`
-- `Content-Type`锛歚multipart/form-data`
-- 琛ㄥ崟瀛楁锛歚image`锛坒ile锛?
-
-璇锋眰绀轰緥锛坈url锛夛細
-
-```bash
-curl -X POST "http://10.6.86.86/upload" \
-  -F "image=@D:/tmp/avatar.png"
-```
-
-鎴愬姛鍝嶅簲锛坄data` 涓哄浘鐗?URL锛夛細
-
-```json
-{
-  "code": 1,
-  "msg": "success",
-  "data": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/xxxx-xxxx.png"
-}
-```
-
-娉ㄦ剰浜嬮」锛?
-
-- 鍗曟枃浠堕檺鍒讹細`1MB`
-- 璇锋眰鎬诲ぇ灏忛檺鍒讹細`10MB`
-
-### 5.2 AI 瑙勫垝璺嚎
-
-- 鏂规硶锛歚POST`
-- 璺緞锛歚/routes/ai/{memoryId}`
-- 鎺ュ彛璇存槑锛氭牴鎹?`message` 鐢辫緭鍏ユ枃鏈皟鐢?AI 鐢熸垚璺嚎锛屽苟杩斿洖鏂板缓 `routeId`
-
-璺緞鍙傛暟锛?
-
-| 鍙傛暟 | 绫诲瀷 | 蹇呭～ | 璇存槑 |
-|---|---|---|---|
-| memoryId | string | 鏄?| AI 瀵硅瘽璁板繂 ID |
-
-璇锋眰鍙傛暟锛坬uery/form锛夛細
-
-| 鍙傛暟 | 绫诲瀷 | 蹇呭～ | 璇存槑 |
-|---|---|---|---|
-| message | string | 鏄?| 鐢ㄦ埛鐨勮矾绾胯鍒掕姹?|
-
-璇锋眰绀轰緥锛?
-
-```http
-POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶╃爺瀛﹁矾绾?
-```
-
-鎴愬姛鍝嶅簲绀轰緥锛坄data` 涓?routeId锛夛細
-
-```json
-{
-  "code": 1,
-  "msg": "success",
-  "data": 8
-}
-```
-
-失败响应：
-
-```json
-{
-  "code": 0,
-  "msg": "用户名已存在",
-  "data": null
-}
-```
-
-```json
-{
-  "code": 0,
-  "msg": "手机号已存在",
-  "data": null
-}
-```
 
 ### 4.2 用户登录
 
@@ -593,14 +511,8 @@ POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶
 }
 ```
 
-### 4.11 AI 生成路线
 
-- 方法：`POST`
-- 路径：`/routes/ai`
-- 状态：未实现
-- 说明：当前控制器方法直接返回 `null`，不建议前端接入
-
-### 4.12 获取全部项目
+### 4.11 获取全部项目
 
 - 方法：`GET`
 - 路径：`/projects`
@@ -630,7 +542,7 @@ POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶
 }
 ```
 
-### 4.13 获取项目详情
+### 4.12 获取项目详情
 
 - 方法：`GET`
 - 路径：`/projects/{id}`
@@ -640,7 +552,28 @@ POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶
 
 `GET /projects/1`
 
-### 4.14 获取项目成员
+成功响应：
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "id": 1,
+        "routeId": 2,
+        "ownerAccountId": 1,
+        "leaderAccountId": 3,
+        "title": "test",
+        "departureDate": "2026-03-12",
+        "maxMembers": 3,
+        "currentMembers": 1,
+        "status": "OPEN",
+        "createdAt": "2026-03-12T16:38:12",
+        "updatedAt": "2026-03-12T19:56:33"
+    }
+}
+```
+
+### 4.13 获取项目成员
 
 - 方法：`GET`
 - 路径：`/projects/{id}/members`
@@ -675,7 +608,7 @@ POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶
 }
 ```
 
-### 4.15 创建项目
+### 4.14 创建项目
 
 - 方法：`POST`
 - 路径：`/projects`
@@ -698,7 +631,6 @@ POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶
 说明：
 
 - `leaderAccountId` 可选
-- 当前代码未在 service 中手动设置 `createdAt/updatedAt`，依赖数据库默认值更稳妥
 
 成功响应：
 
@@ -710,7 +642,7 @@ POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶
 }
 ```
 
-### 4.16 加入项目
+### 4.15 加入项目
 
 - 方法：`POST`
 - 路径：`/projects/{id}/join`
@@ -734,7 +666,7 @@ POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶
 }
 ```
 
-### 4.17 指定项目领队
+### 4.16 指定项目领队
 
 - 方法：`POST`
 - 路径：`/projects/{id}/leader`
@@ -757,3 +689,67 @@ POST /routes/ai/memory-001?message=甯垜瑙勫垝涓€鏉″寳浜袱澶
   "data": null
 }
 ```
+
+### 4.17 文件上传（OSS）
+
+- 方法：`POST`
+- 路径：`/upload`
+- `Content-Type`：`multipart/form-data`
+- 表单字段：`image`（file）
+
+请求示例（curl）：
+
+```bash
+curl -X POST "http://10.6.86.86/upload" \
+  -F "image=@D:/tmp/avatar.png"
+```
+
+成功响应（`data` 为图片 URL）：
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/28afeeb9-afa8-4e16-99e2-4f8aac53a5c3.jpg"
+}
+```
+
+注意事项：
+
+- 单文件限制：`1MB`
+- 请求总大小限制：`10MB`
+
+### 4.18 AI 规划路线
+
+- 方法：`POST`
+- 路径：`/routes/ai/{memoryId}`
+- 接口说明：根据 `message` 调用 AI 生成路线，并返回新建 `routeId`
+
+路径参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| memoryId | string | 是 | AI 对话记忆 ID |
+
+请求参数（query/form）：
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| message | string | 是 | 用户的路线规划请求 |
+
+请求示例：
+
+```http
+POST /routes/ai/1?message=帮我规划一条北京两天研学路线
+```
+
+成功响应示例（`data` 为 `routeId`）：
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": 4
+}
+```
+

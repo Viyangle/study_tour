@@ -34,11 +34,8 @@ public class AccountServiceImpl implements AccountService {
         account.setStatus(1);
         account.setCreatedAt(LocalDateTime.now());
         account.setUpdatedAt(LocalDateTime.now());
-        if (accountMapper.selectByUsername()) {
-            return (long) -1;
-        }
         if (accountMapper.selectByPhone()) {
-            return (long) -2;
+            return (long) -1;
         }
         accountMapper.insert(account);
         if (account.getRole().equals("LEADER")){
