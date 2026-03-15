@@ -1,0 +1,12 @@
+只返回 JSON 数组，不要解释，不要 Markdown。
+每项字段: attractionId(long), visitOrder(int), visitTime("yyyy-MM-dd'T'HH:mm:ss"), recommendedDuration(int), notes(string)
+样例：
+[
+    {
+        "attractionId": "1",
+        "visitOrder": "1",
+        "visitTime": "2026-03-15T09:00:00",
+        "recommendedDuration": "180",
+        "notes": "需提前预约"
+    }
+]

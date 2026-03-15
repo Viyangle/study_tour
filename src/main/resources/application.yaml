@@ -7,6 +7,11 @@ spring:
     url: jdbc:mysql://localhost:3306/study_tour
     username: root
     password: "123456"
+  # redis配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
   servlet:
     multipart:
       # 文件上传限额配置
@@ -30,3 +35,34 @@ aliyun:
 logging:
   level:
     org.springframework.jdbc.support.JdbcTransactionManager: debug
+    dev.langchain4j: DEBUG
+
+# langchain4j参数配置
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${OPENAI_API_KEY}
+      model-name: qwen-max
+      log-requests: true
+      log-responses: true
+
+    streaming-chat-model:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${OPENAI_API_KEY}
+      model-name: qwen-max
+      log-requests: true
+      log-responses: true
+
+    embedding-model:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${OPENAI_API_KEY}
+      model-name: text-embedding-v3
+      log-requests: true
+      log-responses: true
+      max-segments-per-batch: 10
+
+  community:
+    redis:
+      host: localhost
+      port: 6379

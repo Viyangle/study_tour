@@ -4,19 +4,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class RouteAttraction {
-    private Long id;
-    private Long routeId;
+public class AIRouteItem {
     private Long attractionId;
     private Integer visitOrder;
-    private LocalDateTime visitTime;
+    private String visitTime;
     private Integer recommendedDuration;
     private String notes;
-    private LocalDateTime createdAt;
 }
