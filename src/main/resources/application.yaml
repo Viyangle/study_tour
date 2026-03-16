@@ -66,3 +66,20 @@ langchain4j:
     redis:
       host: localhost
       port: 6379
+
+# HTTPS configuration
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: classpath:ssl/study-tour.p12
+    key-store-type: PKCS12
+    key-store-password: ${SSL_KEY_STORE_PASSWORD}
+    key-alias: study-tour
+
+# App custom config
+app:
+  https:
+    # Enable HTTP(8080) -> HTTPS(8443) redirect
+    redirect-enabled: true
+    http-port: 8080
