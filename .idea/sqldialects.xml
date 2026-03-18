@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/AccountMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/AccountTagPrefMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/AttractionMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/ChatMessageMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/ChatSessionMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/LeaderApplicationMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/LeaderProfileMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/ProjectMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/ProjectMemberMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/ReviewMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/ReviewTagScoreMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/RouteAttractionMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/RouteMapper.xml" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/RouteTagMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/com/viyangle/study_tour/mapper/TagMapper.xml" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/study_tour.sql" dialect="MySQL" />
+  </component>
+</project>

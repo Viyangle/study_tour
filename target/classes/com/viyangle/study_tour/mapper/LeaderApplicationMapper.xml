@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.LeaderApplicationMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.LeaderApplication"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into leader_applications
+        (project_id, leader_account_id, status, message)
+        values
+        (#{projectId}, #{leaderAccountId}, #{status}, #{message})
+    </insert>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from leader_applications where id = #{id}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.LeaderApplication">
+        update leader_applications
+        set project_id = #{projectId},
+            leader_account_id = #{leaderAccountId},
+            status = #{status},
+            message = #{message}
+        where id = #{id}
+    </update>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.LeaderApplication">
+        select id, project_id, leader_account_id, status, message, created_at, updated_at
+        from leader_applications
+        where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.LeaderApplication">
+        select id, project_id, leader_account_id, status, message, created_at, updated_at
+        from leader_applications
+    </select>
+
+</mapper>

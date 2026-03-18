@@ -1,0 +1,55 @@
+-------------------------------------------------------------------------------
+Test set: com.viyangle.study_tour.AuthControllerTest
+-------------------------------------------------------------------------------
+Tests run: 7, Failures: 1, Errors: 5, Skipped: 0, Time elapsed: 6.542 s <<< FAILURE! -- in com.viyangle.study_tour.AuthControllerTest
+com.viyangle.study_tour.AuthControllerTest.testLoginSuccess -- Time elapsed: 1.961 s <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "com.viyangle.study_tour.pojo.LoginRequest.getPhone()" because "loginRequest" is null
+	at com.viyangle.study_tour.service.impl.AccountServiceImpl.login(AccountServiceImpl.java:53)
+	at com.viyangle.study_tour.AuthControllerTest.testLoginSuccess(AuthControllerTest.java:102)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+com.viyangle.study_tour.AuthControllerTest.testLoginPing -- Time elapsed: 0.033 s <<< FAILURE!
+java.lang.AssertionError: Status expected:<200> but was:<405>
+	at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+	at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+	at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+	at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+	at com.viyangle.study_tour.AuthControllerTest.testLoginPing(AuthControllerTest.java:132)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+com.viyangle.study_tour.AuthControllerTest.testLoginFailure -- Time elapsed: 0.004 s <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "com.viyangle.study_tour.pojo.LoginRequest.getPhone()" because "loginRequest" is null
+	at com.viyangle.study_tour.service.impl.AccountServiceImpl.login(AccountServiceImpl.java:53)
+	at com.viyangle.study_tour.AuthControllerTest.testLoginFailure(AuthControllerTest.java:119)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+com.viyangle.study_tour.AuthControllerTest.testRegisterPhoneExists -- Time elapsed: 0.003 s <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "com.viyangle.study_tour.pojo.RegisterRequest.getUsername()" because "registerRequest" is null
+	at com.viyangle.study_tour.service.impl.AccountServiceImpl.register(AccountServiceImpl.java:77)
+	at com.viyangle.study_tour.AuthControllerTest.testRegisterPhoneExists(AuthControllerTest.java:70)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+com.viyangle.study_tour.AuthControllerTest.testRegisterSuccess -- Time elapsed: 0.004 s <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "com.viyangle.study_tour.pojo.RegisterRequest.getUsername()" because "registerRequest" is null
+	at com.viyangle.study_tour.service.impl.AccountServiceImpl.register(AccountServiceImpl.java:77)
+	at com.viyangle.study_tour.AuthControllerTest.testRegisterSuccess(AuthControllerTest.java:44)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+com.viyangle.study_tour.AuthControllerTest.testRegisterUsernameExists -- Time elapsed: 0.004 s <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "com.viyangle.study_tour.pojo.RegisterRequest.getUsername()" because "registerRequest" is null
+	at com.viyangle.study_tour.service.impl.AccountServiceImpl.register(AccountServiceImpl.java:77)
+	at com.viyangle.study_tour.AuthControllerTest.testRegisterUsernameExists(AuthControllerTest.java:84)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+

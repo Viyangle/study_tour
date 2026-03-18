@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.ReviewMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Review"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into reviews
+        (project_id, route_id, from_account_id, to_account_id, review_type, overall_score, content)
+        values
+        (#{projectId}, #{routeId}, #{fromAccountId}, #{toAccountId}, #{reviewType}, #{overallScore}, #{content})
+    </insert>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from reviews where id = #{id}
+    </delete>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Review">
+        update reviews
+        set project_id = #{projectId},
+            route_id = #{routeId},
+            from_account_id = #{fromAccountId},
+            to_account_id = #{toAccountId},
+            review_type = #{reviewType},
+            overall_score = #{overallScore},
+            content = #{content}
+        where id = #{id}
+    </update>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Review">
+        select id, project_id, route_id, from_account_id, to_account_id, review_type, overall_score, content, created_at
+        from reviews
+        where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Review">
+        select id, project_id, route_id, from_account_id, to_account_id, review_type, overall_score, content, created_at
+        from reviews
+    </select>
+
+</mapper>
