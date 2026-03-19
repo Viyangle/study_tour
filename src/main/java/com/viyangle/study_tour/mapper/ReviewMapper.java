@@ -18,4 +18,16 @@ public interface ReviewMapper {
     Review selectById(@Param("id") Long id);
 
     List<Review> selectAll();
+    
+    List<Review> selectByProjectId(@Param("projectId") Long projectId);
+    
+    List<Review> selectByRouteId(@Param("routeId") Long routeId);
+    
+    List<Review> selectByToAccountId(@Param("toAccountId") Long toAccountId);
+    
+    List<Review> selectByFromAccountId(@Param("fromAccountId") Long fromAccountId);
+    
+    List<Review> selectByReviewType(@Param("reviewType") String reviewType);
+    
+    Double selectAverageScoreByToAccountId(@Param("toAccountId") Long toAccountId);
 }

@@ -39,4 +39,40 @@
         from reviews
     </select>
 
+    <select id="selectByProjectId" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Review">
+        select id, project_id, route_id, from_account_id, to_account_id, review_type, overall_score, content, created_at
+        from reviews
+        where project_id = #{projectId}
+    </select>
+
+    <select id="selectByRouteId" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Review">
+        select id, project_id, route_id, from_account_id, to_account_id, review_type, overall_score, content, created_at
+        from reviews
+        where route_id = #{routeId}
+    </select>
+
+    <select id="selectByToAccountId" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Review">
+        select id, project_id, route_id, from_account_id, to_account_id, review_type, overall_score, content, created_at
+        from reviews
+        where to_account_id = #{toAccountId}
+    </select>
+
+    <select id="selectByFromAccountId" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Review">
+        select id, project_id, route_id, from_account_id, to_account_id, review_type, overall_score, content, created_at
+        from reviews
+        where from_account_id = #{fromAccountId}
+    </select>
+
+    <select id="selectByReviewType" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.Review">
+        select id, project_id, route_id, from_account_id, to_account_id, review_type, overall_score, content, created_at
+        from reviews
+        where review_type = #{reviewType}
+    </select>
+
+    <select id="selectAverageScoreByToAccountId" parameterType="java.lang.Long" resultType="java.lang.Double">
+        select avg(overall_score)
+        from reviews
+        where to_account_id = #{toAccountId}
+    </select>
+
 </mapper>

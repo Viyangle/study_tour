@@ -16,6 +16,11 @@
         where review_id = #{reviewId} and tag_id = #{tagId}
     </delete>
 
+    <delete id="deleteByReviewId" parameterType="java.lang.Long">
+        delete from review_tag_scores
+        where review_id = #{reviewId}
+    </delete>
+
     <update id="updateById" parameterType="com.viyangle.study_tour.pojo.ReviewTagScore">
         update review_tag_scores
         set score = #{score}
@@ -31,6 +36,12 @@
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.ReviewTagScore">
         select review_id, tag_id, score
         from review_tag_scores
+    </select>
+
+    <select id="selectByReviewId" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.ReviewTagScore">
+        select review_id, tag_id, score
+        from review_tag_scores
+        where review_id = #{reviewId}
     </select>
 
 </mapper>
