@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.viyangle.study_tour.aiservice.ConsultantService;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.Result;
-import com.viyangle.study_tour.pojo.Route;
 import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.service.RouteService;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +12,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @RestController
@@ -28,6 +30,7 @@ public class RouteController {
 
     @Autowired
     private ObjectMapper objectMapper;
+
     @GetMapping("/{id}")
     public Result getRouteById(@PathVariable Long id) {
         log.info("获取路线: {}", id);
@@ -50,21 +53,58 @@ public class RouteController {
     }
 
     public List<RouteAttraction> parseAiResult(String aiText) throws Exception {
-        // 若 AI 可能返回 ```json ...```，先清洗
         String json = aiText.replaceAll("(?s)^```json\\s*|\\s*```$", "").trim();
 
         List<AIRouteItem> items = objectMapper.readValue(
                 json, new TypeReference<List<AIRouteItem>>() {}
         );
+        validateAiItems(items);
 
         return items.stream().map(i -> {
             RouteAttraction ra = new RouteAttraction();
-            ra.setAttractionId(i.getAttractionId());
+            ra.setPoiId(i.getPoiId());
             ra.setVisitOrder(i.getVisitOrder());
-            ra.setVisitTime(LocalDateTime.parse(i.getVisitTime()));
+            if (i.getVisitTime() != null && !i.getVisitTime().isBlank()) {
+                ra.setVisitTime(LocalDateTime.parse(i.getVisitTime()));
+            }
             ra.setRecommendedDuration(i.getRecommendedDuration());
             ra.setNotes(i.getNotes());
             return ra;
         }).toList();
+    }
+
+    private void validateAiItems(List<AIRouteItem> items) {
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException("AI生成路线为空");
+        }
+
+        Set<Integer> orders = new HashSet<>();
+        for (int i = 0; i < items.size(); i++) {
+            AIRouteItem item = items.get(i);
+            int row = i + 1;
+
+            if (item.getVisitOrder() == null || item.getVisitOrder() <= 0) {
+                throw new IllegalArgumentException("第" + row + "项 visitOrder 非法");
+            }
+            if (!orders.add(item.getVisitOrder())) {
+                throw new IllegalArgumentException("visitOrder 重复: " + item.getVisitOrder());
+            }
+
+            if (item.getPoiId() == null || item.getPoiId().isBlank()) {
+                throw new IllegalArgumentException("第" + row + "项 poiId 非法");
+            }
+
+            if (item.getRecommendedDuration() == null || item.getRecommendedDuration() <= 0) {
+                throw new IllegalArgumentException("第" + row + "项 recommendedDuration 非法");
+            }
+
+            if (item.getVisitTime() != null && !item.getVisitTime().isBlank()) {
+                try {
+                    LocalDateTime.parse(item.getVisitTime());
+                } catch (DateTimeParseException e) {
+                    throw new IllegalArgumentException("第" + row + "项 visitTime 格式非法，应为 yyyy-MM-dd'T'HH:mm:ss");
+                }
+            }
+        }
     }
 }

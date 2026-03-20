@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AIRouteItem {
-    private Long attractionId;
+    private String poiId;
     private Integer visitOrder;
     private String visitTime;
     private Integer recommendedDuration;

@@ -4,37 +4,43 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.viyangle.study_tour.mapper.AttractionMapper">
 
-    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Attraction"
-            useGeneratedKeys="true" keyProperty="id">
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Attraction">
         insert into attractions
-        (name, type, location, region_code, description, recommended_duration)
+        (poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance)
         values
-        (#{name}, #{type}, #{location}, #{regionCode}, #{description}, #{recommendedDuration})
+        (#{poiId}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance})
     </insert>
 
-    <delete id="deleteById" parameterType="java.lang.Long">
-        delete from attractions where id = #{id}
+    <delete id="deleteByPoiId" parameterType="java.lang.String">
+        delete from attractions where poi_id = #{poiId}
     </delete>
 
-    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Attraction">
+    <update id="updateByPoiId" parameterType="com.viyangle.study_tour.pojo.Attraction">
         update attractions
-        set name = #{name},
-            type = #{type},
+        set parent_poi_id = #{parentPoiId},
+            name = #{name},
+            address = #{address},
             location = #{location},
-            region_code = #{regionCode},
-            description = #{description},
-            recommended_duration = #{recommendedDuration}
-        where id = #{id}
+            pcode = #{pcode},
+            pname = #{pname},
+            citycode = #{citycode},
+            cityname = #{cityname},
+            adcode = #{adcode},
+            adname = #{adname},
+            type = #{type},
+            typecode = #{typecode},
+            distance = #{distance}
+        where poi_id = #{poiId}
     </update>
 
-    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select id, name, type, location, region_code, description, recommended_duration, created_at, updated_at
+    <select id="selectByPoiId" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.Attraction">
+        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
         from attractions
-        where id = #{id}
+        where poi_id = #{poiId}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select id, name, type, location, region_code, description, recommended_duration, created_at, updated_at
+        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
         from attractions
     </select>
 

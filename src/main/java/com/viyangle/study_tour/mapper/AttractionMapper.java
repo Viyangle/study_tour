@@ -11,11 +11,11 @@ public interface AttractionMapper {
 
     int insert(Attraction attraction);
 
-    int deleteById(@Param("id") Long id);
+    int deleteByPoiId(@Param("poiId") String poiId);
 
-    int updateById(Attraction attraction);
+    int updateByPoiId(Attraction attraction);
 
-    Attraction selectById(@Param("id") Long id);
+    Attraction selectByPoiId(@Param("poiId") String poiId);
 
     List<Attraction> selectAll();
 }

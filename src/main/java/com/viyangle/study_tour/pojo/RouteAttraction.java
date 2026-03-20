@@ -5,18 +5,34 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class RouteAttraction {
-    private Long id;
     private Long routeId;
-    private Long attractionId;
     private Integer visitOrder;
+    private String poiId;
     private LocalDateTime visitTime;
     private Integer recommendedDuration;
     private String notes;
+
+    // Joined attraction fields
+    private String parentPoiId;
+    private String name;
+    private String address;
+    private String location;
+    private String pcode;
+    private String pname;
+    private String citycode;
+    private String cityname;
+    private String adcode;
+    private String adname;
+    private String type;
+    private String typecode;
+    private String distance;
+    private LocalDateTime attractionCreatedAt;
+    private LocalDateTime attractionUpdatedAt;
+
     private LocalDateTime createdAt;
 }
