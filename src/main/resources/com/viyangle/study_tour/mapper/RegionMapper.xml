@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.RegionMapper">
+
+    <select id="selectProvinces" resultType="com.viyangle.study_tour.pojo.Region">
+        select adcode, name, level, parent_adcode, citycode, is_virtual, has_children
+        from region
+        where level = 1
+        order by adcode
+    </select>
+
+    <select id="selectChildrenByParentAdcode" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.Region">
+        select adcode, name, level, parent_adcode, citycode, is_virtual, has_children
+        from region
+        where parent_adcode = #{parentAdcode}
+        order by level, adcode
+    </select>
+
+</mapper>

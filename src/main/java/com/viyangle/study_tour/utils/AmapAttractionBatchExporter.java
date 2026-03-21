@@ -287,13 +287,15 @@ public class AmapAttractionBatchExporter {
     private static class Config {
         private String endpoint = "https://restapi.amap.com/v5/place/polygon";
         private String key;
-        private String polygon = "118.615633,31.977535|118.828269,32.23027|118.828269,32.23027|119.054264,32.11342";
+        //beijing: "116.217132,40.016218|116.539893,40.01763|116.200533,39.828094|116.49194,39.825261"
+        //nanjing: "118.615633,31.977535|118.828269,32.23027|118.828269,32.23027|119.054264,32.11342"
+        private String polygon = "116.217132,40.016218|116.539893,40.01763|116.200533,39.828094|116.49194,39.825261";
         //attractions: "110201|110202|110203|110204|110210|140100|140400|140600"
         //transport: "150500|150702|150904"
         private String types = "110201|110202|110203|110204|110210|140100|140400|140600";
         private int pageSize = 25;
         private int pageStart = 1;
-        private int maxPages = 2;
+        private int maxPages = 1;
         private long sleepMillis = 200;
         private String mergedOutputDir = "src/main/resources/content";
         private String othersOutputDir = "src/main/resources/others";
