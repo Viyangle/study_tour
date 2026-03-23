@@ -138,6 +138,7 @@ public class AmapAttractionBatchExporter {
         query.put("key", config.key);
         query.put("polygon", config.polygon);
         query.put("types", config.types);
+        query.put("show_fields", config.showFields);
         query.put("page_size", String.valueOf(config.pageSize));
         query.put("page_num", String.valueOf(pageNum));
 
@@ -171,6 +172,12 @@ public class AmapAttractionBatchExporter {
         putNullable(node, "type", textOrNull(poi, "type"));
         putNullable(node, "typecode", textOrNull(poi, "typecode"));
         putNullable(node, "distance", textOrNull(poi, "distance"));
+        JsonNode business = poi.get("business");
+        if (business != null && !business.isNull()) {
+            node.set("business", business.deepCopy());
+        } else {
+            node.putNull("business");
+        }
         return node;
     }
 
@@ -237,6 +244,7 @@ public class AmapAttractionBatchExporter {
                 + "endpoint=" + config.endpoint + "\n"
                 + "polygon=" + config.polygon + "\n"
                 + "types=" + config.types + "\n"
+                + "showFields=" + config.showFields + "\n"
                 + "pageSize=" + config.pageSize + "\n"
                 + "pageStart=" + config.pageStart + "\n"
                 + "maxPages=" + config.maxPages + "\n"
@@ -289,13 +297,14 @@ public class AmapAttractionBatchExporter {
         private String key;
         //beijing: "116.217132,40.016218|116.539893,40.01763|116.200533,39.828094|116.49194,39.825261"
         //nanjing: "118.615633,31.977535|118.828269,32.23027|118.828269,32.23027|119.054264,32.11342"
-        private String polygon = "116.217132,40.016218|116.539893,40.01763|116.200533,39.828094|116.49194,39.825261";
+        private String polygon = "118.615633,31.977535|118.828269,32.23027|118.828269,32.23027|119.054264,32.11342";
         //attractions: "110201|110202|110203|110204|110210|140100|140400|140600"
         //transport: "150500|150702|150904"
         private String types = "110201|110202|110203|110204|110210|140100|140400|140600";
+        private String showFields = "business";
         private int pageSize = 25;
         private int pageStart = 1;
-        private int maxPages = 1;
+        private int maxPages = 2;
         private long sleepMillis = 200;
         private String mergedOutputDir = "src/main/resources/content";
         private String othersOutputDir = "src/main/resources/others";
@@ -330,6 +339,7 @@ public class AmapAttractionBatchExporter {
                 case "key" -> config.key = value;
                 case "polygon" -> config.polygon = value;
                 case "types" -> config.types = value;
+                case "showFields" -> config.showFields = value;
                 case "pageSize" -> config.pageSize = Integer.parseInt(value);
                 case "pageStart" -> config.pageStart = Integer.parseInt(value);
                 case "maxPages" -> config.maxPages = Integer.parseInt(value);
