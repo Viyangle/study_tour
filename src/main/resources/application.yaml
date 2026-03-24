@@ -55,9 +55,9 @@ langchain4j:
       log-responses: true
 
     embedding-model:
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api-key: ${OPENAI_API_KEY}
-      model-name: text-embedding-v3
+      base-url: http://localhost:11434/v1
+      api-key: ollama
+      model-name: qwen3-embedding:4b
       log-requests: true
       log-responses: true
       max-segments-per-batch: 10
@@ -83,3 +83,9 @@ app:
     # Enable HTTP(8080) -> HTTPS(8443) redirect
     redirect-enabled: true
     http-port: 8080
+  amap:
+    key: ${AMAP_KEY:}
+    transit-endpoint: https://restapi.amap.com/v5/direction/transit/integrated
+    transit-timeout-seconds: 20
+    transit-cache-ttl-hours: 24
+    transit-sleep-millis: 80

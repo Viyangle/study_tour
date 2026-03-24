@@ -52,7 +52,7 @@ public class CommonConfig {
         };
     }
 
-    @Bean//不需要时注释
+    //@Bean//不需要时注释
     public EmbeddingStore store() {
         List<Document> documents = ClassPathDocumentLoader.loadDocuments("content");
         InMemoryEmbeddingStore store = new InMemoryEmbeddingStore();//使用内存
@@ -71,7 +71,7 @@ public class CommonConfig {
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(redisEmbeddingStore)
                 .minScore(0.5)
-                .maxResults(6)
+                .maxResults(12)
                 .embeddingModel(embeddingModel)
                 .build();
     }

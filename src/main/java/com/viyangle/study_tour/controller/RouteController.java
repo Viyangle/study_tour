@@ -6,6 +6,7 @@ import com.viyangle.study_tour.aiservice.ConsultantService;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.pojo.RouteAttraction;
+import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.service.RouteService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,35 +30,43 @@ public class RouteController {
     private ConsultantService consultantService;
 
     @Autowired
+    private AiRoutePlanningService aiRoutePlanningService;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @GetMapping("/{id}")
     public Result getRouteById(@PathVariable Long id) {
-        log.info("获取路线: {}", id);
+        log.info("Get route: {}", id);
         return Result.success(routeService.getRouteById(id));
     }
 
     @PostMapping("/manual")
     public Result generateRouteByManual(@RequestBody List<RouteAttraction> routeAttractions) {
-        log.info("手动生成路线");
+        log.info("Generate manual route");
         return Result.success(routeService.generateRouteByManual(routeAttractions));
     }
 
     @PostMapping("/ai/{memoryId}")
-    public Result generateRouteByAI(@PathVariable String memoryId, String message) throws Exception {
-        log.info("AI生成路线");
+    public Result generateRouteByAI(@PathVariable String memoryId, @RequestParam String message) throws Exception {
+        log.info("Generate route by AI v1");
         String aiText = consultantService.chat(memoryId, message);
-        log.info("AI返回结果: {}", aiText);
+        log.info("AI raw response: {}", aiText);
         List<RouteAttraction> routeAttractions = parseAiResult(aiText);
+        return Result.success(routeService.generateRouteByManual(routeAttractions));
+    }
+
+    @PostMapping("/ai/v2/{memoryId}")
+    public Result generateRouteByAIV2(@PathVariable String memoryId, @RequestParam String message) throws Exception {
+        log.info("Generate route by AI v2");
+        List<RouteAttraction> routeAttractions = aiRoutePlanningService.planRouteV2(memoryId, message);
         return Result.success(routeService.generateRouteByManual(routeAttractions));
     }
 
     public List<RouteAttraction> parseAiResult(String aiText) throws Exception {
         String json = aiText.replaceAll("(?s)^```json\\s*|\\s*```$", "").trim();
 
-        List<AIRouteItem> items = objectMapper.readValue(
-                json, new TypeReference<List<AIRouteItem>>() {}
-        );
+        List<AIRouteItem> items = objectMapper.readValue(json, new TypeReference<List<AIRouteItem>>() {});
         validateAiItems(items);
 
         return items.stream().map(i -> {
@@ -75,7 +84,7 @@ public class RouteController {
 
     private void validateAiItems(List<AIRouteItem> items) {
         if (items == null || items.isEmpty()) {
-            throw new IllegalArgumentException("AI生成路线为空");
+            throw new IllegalArgumentException("AI route is empty");
         }
 
         Set<Integer> orders = new HashSet<>();
@@ -84,27 +93,28 @@ public class RouteController {
             int row = i + 1;
 
             if (item.getVisitOrder() == null || item.getVisitOrder() <= 0) {
-                throw new IllegalArgumentException("第" + row + "项 visitOrder 非法");
+                throw new IllegalArgumentException("Row " + row + ": invalid visitOrder");
             }
             if (!orders.add(item.getVisitOrder())) {
-                throw new IllegalArgumentException("visitOrder 重复: " + item.getVisitOrder());
+                throw new IllegalArgumentException("Duplicated visitOrder: " + item.getVisitOrder());
             }
 
             if (item.getPoiId() == null || item.getPoiId().isBlank()) {
-                throw new IllegalArgumentException("第" + row + "项 poiId 非法");
+                throw new IllegalArgumentException("Row " + row + ": invalid poiId");
             }
 
             if (item.getRecommendedDuration() == null || item.getRecommendedDuration() <= 0) {
-                throw new IllegalArgumentException("第" + row + "项 recommendedDuration 非法");
+                throw new IllegalArgumentException("Row " + row + ": invalid recommendedDuration");
             }
 
             if (item.getVisitTime() != null && !item.getVisitTime().isBlank()) {
                 try {
                     LocalDateTime.parse(item.getVisitTime());
                 } catch (DateTimeParseException e) {
-                    throw new IllegalArgumentException("第" + row + "项 visitTime 格式非法，应为 yyyy-MM-dd'T'HH:mm:ss");
+                    throw new IllegalArgumentException("Row " + row + ": invalid visitTime format yyyy-MM-dd'T'HH:mm:ss");
                 }
             }
         }
     }
 }
+
