@@ -7,9 +7,9 @@
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Project"
             useGeneratedKeys="true" keyProperty="id">
         insert into projects
-        (route_id, owner_account_id, leader_account_id, title, departure_date, max_members, current_members, status)
+        (route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members, status)
         values
-        (#{routeId}, #{ownerAccountId}, #{leaderAccountId}, #{title}, #{departureDate}, #{maxMembers}, #{currentMembers}, #{status})
+        (#{routeId}, #{regionAdcode}, #{tag}, #{ownerAccountId}, #{leaderAccountId}, #{title}, #{departureDate}, #{maxMembers}, #{currentMembers}, #{status})
     </insert>
 
     <delete id="deleteById" parameterType="java.lang.Long">
@@ -21,6 +21,12 @@
         <set>
             <if test="routeId != null">
                 route_id = #{routeId},
+            </if>
+            <if test="regionAdcode != null">
+                region_adcode = #{regionAdcode},
+            </if>
+            <if test="tag != null">
+                tag = #{tag},
             </if>
             <if test="ownerAccountId != null">
                 owner_account_id = #{ownerAccountId},
@@ -48,14 +54,14 @@
     </update>
 
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Project">
-        select id, route_id, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
+        select id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
                status, created_at, updated_at
         from projects
         where id = #{id}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Project">
-        select id, route_id, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
+        select id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
                status, created_at, updated_at
         from projects
     </select>

@@ -11,6 +11,8 @@ public interface RouteAttractionMapper {
 
     int insert(RouteAttraction routeAttraction);
 
+    int deleteByRouteId(@Param("routeId") Long routeId);
+
     int deleteByRouteIdAndVisitOrder(@Param("routeId") Long routeId,
                                      @Param("visitOrder") Integer visitOrder);
 

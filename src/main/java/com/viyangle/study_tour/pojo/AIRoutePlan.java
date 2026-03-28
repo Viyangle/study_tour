@@ -4,11 +4,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class RouteTag {
-    private Long routeId;
-    private Long tagId;
-    private Integer weight;
+public class AIRoutePlan {
+    private String tag;
+    private List<AIRouteItem> items;
 }

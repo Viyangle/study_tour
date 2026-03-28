@@ -61,6 +61,11 @@
             (#{routeId}, #{visitOrder}, #{poiId}, #{visitTime}, #{recommendedDuration}, #{notes}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance}, #{attractionCreatedAt}, #{attractionUpdatedAt})
     </insert>
 
+    <delete id="deleteByRouteId">
+        delete from route_attractions
+        where route_id = #{routeId}
+    </delete>
+
     <delete id="deleteByRouteIdAndVisitOrder">
         delete from route_attractions
         where route_id = #{routeId}

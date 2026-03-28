@@ -11,5 +11,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class Route {
     private Long id;
+    private String regionAdcode;
+    private String tag;
     private LocalDateTime createdAt;
 }

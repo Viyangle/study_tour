@@ -6,8 +6,8 @@ import com.viyangle.study_tour.aiservice.CandidateSelectorService;
 import com.viyangle.study_tour.aiservice.RouteComposerService;
 import com.viyangle.study_tour.mapper.AttractionMapper;
 import com.viyangle.study_tour.pojo.AIRouteItem;
+import com.viyangle.study_tour.pojo.AIRoutePlan;
 import com.viyangle.study_tour.pojo.Attraction;
-import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,6 +26,11 @@ import java.util.Set;
 
 @Service
 public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
+    private static final Set<String> ALLOWED_TAGS = new HashSet<>(List.of(
+            "历史人文", "博物馆研学", "非遗体验", "科技探索", "自然生态",
+            "地理地质", "航天航空", "农耕劳动", "艺术美育", "红色教育",
+            "高校参访", "职业启蒙", "英语实践", "摄影记录", "亲子互动"
+    ));
 
     @Autowired
     private CandidateSelectorService candidateSelectorService;
@@ -42,7 +48,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     private ObjectMapper objectMapper;
 
     @Override
-    public List<RouteAttraction> planRouteV2(String memoryId, String message) throws Exception {
+    public AIRoutePlan planRouteV2(String memoryId, String message) throws Exception {
         String candidatePrompt = buildCandidatePrompt(message);
         String candidateText = candidateSelectorService.chat(memoryId, candidatePrompt);
         List<AIRouteItem> candidateItems = parseAiItems(candidateText);
@@ -56,10 +62,10 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
         String finalPrompt = buildFinalPrompt(message, candidates, matrix);
         String finalText = routeComposerService.chat(memoryId, finalPrompt);
-        List<AIRouteItem> finalItems = parseAiItems(finalText);
-        validateFinalItems(finalItems, candidates);
+        AIRoutePlan plan = parseAiPlan(finalText);
+        validateFinalItems(plan.getItems(), candidates);
 
-        return toRouteAttractions(finalItems);
+        return plan;
     }
 
     private List<AIRouteItem> parseAiItems(String aiText) throws Exception {
@@ -67,6 +73,26 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         List<AIRouteItem> items = objectMapper.readValue(json, new TypeReference<List<AIRouteItem>>() {});
         validateAiItems(items);
         return items;
+    }
+
+    private AIRoutePlan parseAiPlan(String aiText) throws Exception {
+        String json = aiText.replaceAll("(?s)^```json\\s*|\\s*```$", "").trim();
+        AIRoutePlan plan = objectMapper.readValue(json, AIRoutePlan.class);
+        validateAiPlan(plan);
+        return plan;
+    }
+
+    private void validateAiPlan(AIRoutePlan plan) {
+        if (plan == null) {
+            throw new IllegalArgumentException("AI route plan is empty");
+        }
+        if (plan.getTag() == null || plan.getTag().isBlank()) {
+            throw new IllegalArgumentException("AI route plan tag is empty");
+        }
+        if (!ALLOWED_TAGS.contains(plan.getTag())) {
+            throw new IllegalArgumentException("AI route plan tag is invalid: " + plan.getTag());
+        }
+        validateAiItems(plan.getItems());
     }
 
     private void validateAiItems(List<AIRouteItem> items) {
@@ -151,44 +177,13 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         }
     }
 
-    private List<RouteAttraction> toRouteAttractions(List<AIRouteItem> items) {
-        List<RouteAttraction> result = new ArrayList<>();
-        for (AIRouteItem i : items) {
-            RouteAttraction ra = new RouteAttraction();
-            ra.setPoiId(i.getPoiId());
-            ra.setVisitOrder(i.getVisitOrder());
-            if (i.getVisitTime() != null && !i.getVisitTime().isBlank()) {
-                ra.setVisitTime(LocalDateTime.parse(i.getVisitTime()));
-            }
-            ra.setRecommendedDuration(i.getRecommendedDuration());
-            ra.setNotes(i.getNotes());
-            result.add(ra);
-        }
-        return result;
-    }
-
     private String buildCandidatePrompt(String userMessage) {
-        return """
-                你现在处于路线规划第一阶段：只做候选景点筛选。
-                根据用户需求，从现有知识中筛选 10-15 个候选景点。
-                输出必须是 JSON 数组，不要 Markdown，不要解释。
-                每个元素字段必须包含: poiId, visitOrder, visitTime, recommendedDuration, notes。
-                规则:
-                1) visitOrder 从 1 开始递增且不重复。
-                2) visitTime 可为 null。
-                3) recommendedDuration 必须 > 0。
-                4) notes 简短说明推荐理由即可。
-                用户需求:
-                """ + userMessage;
+        return userMessage;
     }
 
     private String buildFinalPrompt(String userMessage, List<Attraction> candidates, List<AmapTransitClient.TransitEdge> matrix) {
         StringBuilder sb = new StringBuilder();
-        sb.append("你现在处于路线规划第二阶段：基于候选景点与通勤矩阵输出最终路线。\n");
-        sb.append("必须只使用候选 poiId，输出 JSON 数组，不要 Markdown，不要解释。\n");
-        sb.append("字段必须包含: poiId, visitOrder, visitTime, recommendedDuration, notes。\n");
-        sb.append("notes 里要写联系电话，开放时间等约束，也要体现相邻景点通勤方式/大概步行距离/线路信息。\n");
-        sb.append("用户需求:\n").append(userMessage).append("\n\n");
+        sb.append(userMessage).append("\n\n");
 
         sb.append("候选景点列表:\n");
         for (int i = 0; i < candidates.size(); i++) {

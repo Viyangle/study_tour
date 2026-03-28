@@ -13,6 +13,8 @@ import java.time.LocalDateTime;
 public class Project {
     private Long id;
     private Long routeId;
+    private String regionAdcode;
+    private String tag;
     private Long ownerAccountId;
     private Long leaderAccountId;
     private String title;
