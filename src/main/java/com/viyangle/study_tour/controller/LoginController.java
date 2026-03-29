@@ -1,6 +1,7 @@
 package com.viyangle.study_tour.controller;
 
 import com.viyangle.study_tour.pojo.Account;
+import com.viyangle.study_tour.pojo.LoginRequest;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.service.AccountService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,6 +38,7 @@ public class LoginController {
     public String ping(HttpServletRequest request) {
         String ip = getClientIpAddress(request);
         log.info("ping, 客户端ip: {}", ip);
+        return "ok";
     }
 
 
@@ -75,27 +77,6 @@ public class LoginController {
         return ip;
     }
 
-    @PostMapping
-    public Result login(@RequestBody Account account){
-        log.info("用户登录, {}", account);
-        //TODO: BCrypt
-
-    /**
-     * 登录接口
-     * URL：POST /login
-     * 请求体：JSON 格式
-     * {
-     *   "phone": "13800138000",
-     *   "password": "123456"
-     * }
-     * 流程：
-     * 1. 接收前端传来的 LoginRequest 对象（Spring 自动把 JSON 转成对象）
-     * 2. 调用 Service 层的 login 方法验证手机号和密码
-     * 3. 如果登录成功，返回用户信息；如果失败，返回错误信息
-     * 注意：
-     * - 目前密码是明文比较，未来应该用 BCrypt 加密后比较
-     * - 目前没有生成 JWT token，未来应该返回 token 给前端
-     */
     @PostMapping  // POST 请求，完整 URL 是 /login
     public Result login(@RequestBody LoginRequest loginRequest) {
         log.info("用户登录, 手机号: {}", loginRequest.getPhone());
