@@ -12,11 +12,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * RegisterController 类
- * 
  * 作用：处理用户注册相关的 HTTP 请求
- * @RestController：告诉 Spring 这是一个 REST 风格的控制器，返回的数据会自动转成 JSON
- * @RequestMapping("/register")：这个类下的所有接口的 URL 都以 /register 开头
- * 
+ * &#064;RestController：告诉  Spring 这是一个 REST 风格的控制器，返回的数据会自动转成 JSON
+ * &#064;RequestMapping("/register")：这个类下的所有接口的  URL 都以 /register 开头
  * 这个类负责：
  * - 接收前端的注册请求
  * - 校验请求数据（比如两次密码是否一致）

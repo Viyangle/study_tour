@@ -30,3 +30,23 @@ aliyun:
 logging:
   level:
     org.springframework.jdbc.support.JdbcTransactionManager: debug
+
+# App custom config
+app:
+  https:
+    # Enable HTTP(8080) -> HTTPS(8443) redirect
+    redirect-enabled: true
+    http-port: 8080
+
+# JWT 配置
+jwt:
+  # 密钥，建议使用 64 位以上的随机字符串
+  # 生产环境应该通过环境变量注入，不要直接写在代码里
+  secret: ${JWT_SECRET:your-very-long-and-secure-secret-key-at-least-64-characters-for-hs256}
+  # Token 过期时间（毫秒）
+  expiration: 86400000
+  # 刷新 Token 过期时间（毫秒）7 天
+  refresh-expiration: 604800000
+  # Token 前缀
+  header: Authorization
+  prefix: "Bearer "

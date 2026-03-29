@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -61,21 +62,83 @@ public class LoginController {
      * - 目前密码是明文比较，未来应该用 BCrypt 加密后比较
      * - 目前没有生成 JWT token，未来应该返回 token 给前端
      */
-    @PostMapping  // POST 请求，完整 URL 是 /login
+    @PostMapping
     public Result login(@RequestBody LoginRequest loginRequest) {
-        log.info("用户登录, 手机号: {}", loginRequest.getPhone());
+        log.info("用户登录，手机号：{}", loginRequest.getPhone());
 
         Account account = accountService.login(loginRequest);
 
         if (account != null) {
-            // 生成JWT token
-            String token = jwtUtil.generateToken(account.getId().toString());
+            // 生成 JWT token 和刷新 token
+            String token = jwtUtil.generateToken(account.getId(), account.getRole());
+            String refreshToken = jwtUtil.generateRefreshToken(account.getId());
+            
             Map<String, Object> data = new HashMap<>();
             data.put("account", account);
             data.put("token", token);
+            data.put("refreshToken", refreshToken);
             return Result.success(data);
         }
 
         return Result.error("手机号或密码错误");
+    }
+
+    /**
+     * 刷新 token 接口
+     * URL：POST /login/refresh
+     * 请求参数：refreshToken
+     * 流程：
+     * 1. 接收前端传来的 refreshToken
+     * 2. 验证 refreshToken 是否有效且未过期
+     * 3. 如果有效，生成新的 access token 并返回
+     * 4. 如果无效，返回错误信息
+     */
+    @PostMapping("/refresh")
+    public Result refreshToken(@RequestParam String refreshToken) {
+        log.info("刷新 token");
+        
+        try {
+            // 1. 验证 refresh token 是否有效
+            if (!jwtUtil.validateToken(refreshToken, jwtUtil.extractUsername(refreshToken))) {
+                return Result.error("刷新 token 无效或已过期");
+            }
+            
+            // 2. 检查 refresh token 的剩余有效期（应该至少还有 1 天以上）
+            Date expiration = jwtUtil.extractExpiration(refreshToken);
+            long now = System.currentTimeMillis();
+            long expTime = expiration.getTime();
+            long remainingTime = expTime - now;
+            
+            // 如果剩余时间少于 24 小时，拒绝刷新，要求重新登录
+            if (remainingTime < 86400000) {  // 24 小时 = 86400000 毫秒
+                log.warn("Refresh token 即将过期，剩余时间：{} 小时", remainingTime / 3600000);
+                return Result.error("刷新 token 即将过期，请重新登录");
+            }
+            
+            // 3. 获取用户信息
+            Long accountId = jwtUtil.extractAccountId(refreshToken);
+            Account account = accountService.getById(accountId);
+            
+            if (account == null) {
+                return Result.error("用户不存在");
+            }
+            
+            // 4. 生成新的 access token（24 小时有效）
+            String newToken = jwtUtil.generateToken(accountId, account.getRole());
+            
+            // 5. 返回新 token（refresh token 不变，继续使用原来的 7 天有效期）
+            Map<String, Object> data = new HashMap<>();
+            data.put("token", newToken);
+            data.put("refreshToken", refreshToken);
+            data.put("expiresIn", 86400);  // access token 有效期（秒）
+            data.put("refreshExpiresIn", remainingTime / 1000);  // refresh token 剩余有效期（秒）
+            
+            log.info("Token 刷新成功：accountId={}, 新 token 有效期 24 小时", accountId);
+            return Result.success(data);
+            
+        } catch (Exception e) {
+            log.error("刷新 token 失败：{}", e.getMessage());
+            return Result.error("刷新 token 失败：" + e.getMessage());
+        }
     }
 }
