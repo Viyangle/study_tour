@@ -175,9 +175,9 @@
 
 请求字段：
 
-- `role`：用户角色，为`USER`或`LEADER`
+- `role`：用户角色，为`USER`或`LEADER`或`Both`
 - `username`：用户名
-- `phone`：手机号，需唯一
+- `phone`：手机号
 - `passwordHash`：密码字段，当前实际仍是明文比对，尚未做 BCrypt/JWT
 - `regionCode`：地区编码
 
@@ -190,7 +190,6 @@
   "data": null
 }
 ```
-
 
 ### 4.2 用户登录
 
@@ -753,3 +752,189 @@ POST /routes/ai/1?message=帮我规划一条北京两天研学路线
 }
 ```
 
+## Postman 测试指南
+
+### 环境准备
+1. **数据库**：确保MySQL数据库已启动，数据库名为`study_tour`，用户名为`love`，密码为`lovepoems`。
+2. **Java**：确保安装了JDK 17或更高版本。
+3. **Maven**：确保安装了Maven。
+4. **Postman**：下载并安装Postman。
+
+### 启动应用
+1. 进入项目根目录：`cd D:\dachuang\study_tour`
+2. 运行Maven命令：`mvn spring-boot:run`
+3. 应用将在`http://localhost:8080`启动。
+
+### Postman配置
+- Base URL: `http://localhost:8080`
+- 设置环境变量（如需要）。
+
+### API测试步骤
+
+#### 1. 健康检查
+- **方法**: GET
+- **URL**: `/login/ping`
+- **描述**: 检查服务是否正常运行。
+- **预期响应**: `"ok"`
+
+#### 2. 用户注册
+- **方法**: POST
+- **URL**: `/register`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON):
+  ```json
+  {
+    "username": "testuser",
+    "phone": "13800138000",
+    "password": "password123",
+    "confirmPassword": "password123",
+    "role": "USER"
+  }
+  ```
+- **描述**: 注册新用户。
+- **预期响应**: 成功时返回`{"code":1,"msg":"success"}`，失败时返回错误信息。
+
+#### 3. 用户登录
+- **方法**: POST
+- **URL**: `/login`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON):
+  ```json
+  {
+    "phone": "13800138000",
+    "password": "password123"
+  }
+  ```
+- **描述**: 用户登录，获取JWT token。
+- **预期响应**: 成功时返回`{"code":1,"msg":"success","data":{"account":{...},"token":"jwt_token"}}`。
+- **注意**: 保存token用于后续需要认证的请求。
+
+#### 4. 获取用户信息
+- **方法**: GET
+- **URL**: `/accounts/{id}` (替换{id}为用户ID，如1)
+- **Headers**: `Authorization: Bearer {token}` (如果需要认证)
+- **描述**: 获取指定用户的信息。
+- **预期响应**: 返回用户信息。
+
+#### 5. 获取用户标签偏好
+- **方法**: GET
+- **URL**: `/accounts/{id}/tagPrefs`
+- **描述**: 获取用户的标签偏好。
+- **预期响应**: 返回标签偏好列表。
+
+#### 6. 修改用户标签偏好
+- **方法**: POST
+- **URL**: `/accounts/{id}/tagPrefs`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON): 标签偏好列表
+- **描述**: 修改用户的标签偏好。
+
+#### 7. 获取领队简介
+- **方法**: GET
+- **URL**: `/accounts/{id}/leaderProfile`
+- **描述**: 获取领队的简介。
+
+#### 8. 修改领队简介
+- **方法**: POST
+- **URL**: `/accounts/{id}/intro`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON):
+  ```json
+  {
+    "intro": "新的简介内容"
+  }
+  ```
+
+#### 9. 获取所有景点
+- **方法**: GET
+- **URL**: `/attractions`
+- **描述**: 获取所有景点信息。
+- **预期响应**: 返回景点列表。
+
+#### 10. 获取所有项目
+- **方法**: GET
+- **URL**: `/projects`
+- **描述**: 获取所有项目。
+- **预期响应**: 返回项目列表。
+
+#### 11. 获取项目详情
+- **方法**: GET
+- **URL**: `/projects/{id}`
+- **描述**: 获取指定项目的详情。
+
+#### 12. 获取项目成员
+- **方法**: GET
+- **URL**: `/projects/{id}/members`
+- **描述**: 获取项目的成员列表。
+
+#### 13. 创建项目
+- **方法**: POST
+- **URL**: `/projects`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON): 项目信息
+- **描述**: 创建新项目。
+
+#### 14. 加入项目
+- **方法**: POST
+- **URL**: `/projects/{id}/join`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON):
+  ```json
+  {
+    "accountId": 1
+  }
+  ```
+
+#### 15. 创建聊天会话
+- **方法**: POST
+- **URL**: `/chat/sessions`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON):
+  ```json
+  {
+    "projectId": 1,
+    "userAccountId": 1,
+    "leaderAccountId": 2
+  }
+  ```
+- **描述**: 创建或获取聊天会话。
+
+#### 16. 查询会话列表
+- **方法**: GET
+- **URL**: `/chat/sessions?accountId=1&role=USER`
+- **描述**: 查询用户的会话列表。
+
+#### 17. 发送聊天消息
+- **方法**: POST
+- **URL**: `/chat/messages`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON): 消息内容
+- **描述**: 发送聊天消息。
+
+#### 18. 获取路线
+- **方法**: GET
+- **URL**: `/routes/{id}`
+- **描述**: 获取指定路线。
+
+#### 19. 手动生成路线
+- **方法**: POST
+- **URL**: `/routes/manual`
+- **Headers**: `Content-Type: application/json`
+- **Body** (JSON): 路线景点列表
+- **描述**: 手动生成路线。
+
+#### 20. AI生成路线
+- **方法**: POST
+- **URL**: `/routes/ai`
+- **描述**: AI生成路线（当前未实现，返回null）。
+
+### 注意事项
+- 某些接口可能需要JWT token认证，请在Headers中添加`Authorization: Bearer {token}`。
+- 评价功能（ReviewController）尚未实现。
+- 确保数据库中有相应的数据，否则某些查询可能返回空结果。
+- 如果遇到错误，检查控制台日志或数据库连接。
+
+### 故障排除
+- 如果端口冲突，修改`application.yaml`中的server.port。
+- 确保MySQL服务运行，并数据库已创建。
+- 使用`mvn clean install`重新构建项目。

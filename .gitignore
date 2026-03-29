@@ -20,3 +20,6 @@ Thumbs.db
 src/main/resources/ssl/*.p12
 src/main/resources/ssl/*.jks
 !src/main/resources/ssl/.gitkeep
+
+# Editor backup files
+*~

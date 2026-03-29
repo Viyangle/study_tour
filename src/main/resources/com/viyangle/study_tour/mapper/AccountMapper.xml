@@ -2,8 +2,18 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    AccountMapper.xml
+    作用：定义 AccountMapper 接口中每个方法对应的具体SQL语句
+    namespace：必须和 AccountMapper.java 的完整类名一致，这样 MyBatis 才能找到对应的接口
+-->
 <mapper namespace="com.viyangle.study_tour.mapper.AccountMapper">
 
+    <!--
+        insert：插入账号
+        useGeneratedKeys="true"：告诉 MyBatis 使用数据库自动生成的主键
+        keyProperty="id"：把生成的主键值赋给 Account 对象的 id 属性
+    -->
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Account"
             useGeneratedKeys="true" keyProperty="id">
         insert into accounts
@@ -12,10 +22,12 @@
         (#{role}, #{username}, #{phone}, #{passwordHash}, #{regionCode}, #{avatarUrl}, #{status}, #{createdAt}, #{updatedAt})
     </insert>
 
+    <!-- delete：根据id删除账号 -->
     <delete id="deleteById" parameterType="java.lang.Long">
         delete from accounts where id = #{id}
     </delete>
 
+    <!-- update：根据id更新账号信息 -->
     <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Account">
         update accounts
         <set>
@@ -31,27 +43,55 @@
         where id = #{id}
     </update>
 
+    <!-- select：根据id查询账号 -->
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Account">
         select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
         from accounts
         where id = #{id}
     </select>
 
+    <!-- select：查询所有账号 -->
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Account">
         select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
         from accounts
     </select>
 
+    <!--
+        select：根据手机号和密码查询账号（用于登录）
+        #{phone} 和 #{passwordHash} 是 MyBatis 的参数占位符，会自动防止SQL注入
+    -->
     <select id="selectByPhoneAndPassword" resultType="com.viyangle.study_tour.pojo.Account">
         select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
         from accounts
         where phone = #{phone} and password_hash = #{passwordHash}
     </select>
-    <select id="selectByUsername" resultType="java.lang.Boolean">
-         select exists(select 1 from accounts where username = #{username})
+
+    <!--
+        select：根据手机号查询账号（用于登录）
+        #{phone} 是 MyBatis 的参数占位符，会自动防止SQL注入
+    -->
+    <select id="selectByPhone" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.Account">
+        select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
+        from accounts
+        where phone = #{phone}
     </select>
-    <select id="selectByPhone" resultType="java.lang.Boolean">
+
+    <!--
+        select：检查手机号是否已存在（用于注册时校验）
+        exists() 函数：如果子查询返回至少一行，返回 true，否则返回 false
+        select 1：不关心具体数据，只关心是否存在，用 1 代替 * 提高性能
+    -->
+    <select id="existsByPhone" resultType="java.lang.Boolean">
         select exists(select 1 from accounts where phone = #{phone})
+    </select>
+
+    <!--
+        select：检查用户名是否已存在（用于注册时校验）
+        exists() 函数：如果子查询返回至少一行，返回 true，否则返回 false
+        select 1：不关心具体数据，只关心是否存在，用 1 代替 * 提高性能
+    -->
+    <select id="existsByUsername" resultType="java.lang.Boolean">
+        select exists(select 1 from accounts where username = #{username})
     </select>
 
 </mapper>

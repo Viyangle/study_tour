@@ -12,10 +12,14 @@ public interface ReviewTagScoreMapper {
     int insert(ReviewTagScore reviewTagScore);
 
     int deleteById(@Param("reviewId") Long reviewId, @Param("tagId") Long tagId);
+    
+    int deleteByReviewId(@Param("reviewId") Long reviewId);
 
     int updateById(ReviewTagScore reviewTagScore);
 
     ReviewTagScore selectById(@Param("reviewId") Long reviewId, @Param("tagId") Long tagId);
 
     List<ReviewTagScore> selectAll();
+    
+    List<ReviewTagScore> selectByReviewId(@Param("reviewId") Long reviewId);
 }

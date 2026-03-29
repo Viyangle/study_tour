@@ -18,4 +18,9 @@ public interface ChatMessageMapper {
     ChatMessage selectById(@Param("id") Long id);
 
     List<ChatMessage> selectAll();
+
+    /**
+     * 按会话id查询消息列表（按发送时间升序）
+     */
+    List<ChatMessage> selectBySessionId(@Param("sessionId") Long sessionId);
 }

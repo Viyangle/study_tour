@@ -35,4 +35,27 @@
         from chat_sessions
     </select>
 
+    <select id="selectByProjectAndAccounts" resultType="com.viyangle.study_tour.pojo.ChatSession">
+        select id, project_id, user_account_id, leader_account_id, created_at
+        from chat_sessions
+        where project_id = #{projectId}
+          and user_account_id = #{userAccountId}
+          and leader_account_id = #{leaderAccountId}
+        limit 1
+    </select>
+
+    <select id="selectByUserAccountId" resultType="com.viyangle.study_tour.pojo.ChatSession">
+        select id, project_id, user_account_id, leader_account_id, created_at
+        from chat_sessions
+        where user_account_id = #{userAccountId}
+        order by created_at desc
+    </select>
+
+    <select id="selectByLeaderAccountId" resultType="com.viyangle.study_tour.pojo.ChatSession">
+        select id, project_id, user_account_id, leader_account_id, created_at
+        from chat_sessions
+        where leader_account_id = #{leaderAccountId}
+        order by created_at desc
+    </select>
+
 </mapper>
