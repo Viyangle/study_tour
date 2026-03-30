@@ -18,4 +18,7 @@ public interface RouteMapper {
     Route selectById(@Param("id") Long id);
 
     List<Route> selectAll();
+
+    List<Route> selectByPreference(@Param("preferredTags") List<String> preferredTags,
+                                   @Param("regionCode") String regionCode);
 }

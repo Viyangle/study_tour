@@ -15,35 +15,41 @@ public class ProjectController {
 
     @Autowired
     private ProjectService projectService;
+
     @GetMapping
-    public Result getAllProjects() {
-        log.info("获取所有项目");
-        return Result.success(projectService.getAllProjects());
+    public Result getAllProjects(@RequestParam(defaultValue = "1") Integer pageNum,
+                                 @RequestParam(defaultValue = "10") Integer pageSize,
+                                 @RequestParam Long accountId) {
+        log.info("分页获取项目, accountId={}, pageNum={}, pageSize={}", accountId, pageNum, pageSize);
+        return Result.success(projectService.getPagedProjectsByPreference(accountId, pageNum, pageSize));
     }
 
-    //TODO: 分页
     @GetMapping("/{id}")
     public Result getProjectById(@PathVariable Long id) {
         log.info("获取项目: {}", id);
         return Result.success(projectService.getProjectById(id));
     }
+
     @GetMapping("/{id}/members")
     public Result getProjectMembers(@PathVariable Long id) {
         log.info("获取项目成员: {}", id);
         return Result.success(projectService.getProjectMembers(id));
     }
+
     @PostMapping
     public Result createProject(@RequestBody Project project) {
         log.info("创建项目");
         projectService.createProject(project);
         return Result.success();
     }
+
     @PostMapping("/{id}/join")
     public Result joinProject(@PathVariable Long id, @RequestBody ProjectMember projectMember) {
         log.info("加入项目: {}", id);
         projectService.joinProject(id, projectMember.getAccountId());
         return Result.success();
     }
+
     @PostMapping("/{id}/leader")
     public Result leaderJoinProject(@PathVariable Long id, @RequestBody Project project) {
         log.info("项目组长加入项目: {}", id);

@@ -10,6 +10,8 @@ public interface ProjectService {
 
     List<Project> getAllProjects();
 
+    List<Project> getPagedProjectsByPreference(Long accountId, Integer pageNum, Integer pageSize);
+
     void joinProject(Long id, Long accountId);
 
     Project getProjectById(Long id);

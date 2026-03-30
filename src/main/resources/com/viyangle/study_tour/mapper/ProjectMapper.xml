@@ -66,4 +66,32 @@
         from projects
     </select>
 
+    <select id="selectByPreference" resultType="com.viyangle.study_tour.pojo.Project">
+        select id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
+               status, created_at, updated_at
+        from projects
+        order by
+        (
+            case
+                when #{regionCode} is null or #{regionCode} = '' then 0
+                when region_adcode = #{regionCode} then 100
+                when left(region_adcode, 4) = left(#{regionCode}, 4) then 50
+                else 0
+            end
+            +
+            case
+                when tag is null or tag = '' then 0
+                <if test="preferredTags != null and preferredTags.size() > 0">
+                    when tag in
+                    <foreach collection="preferredTags" item="tag" open="(" separator="," close=")">
+                        #{tag}
+                    </foreach>
+                    then 80
+                </if>
+                else 0
+            end
+        ) desc,
+        created_at desc
+    </select>
+
 </mapper>

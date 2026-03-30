@@ -44,4 +44,15 @@
         from attractions
     </select>
 
+    <select id="selectByRegionCode" resultType="com.viyangle.study_tour.pojo.Attraction">
+        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
+        from attractions
+        <where>
+            <if test="regionCode != null and regionCode != ''">
+                and (adcode = #{regionCode} or left(adcode, 4) = left(#{regionCode}, 4))
+            </if>
+        </where>
+        order by updated_at desc, created_at desc
+    </select>
+
 </mapper>

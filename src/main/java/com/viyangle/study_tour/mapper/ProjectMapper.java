@@ -18,4 +18,7 @@ public interface ProjectMapper {
     Project selectById(@Param("id") Long id);
 
     List<Project> selectAll();
+
+    List<Project> selectByPreference(@Param("preferredTags") List<String> preferredTags,
+                                     @Param("regionCode") String regionCode);
 }

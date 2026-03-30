@@ -10,5 +10,7 @@ public interface RouteService {
 
     Long saveOrUpdateAIConversationRoute(String memoryId, String tag, List<RouteAttraction> routeAttractions);
 
+    List<Route> getPagedRoutesByPreference(Long accountId, Integer pageNum, Integer pageSize);
+
     List<RouteAttraction> getRouteById(Long id);
 }

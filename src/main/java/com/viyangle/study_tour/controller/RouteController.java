@@ -5,6 +5,7 @@ import com.viyangle.study_tour.aiservice.ConsultantService;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.AIRoutePlan;
 import com.viyangle.study_tour.pojo.Result;
+import com.viyangle.study_tour.pojo.Route;
 import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.service.RouteService;
@@ -39,6 +40,15 @@ public class RouteController {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @GetMapping
+    public Result getAllRoutes(@RequestParam(defaultValue = "1") Integer pageNum,
+                               @RequestParam(defaultValue = "10") Integer pageSize,
+                               @RequestParam Long accountId) {
+        log.info("分页获取路线, accountId={}, pageNum={}, pageSize={}", accountId, pageNum, pageSize);
+        List<Route> routes = routeService.getPagedRoutesByPreference(accountId, pageNum, pageSize);
+        return Result.success(routes);
+    }
 
     @GetMapping("/{id}")
     public Result getRouteById(@PathVariable Long id) {
