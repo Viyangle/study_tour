@@ -158,4 +158,9 @@ public class AccountServiceImpl implements AccountService {
     public LeaderProfile getLeaderProfile(Long id) {
         return leaderProfileMapper.selectById(id);
     }
+
+    @Override
+    public void changeAvatar(Account account) {
+        accountMapper.updateById(account);
+    }
 }

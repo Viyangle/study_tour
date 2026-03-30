@@ -6,21 +6,29 @@
 
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Route"
             useGeneratedKeys="true" keyProperty="id">
-        insert into routes(created_at) VALUES (now())
+        insert into routes(region_adcode, tag, created_at)
+        values (#{regionAdcode}, #{tag}, #{createdAt})
     </insert>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.Route">
+        update routes
+        set region_adcode = #{regionAdcode},
+            tag = #{tag}
+        where id = #{id}
+    </update>
 
     <delete id="deleteById" parameterType="java.lang.Long">
         delete from routes where id = #{id}
     </delete>
 
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, created_at
+        select id, region_adcode, tag, created_at
         from routes
         where id = #{id}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, created_at
+        select id, region_adcode, tag, created_at
         from routes
     </select>
 

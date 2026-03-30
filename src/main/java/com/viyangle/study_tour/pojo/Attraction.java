@@ -10,13 +10,20 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Attraction {
-    private Long id;
+    private String poiId;
+    private String parentPoiId;
     private String name;
-    private String type;
+    private String address;
     private String location;
-    private String regionCode;
-    private String description;
-    private Integer recommendedDuration;
+    private String pcode;
+    private String pname;
+    private String citycode;
+    private String cityname;
+    private String adcode;
+    private String adname;
+    private String type;
+    private String typecode;
+    private String distance;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

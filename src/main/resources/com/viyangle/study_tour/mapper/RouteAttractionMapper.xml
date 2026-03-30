@@ -4,43 +4,102 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.viyangle.study_tour.mapper.RouteAttractionMapper">
 
-    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.RouteAttraction"
-            useGeneratedKeys="true" keyProperty="id">
+    <resultMap id="routeAttractionResultMap" type="com.viyangle.study_tour.pojo.RouteAttraction">
+        <id property="routeId" column="route_id"/>
+        <id property="visitOrder" column="visit_order"/>
+        <result property="poiId" column="poi_id"/>
+        <result property="visitTime" column="visit_time"/>
+        <result property="recommendedDuration" column="recommended_duration"/>
+        <result property="notes" column="notes"/>
+        <result property="parentPoiId" column="parent_poi_id"/>
+        <result property="name" column="name"/>
+        <result property="address" column="address"/>
+        <result property="location" column="location"/>
+        <result property="pcode" column="pcode"/>
+        <result property="pname" column="pname"/>
+        <result property="citycode" column="citycode"/>
+        <result property="cityname" column="cityname"/>
+        <result property="adcode" column="adcode"/>
+        <result property="adname" column="adname"/>
+        <result property="type" column="type"/>
+        <result property="typecode" column="typecode"/>
+        <result property="distance" column="distance"/>
+        <result property="attractionCreatedAt" column="attraction_created_at"/>
+        <result property="attractionUpdatedAt" column="attraction_updated_at"/>
+        <result property="createdAt" column="route_created_at"/>
+    </resultMap>
+
+    <sql id="routeAttractionSelectColumns">
+        ra.route_id,
+        ra.visit_order,
+        ra.poi_id,
+        ra.visit_time,
+        ra.recommended_duration,
+        ra.notes,
+        a.parent_poi_id,
+        a.name,
+        a.address,
+        a.location,
+        a.pcode,
+        a.pname,
+        a.citycode,
+        a.cityname,
+        a.adcode,
+        a.adname,
+        a.type,
+        a.typecode,
+        a.distance,
+        a.created_at as attraction_created_at,
+        a.updated_at as attraction_updated_at,
+        ra.created_at as route_created_at
+    </sql>
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.RouteAttraction">
         insert into route_attractions
-        (route_id, attraction_id, visit_order, visit_time, recommended_duration, notes)
+        (route_id, visit_order, poi_id, visit_time, recommended_duration, notes, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, attraction_created_at, attraction_updated_at)
         values
-        (#{routeId}, #{attractionId}, #{visitOrder}, #{visitTime}, #{recommendedDuration}, #{notes})
+            (#{routeId}, #{visitOrder}, #{poiId}, #{visitTime}, #{recommendedDuration}, #{notes}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance}, #{attractionCreatedAt}, #{attractionUpdatedAt})
     </insert>
 
-    <delete id="deleteById" parameterType="java.lang.Long">
-        delete from route_attractions where id = #{id}
+    <delete id="deleteByRouteId">
+        delete from route_attractions
+        where route_id = #{routeId}
     </delete>
 
-    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.RouteAttraction">
+    <delete id="deleteByRouteIdAndVisitOrder">
+        delete from route_attractions
+        where route_id = #{routeId}
+          and visit_order = #{visitOrder}
+    </delete>
+
+    <update id="updateByRouteIdAndVisitOrder" parameterType="com.viyangle.study_tour.pojo.RouteAttraction">
         update route_attractions
-        set route_id = #{routeId},
-            attraction_id = #{attractionId},
-            visit_order = #{visitOrder},
+        set poi_id = #{poiId},
             visit_time = #{visitTime},
             recommended_duration = #{recommendedDuration},
             notes = #{notes}
-        where id = #{id}
+        where route_id = #{routeId}
+          and visit_order = #{visitOrder}
     </update>
 
-    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.RouteAttraction">
-        select id, route_id, attraction_id, visit_order, visit_time, recommended_duration, notes, created_at
-        from route_attractions
-        where id = #{id}
-    </select>
-
-    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.RouteAttraction">
-        select id, route_id, attraction_id, visit_order, visit_time, recommended_duration, notes, created_at
-        from route_attractions
-    </select>
-    <select id="selectByRouteId" resultType="com.viyangle.study_tour.pojo.RouteAttraction">
-        select id, route_id, attraction_id, visit_order, visit_time, recommended_duration, notes, created_at
+    <select id="selectByRouteIdAndVisitOrder" resultMap="routeAttractionResultMap">
+        select <include refid="routeAttractionSelectColumns"/>
         from route_attractions
         where route_id = #{routeId}
+          and visit_order = #{visitOrder}
+    </select>
+
+    <select id="selectAll" resultMap="routeAttractionResultMap">
+        select <include refid="routeAttractionSelectColumns"/>
+        from route_attractions
+        order by route_id asc, visit_order asc
+    </select>
+
+    <select id="selectByRouteId" resultMap="routeAttractionResultMap">
+        select <include refid="routeAttractionSelectColumns"/>
+        from route_attractions
+        where route_id = #{routeId}
+        order by visit_order asc
     </select>
 
 </mapper>

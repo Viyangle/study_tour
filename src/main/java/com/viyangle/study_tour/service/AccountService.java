@@ -41,4 +41,6 @@ public interface AccountService {
     List<AccountTagPref> getTagPrefs(Long id);
 
     LeaderProfile getLeaderProfile(Long id);
+
+    void changeAvatar(Account account);
 }

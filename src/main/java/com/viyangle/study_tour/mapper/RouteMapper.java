@@ -11,6 +11,8 @@ public interface RouteMapper {
 
     int insert(Route route);
 
+    int updateById(Route route);
+
     int deleteById(@Param("id") Long id);
 
     Route selectById(@Param("id") Long id);

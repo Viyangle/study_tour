@@ -11,13 +11,17 @@ public interface RouteAttractionMapper {
 
     int insert(RouteAttraction routeAttraction);
 
-    int deleteById(@Param("id") Long id);
+    int deleteByRouteId(@Param("routeId") Long routeId);
 
-    int updateById(RouteAttraction routeAttraction);
+    int deleteByRouteIdAndVisitOrder(@Param("routeId") Long routeId,
+                                     @Param("visitOrder") Integer visitOrder);
 
-    RouteAttraction selectById(@Param("id") Long id);
+    int updateByRouteIdAndVisitOrder(RouteAttraction routeAttraction);
+
+    RouteAttraction selectByRouteIdAndVisitOrder(@Param("routeId") Long routeId,
+                                                 @Param("visitOrder") Integer visitOrder);
 
     List<RouteAttraction> selectAll();
 
-    List<RouteAttraction> selectByRouteId(Long id);
+    List<RouteAttraction> selectByRouteId(@Param("routeId") Long routeId);
 }

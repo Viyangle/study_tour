@@ -1,6 +1,6 @@
 package com.viyangle.study_tour.config;
 
-import com.viyangle.study_tour.util.JwtUtil;
+import com.viyangle.study_tour.utils.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

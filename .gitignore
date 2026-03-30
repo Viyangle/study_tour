@@ -1,0 +1,25 @@
+# Maven
+target/
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local env files
+.env
+.env.*
+
+# SSL certificates and keys (keep placeholder file)
+src/main/resources/ssl/*.p12
+src/main/resources/ssl/*.jks
+!src/main/resources/ssl/.gitkeep
+
+# Editor backup files
+*~
