@@ -5,18 +5,13 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/study_tour
-    username: root
-    password: "123456"
-  # redis配置
-  data:
-    redis:
-      host: localhost
-      port: 6379
+    username: love
+    password: "lovepoems"
   servlet:
     multipart:
       # 文件上传限额配置
-      max-file-size: 1MB
-      max-request-size: 10MB
+      max-file-size: 10MB
+      max-request-size: 100MB
 
 # mybatis配置
 mybatis:
@@ -35,57 +30,25 @@ aliyun:
 logging:
   level:
     org.springframework.jdbc.support.JdbcTransactionManager: debug
-    dev.langchain4j: DEBUG
 
-# langchain4j参数配置
-langchain4j:
-  open-ai:
-    chat-model:
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api-key: ${OPENAI_API_KEY}
-      model-name: qwen-max
-      log-requests: true
-      log-responses: true
-
-    streaming-chat-model:
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api-key: ${OPENAI_API_KEY}
-      model-name: qwen-max
-      log-requests: true
-      log-responses: true
-
-    embedding-model:
-      base-url: http://localhost:11434/v1
-      api-key: ollama
-      model-name: qwen3-embedding:4b
-      log-requests: true
-      log-responses: true
-      max-segments-per-batch: 10
-
-  community:
-    redis:
-      host: localhost
-      port: 6379
-
-# HTTPS configuration
-server:
-  port: 8443
-  ssl:
-    enabled: true
-    key-store: classpath:ssl/study-tour.p12
-    key-store-type: PKCS12
-    key-store-password: ${SSL_KEY_STORE_PASSWORD}
-    key-alias: study-tour
+# JWT 配置
+jwt:
+  # 密钥，建议使用 64 位以上的随机字符串
+  # 生产环境应该通过环境变量注入，不要直接写在代码里
+  secret: ${JWT_SECRET:your-very-long-and-secure-secret-key-at-least-64-characters-for-hs256}
+  # Token 过期时间（毫秒）
+  expiration: 86400000
+  # 刷新 Token 过期时间（毫秒）7 天
+  refresh-expiration: 604800000
+  # Token 前缀
+  header: Authorization
+  prefix: "Bearer "
 
 # App custom config
 app:
+  security:
+    enabled: true # 是否启用安全
   https:
     # Enable HTTP(8080) -> HTTPS(8443) redirect
     redirect-enabled: true
     http-port: 8080
-  amap:
-    key: ${AMAP_KEY:}
-    transit-endpoint: https://restapi.amap.com/v5/direction/transit/integrated
-    transit-timeout-seconds: 20
-    transit-cache-ttl-hours: 24
-    transit-sleep-millis: 80

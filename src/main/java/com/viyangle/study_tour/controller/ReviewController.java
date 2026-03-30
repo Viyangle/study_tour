@@ -1,5 +1,7 @@
 package com.viyangle.study_tour.controller;
 
+import com.viyangle.study_tour.annotation.OperationLog;
+import com.viyangle.study_tour.annotation.RequireRole;
 import com.viyangle.study_tour.pojo.Review;
 import com.viyangle.study_tour.pojo.ReviewTagScore;
 import com.viyangle.study_tour.pojo.Result;
@@ -21,6 +23,8 @@ public class ReviewController {
     private ReviewService reviewService;
 
     @PostMapping
+    @OperationLog(value = "创建评价", type = "REVIEW_CREATE")
+    @RequireRole({"USER", "LEADER"})
     public Result createReview(@RequestBody Map<String, Object> request) {
         log.info("创建评价");
         
@@ -64,6 +68,8 @@ public class ReviewController {
     }
 
     @DeleteMapping("/{id}")
+    @OperationLog(value = "删除评价", type = "REVIEW_DELETE")
+    @RequireRole({"USER", "LEADER"})
     public Result deleteReview(@PathVariable Long id) {
         log.info("删除评价：{}", id);
         boolean success = reviewService.deleteReview(id);
@@ -71,6 +77,8 @@ public class ReviewController {
     }
 
     @PutMapping("/{id}")
+    @OperationLog(value = "更新评价", type = "REVIEW_UPDATE")
+    @RequireRole({"USER", "LEADER"})
     public Result updateReview(@PathVariable Long id, @RequestBody Map<String, Object> request) {
         log.info("更新评价：{}", id);
         
@@ -115,6 +123,7 @@ public class ReviewController {
     }
 
     @GetMapping("/{id}")
+    @OperationLog(value = "获取评价详情", type = "REVIEW_QUERY")
     public Result getReviewById(@PathVariable Long id) {
         log.info("获取评价详情：{}", id);
         Review review = reviewService.getReviewById(id);
@@ -131,42 +140,49 @@ public class ReviewController {
     }
 
     @GetMapping
+    @OperationLog(value = "获取所有评价", type = "REVIEW_QUERY")
     public Result getAllReviews() {
         log.info("获取所有评价");
         return Result.success(reviewService.getAllReviews());
     }
 
     @GetMapping("/project/{projectId}")
+    @OperationLog(value = "按项目查询评价", type = "REVIEW_QUERY")
     public Result getReviewsByProjectId(@PathVariable Long projectId) {
         log.info("获取项目评价列表：{}", projectId);
         return Result.success(reviewService.getReviewsByProjectId(projectId));
     }
 
     @GetMapping("/route/{routeId}")
+    @OperationLog(value = "按路线查询评价", type = "REVIEW_QUERY")
     public Result getReviewsByRouteId(@PathVariable Long routeId) {
         log.info("获取路线评价列表：{}", routeId);
         return Result.success(reviewService.getReviewsByRouteId(routeId));
     }
 
     @GetMapping("/to-account/{accountId}")
+    @OperationLog(value = "查询用户收到的评价", type = "REVIEW_QUERY")
     public Result getReviewsByToAccountId(@PathVariable Long accountId) {
         log.info("获取用户收到的评价列表：{}", accountId);
         return Result.success(reviewService.getReviewsByToAccountId(accountId));
     }
 
     @GetMapping("/from-account/{accountId}")
+    @OperationLog(value = "查询用户发出的评价", type = "REVIEW_QUERY")
     public Result getReviewsByFromAccountId(@PathVariable Long accountId) {
         log.info("获取用户发出的评价列表：{}", accountId);
         return Result.success(reviewService.getReviewsByFromAccountId(accountId));
     }
 
     @GetMapping("/type/{reviewType}")
+    @OperationLog(value = "按类型查询评价", type = "REVIEW_QUERY")
     public Result getReviewsByReviewType(@PathVariable String reviewType) {
         log.info("获取类型评价列表：{}", reviewType);
         return Result.success(reviewService.getReviewsByReviewType(reviewType));
     }
 
     @GetMapping("/average-score/{accountId}")
+    @OperationLog(value = "获取用户平均评分", type = "REVIEW_QUERY")
     public Result getAverageScoreByToAccountId(@PathVariable Long accountId) {
         log.info("获取用户平均评分：{}", accountId);
         Double averageScore = reviewService.getAverageScoreByToAccountId(accountId);

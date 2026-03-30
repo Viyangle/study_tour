@@ -9,6 +9,7 @@ import com.viyangle.study_tour.pojo.LeaderProfile;
 import com.viyangle.study_tour.pojo.LoginRequest;
 import com.viyangle.study_tour.pojo.RegisterRequest;
 import com.viyangle.study_tour.service.AccountService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import java.util.List;
  * - 登录：根据手机号和密码查询账号
  * - 注册：检查手机号是否重复，创建账号，如果是领队还要创建领队资料
  */
+@Slf4j
 @Service
 public class AccountServiceImpl implements AccountService {
 
@@ -126,9 +128,20 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     public void changeIntro(Long accountId, String intro) {
-        if (accountMapper.selectById(accountId).getRole().equals("LEADER")) {
-            leaderProfileMapper.updateById(new LeaderProfile(accountId, intro, null, null));
+        // 1. 检查用户是否存在
+        Account account = accountMapper.selectById(accountId);
+        if (account == null) {
+            throw new RuntimeException("用户不存在，accountId=" + accountId);
         }
+        
+        // 2. 检查角色是否为 LEADER
+        if (!"LEADER".equals(account.getRole())) {
+            throw new RuntimeException("只有领队可以修改简介，当前用户角色=" + account.getRole());
+        }
+        
+        // 3. 更新领队简介
+        leaderProfileMapper.updateById(new LeaderProfile(accountId, intro, null, null));
+        log.info("领队简介已更新：accountId={}, intro={}", accountId, intro);
     }
 
     @Override
