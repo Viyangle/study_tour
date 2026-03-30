@@ -12,6 +12,10 @@
         (#{projectId}, #{routeId}, #{fromAccountId}, #{toAccountId}, #{reviewType}, #{overallScore}, #{content})
     </insert>
 
+    <delete id="deleteReviewRelationsByReviewId" parameterType="java.lang.Long">
+        delete from review_tag_scores where review_id = #{reviewId}
+    </delete>
+
     <delete id="deleteById" parameterType="java.lang.Long">
         delete from reviews where id = #{id}
     </delete>

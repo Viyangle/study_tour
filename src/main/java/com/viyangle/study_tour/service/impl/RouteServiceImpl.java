@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -57,10 +58,12 @@ public class RouteServiceImpl implements RouteService {
     @Transactional
     @Override
     public Long generateRouteByManual(List<RouteAttraction> routeAttractions) {
+        List<RouteAttraction> normalized = normalizeManualRouteAttractions(routeAttractions);
         Route route = new Route();
         route.setCreatedAt(LocalDateTime.now());
+        route.setRegionAdcode(resolveRegionAdcode(normalized));
         routeMapper.insert(route);
-        upsertRouteAttractions(route.getId(), routeAttractions);
+        upsertRouteAttractions(route.getId(), normalized);
         return route.getId();
     }
 
@@ -123,6 +126,9 @@ public class RouteServiceImpl implements RouteService {
         for (RouteAttraction routeAttraction : routeAttractions) {
             routeAttraction.setRouteId(routeId);
             Attraction a = attractionMapper.selectByPoiId(routeAttraction.getPoiId());
+            if (a == null) {
+                throw new IllegalArgumentException("Invalid poiId: " + routeAttraction.getPoiId());
+            }
             routeAttraction.setParentPoiId(a.getParentPoiId());
             routeAttraction.setName(a.getName());
             routeAttraction.setAddress(a.getAddress());
@@ -136,8 +142,30 @@ public class RouteServiceImpl implements RouteService {
             routeAttraction.setType(a.getType());
             routeAttraction.setTypecode(a.getTypecode());
             routeAttraction.setDistance(a.getDistance());
+            routeAttraction.setAttractionCreatedAt(a.getCreatedAt());
+            routeAttraction.setAttractionUpdatedAt(a.getUpdatedAt());
             routeAttractionMapper.insert(routeAttraction);
         }
+    }
+
+    private List<RouteAttraction> normalizeManualRouteAttractions(List<RouteAttraction> routeAttractions) {
+        if (routeAttractions == null || routeAttractions.isEmpty()) {
+            throw new IllegalArgumentException("routeAttractions cannot be empty");
+        }
+
+        List<RouteAttraction> normalized = new ArrayList<>(routeAttractions.size());
+        for (RouteAttraction ra : routeAttractions) {
+            if (ra == null || ra.getPoiId() == null || ra.getPoiId().isBlank()) {
+                throw new IllegalArgumentException("poiId cannot be empty");
+            }
+            normalized.add(ra);
+        }
+
+        normalized.sort(Comparator.comparingInt(ra -> ra.getVisitOrder() == null ? Integer.MAX_VALUE : ra.getVisitOrder()));
+        for (int i = 0; i < normalized.size(); i++) {
+            normalized.get(i).setVisitOrder(i + 1);
+        }
+        return normalized;
     }
 
     @Override

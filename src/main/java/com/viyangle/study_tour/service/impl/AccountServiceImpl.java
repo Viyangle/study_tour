@@ -92,8 +92,8 @@ public class AccountServiceImpl implements AccountService {
         account.setPhone(registerRequest.getPhone());         // 手机号（唯一）
         // 使用BCrypt加密密码
         account.setPasswordHash(passwordEncoder.encode(registerRequest.getPassword()));
-        // regionCode 暂时设为空字符串或默认值（如果前端没传的话）
-        account.setRegionCode(""); // 或者从 registerRequest 中获取，如果前端有传的话
+        String regionCode = registerRequest.getRegionCode() == null ? null : registerRequest.getRegionCode().trim();
+        account.setRegionCode(regionCode);
         account.setStatus(1);//1表示正常
         account.setCreatedAt(LocalDateTime.now());
         account.setUpdatedAt(LocalDateTime.now());

@@ -6,28 +6,21 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * 全局异常处理器
- * 用于统一处理所有 Controller 抛出的异常
+ * Global exception handler.
  */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    /**
-     * 处理运行时异常（如权限验证失败）
-     */
     @ExceptionHandler(RuntimeException.class)
     public Result handleRuntimeException(RuntimeException e) {
-        log.error("运行时异常：{}", e.getMessage());
+        log.error("\u8fd0\u884c\u65f6\u5f02\u5e38: {}", e.getMessage(), e);
         return Result.error(e.getMessage());
     }
 
-    /**
-     * 处理其他所有异常
-     */
     @ExceptionHandler(Exception.class)
     public Result handleException(Exception e) {
-        log.error("系统异常：", e);
-        return Result.error("系统繁忙，请稍后再试");
+        log.error("\u7cfb\u7edf\u5f02\u5e38", e);
+        return Result.error("\u7cfb\u7edf\u7e41\u5fd9\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5");
     }
 }

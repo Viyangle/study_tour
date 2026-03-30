@@ -155,403 +155,360 @@
 
 ## 4. 接口列表
 
-### 4.1 用户注册
+以下接口按业务分组整理，便于联调与测试。每个接口均预留了“响应结果（待补充）”区域，方便你后续补齐真实返回示例。
+
+### 4.1 用户相关
+
+#### 4.1.1 用户注册
 
 - 方法：`POST`
 - 路径：`/register`
-- 描述：注册普通用户或领队用户；当 `role=LEADER` 时会同时初始化领队档案
+- 描述：注册普通用户或领队用户
 
-请求体：
-
-```json
-{
-  "role": "LEADER",
-  "username": "Leader",
-  "phone": "10010001001",
-  "passwordHash": "123456",
-  "regionCode": "210000"
-}
-```
-
-请求字段：
-
-- `role`：用户角色，为`USER`或`LEADER`或`Both`
-- `username`：用户名
-- `phone`：手机号
-- `passwordHash`：密码字段，当前实际仍是明文比对，尚未做 BCrypt/JWT
-- `regionCode`：地区编码
-
-成功响应：
+请求示例：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": null
+  "username": "B",
+  "phone": "10010001003",
+  "password": "123456",
+  "confirmPassword": "123456",
+  "role": "Both",
+  "regionCode": "320102"
 }
 ```
 
-### 4.2 用户登录
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": null
+}
+```
+
+#### 4.1.2 用户登录
 
 - 方法：`POST`
 - 路径：`/login`
-- 描述：按手机号和密码登录
+- 描述：按手机号和密码登录，返回账号信息与双 Token （目前暂时不需要）
 
-请求体：
-
-```json
-{
-  "phone": "15151091129",
-  "passwordHash": "123456"
-}
-```
-
-成功响应：
+请求示例：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": {
-    "id": 1,
-    "role": "USER",
-    "username": "V",
-    "phone": "15151091129",
-    "passwordHash": "123456",
-    "regionCode": "210000",
-    "avatarUrl": null,
-    "status": 1,
-    "createdAt": "2026-03-11T13:42:05",
-    "updatedAt": "2026-03-11T13:42:05"
-  }
+  "phone": "10010001003",
+  "password": "123456"
 }
 ```
 
-失败响应：
+响应结果：
 
 ```json
 {
-  "code": 0,
-  "msg": "用户名或密码错误",
-  "data": null
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "account": {
+            "id": 6,
+            "role": "BOTH",
+            "username": "B",
+            "phone": "10010001003",
+            "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
+            "regionCode": "320102",
+            "avatarUrl": null,
+            "status": 1,
+            "createdAt": "2026-03-30T16:37:02",
+            "updatedAt": "2026-03-30T16:37:02"
+        },
+        "token": "eyJhbGciOiJIUzI1NiJ9.eyJhY2NvdW50SWQiOjYsInJvbGUiOiJCT1RIIiwic3ViIjoiNiIsImlhdCI6MTc3NDg2MDk3NCwiZXhwIjoxNzc0OTQ3Mzc0fQ.QJpzeDOqgYuyyfe1WC1UuNydQy1ip16lt5Z-lXig2_E",
+        "refreshToken": "eyJhbGciOiJIUzI1NiJ9.eyJhY2NvdW50SWQiOjYsInN1YiI6IjYiLCJpYXQiOjE3NzQ4NjA5NzQsImV4cCI6MTc3NTQ2NTc3NH0.vCx7buXk5EackWc-_pd5kzQnpYH5SqPJZPsn4doFcUE"
+    }
 }
 ```
 
-补充接口：
+#### 4.1.3 刷新登录 Token （暂时禁用）
+
+- 方法：`POST`
+- 路径：`/login/refresh`
+- 描述：使用 `refreshToken` 刷新访问令牌
+
+请求示例：
+
+```http
+POST /login/refresh?refreshToken=xxxxx
+```
+
+响应结果：
+
+```json
+
+```
+
+#### 4.1.4 服务连通性检查
 
 - 方法：`GET`
 - 路径：`/login/ping`
-- 描述：网络检查
-- 成功响应：纯文本 `ok`
+- 描述：连通性检查
 
-### 4.3 获取用户详情
+请求示例：
+
+```http
+GET /login/ping
+```
+
+响应结果：
+
+```text
+ok
+```
+
+#### 4.1.5 获取用户详情
 
 - 方法：`GET`
 - 路径：`/accounts/{id}`
 - 描述：根据用户 ID 获取用户信息
 
-示例：
+请求示例：
 
-`GET /accounts/1`
+```http
+GET /accounts/6
+```
 
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": {
-    "id": 1,
-    "role": "USER",
-    "username": "V",
-    "phone": "15151091129",
-    "passwordHash": "123456",
-    "regionCode": "210000",
-    "avatarUrl": null,
-    "status": 1,
-    "createdAt": "2026-03-11T13:42:05",
-    "updatedAt": "2026-03-11T13:42:05"
-  }
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "id": 6,
+        "role": "BOTH",
+        "username": "B",
+        "phone": "10010001003",
+        "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
+        "regionCode": "320102",
+        "avatarUrl": null,
+        "status": 1,
+        "createdAt": "2026-03-30T16:37:02",
+        "updatedAt": "2026-03-30T16:37:02"
+    }
 }
 ```
 
-### 4.4 获取用户标签偏好
+#### 4.1.6 获取用户标签偏好
 
 - 方法：`GET`
 - 路径：`/accounts/{id}/tagPrefs`
-- 描述：获取指定用户的标签偏好列表
+- 描述：获取指定用户标签偏好列表
 
-示例：
+请求示例：
 
-`GET /accounts/1/tagPrefs`
+```http
+GET /accounts/6/tagPrefs
+```
 
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": [
-    {
-      "accountId": 1,
-      "tagId": 1
-    },
-    {
-      "accountId": 1,
-      "tagId": 2
-    }
-  ]
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "accountId": 6,
+            "tagId": 1
+        },
+        {
+            "accountId": 6,
+            "tagId": 2
+        }
+    ]
 }
 ```
 
-### 4.5 修改用户标签偏好
+#### 4.1.7 修改用户标签偏好
 
 - 方法：`POST`
 - 路径：`/accounts/{id}/tagPrefs`
-- 描述：覆盖式更新用户标签偏好；服务端会先删除该用户原有偏好，再批量插入新偏好
+- 描述：覆盖式更新用户标签偏好
 
-请求体：
+请求示例：
 
 ```json
 [
   {
-    "accountId": 1,
+    "accountId": 6,
     "tagId": 1
   },
   {
-    "accountId": 1,
+    "accountId": 6,
     "tagId": 2
   }
 ]
 ```
 
-注意：
-
-- 路径参数 `id` 在当前实现中只用于路由匹配，实际写入以请求体里的 `accountId` 为准
-- 请求体不能为空，否则服务层会因读取首元素报错
-
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": null
+    "code": 1,
+    "msg": "success",
+    "data": null
 }
 ```
 
-### 4.6 获取领队资料
+#### 4.1.8 获取领队资料
 
 - 方法：`GET`
 - 路径：`/accounts/{id}/leaderProfile`
-- 描述：获取指定账号的领队资料
+- 描述：获取领队资料
 
-示例：
+请求示例：
 
-`GET /accounts/3/leaderProfile`
+```http
+GET /accounts/3/leaderProfile
+```
 
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": {
-    "accountId": 3,
-    "intro": "test",
-    "totalRating": null,
-    "ratingCount": null
-  }
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "accountId": 3,
+        "intro": "test",
+        "totalRating": null,
+        "ratingCount": null
+    }
 }
 ```
 
-### 4.7 修改领队简介
+#### 4.1.9 修改领队简介
 
 - 方法：`POST`
 - 路径：`/accounts/{id}/intro`
-- 描述：仅当账号角色为 `LEADER` 时会实际更新
+- 描述：更新领队简介
 
-请求体：
-
-```json
-{
-  "intro": "test"
-}
-```
-
-成功响应：
+请求示例：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": null
+  "intro": "多年研学带队经验"
 }
 ```
 
-### 4.8 获取全部景点
-
-- 方法：`GET`
-- 路径：`/attractions`
-- 描述：获取所有景点列表，当前未分页
-
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": [
-    {
-      "id": 1,
-      "name": "故宫博物院",
-      "type": "MUSEUM",
-      "location": "北京市东城区景山前街4号",
-      "regionCode": "100000",
-      "description": "中国明清两代皇家宫殿",
-      "recommendedDuration": 180,
-      "createdAt": "2026-03-11T20:23:50",
-      "updatedAt": "2026-03-11T20:23:50"
-    },
-    {
-      "id": 2,
-      "name": "长城",
-      "type": "HISTORIC_SITE",
-      "location": "北京市延庆区八达岭镇",
-      "regionCode": "100000",
-      "description": "世界文化遗产",
-      "recommendedDuration": 240,
-      "createdAt": "2026-03-11T20:23:50",
-      "updatedAt": "2026-03-11T20:23:50"
-    }
-  ]
+    "code": 1,
+    "msg": "success",
+    "data": null
 }
 ```
 
-### 4.9 手动生成路线
+#### 4.1.10 文件上传（OSS）
 
 - 方法：`POST`
-- 路径：`/routes/manual`
-- 描述：创建一条新路线，并保存多个路线景点节点
+- 路径：`/upload`
+- `Content-Type`：`multipart/form-data`
+- 描述：上传图片文件，返回可访问 URL
 
-请求体：
+请求示例（curl）：
 
-```json
-[
-  {
-    "attractionId": 2,
-    "visitOrder": 1,
-    "visitTime": "08:00:00",
-    "recommendedDuration": 240,
-    "notes": "需提前到场"
-  },
-  {
-    "attractionId": 1,
-    "visitOrder": 2,
-    "visitTime": "16:00:00",
-    "recommendedDuration": 180,
-    "notes": "通勤时间长"
-  }
-]
+```bash
+curl -X POST "http://10.6.86.86/upload" \
+  -F "image=@D:/tmp/avatar.png"
 ```
 
-成功响应：
+响应结果：
 
 ```json
 {
   "code": 1,
   "msg": "success",
-  "data": 2
+  "data": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/28afeeb9-afa8-4e16-99e2-4f8aac53a5c3.jpg"
 }
 ```
 
-说明：
+### 4.2 项目相关
 
-- `data` 返回新生成的 `routeId`
-
-### 4.10 获取路线详情
-
-- 方法：`GET`
-- 路径：`/routes/{id}`
-- 描述：根据路线 ID 获取路线中的景点节点列表
-
-示例：
-
-`GET /routes/2`
-
-成功响应：
-
-```json
-{
-  "code": 1,
-  "msg": "success",
-  "data": [
-    {
-      "id": 6,
-      "routeId": 2,
-      "attractionId": 1,
-      "visitOrder": 2,
-      "visitTime": "16:00:00",
-      "recommendedDuration": 180,
-      "notes": "通勤时间长",
-      "createdAt": "2026-03-12T13:54:50"
-    },
-    {
-      "id": 5,
-      "routeId": 2,
-      "attractionId": 2,
-      "visitOrder": 1,
-      "visitTime": "08:00:00",
-      "recommendedDuration": 240,
-      "notes": "需提前到场",
-      "createdAt": "2026-03-12T13:54:50"
-    }
-  ]
-}
-```
-
-
-### 4.11 获取全部项目
+#### 4.2.1 获取项目列表
 
 - 方法：`GET`
 - 路径：`/projects`
-- 描述：获取所有项目列表，当前未分页
+- 描述：按用户偏好分页获取项目列表
 
-成功响应：
+请求示例：
+
+```http
+GET /projects?accountId=6&pageNum=1&pageSize=10
+```
+
+请求参数：
+
+- `accountId`：用户 ID（必填）
+- `pageNum`：页码（可选，默认 `1`， 起始为`1`）
+- `pageSize`：每页数量（可选，默认 `10`）
+
+响应结果：（好吧目前没有太多project）
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": [
-    {
-      "id": 1,
-      "routeId": 2,
-      "ownerAccountId": 1,
-      "leaderAccountId": 3,
-      "title": "test",
-      "departureDate": "2026-03-12",
-      "maxMembers": 3,
-      "currentMembers": 1,
-      "status": "OPEN",
-      "createdAt": "2026-03-12T16:38:12",
-      "updatedAt": "2026-03-12T19:56:33"
-    }
-  ]
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "id": 6,
+            "routeId": 2,
+            "regionAdcode": "320102",
+            "tag": "历史人文",
+            "ownerAccountId": 1,
+            "leaderAccountId": null,
+            "title": "test",
+            "departureDate": "2026-03-12",
+            "maxMembers": 3,
+            "currentMembers": 1,
+            "status": "OPEN",
+            "createdAt": "2026-03-28T16:54:55",
+            "updatedAt": "2026-03-28T16:54:55"
+        },
+        {
+            "id": 1,
+            "routeId": 2,
+            "regionAdcode": null,
+            "tag": null,
+            "ownerAccountId": 1,
+            "leaderAccountId": 3,
+            "title": "test",
+            "departureDate": "2026-03-12",
+            "maxMembers": 3,
+            "currentMembers": 1,
+            "status": "OPEN",
+            "createdAt": "2026-03-12T16:38:12",
+            "updatedAt": "2026-03-12T19:56:33"
+        }
+    ]
 }
 ```
 
-### 4.12 获取项目详情
+#### 4.2.2 获取项目详情
 
 - 方法：`GET`
 - 路径：`/projects/{id}`
 - 描述：根据项目 ID 获取项目详情
 
-示例：
+请求示例：
 
-`GET /projects/1`
+```http
+GET /projects/1
+```
 
-成功响应：
+响应结果：
+
 ```json
 {
     "code": 1,
@@ -559,6 +516,8 @@
     "data": {
         "id": 1,
         "routeId": 2,
+        "regionAdcode": null,
+        "tag": null,
         "ownerAccountId": 1,
         "leaderAccountId": 3,
         "title": "test",
@@ -572,82 +531,81 @@
 }
 ```
 
-### 4.13 获取项目成员
+#### 4.2.3 获取项目成员
 
 - 方法：`GET`
 - 路径：`/projects/{id}/members`
 - 描述：获取项目成员列表
 
-示例：
+请求示例：
 
-`GET /projects/1/members`
+```http
+GET /projects/1/members
+```
 
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": [
-    {
-      "id": 1,
-      "projectId": 1,
-      "accountId": 1,
-      "joinStatus": "JOINED",
-      "joinedAt": "2026-03-12T16:38:12"
-    },
-    {
-      "id": 2,
-      "projectId": 1,
-      "accountId": 2,
-      "joinStatus": "JOINED",
-      "joinedAt": "2026-03-12T19:18:53"
-    }
-  ]
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "id": 1,
+            "projectId": 1,
+            "accountId": 1,
+            "joinStatus": "JOINED",
+            "joinedAt": "2026-03-12T16:38:12"
+        },
+        {
+            "id": 2,
+            "projectId": 1,
+            "accountId": 2,
+            "joinStatus": "JOINED",
+            "joinedAt": "2026-03-12T19:18:53"
+        }
+    ]
 }
 ```
 
-### 4.14 创建项目
+#### 4.2.4 创建项目
 
 - 方法：`POST`
 - 路径：`/projects`
-- 描述：创建项目，同时自动把项目发起人写入项目成员表
+- 描述：创建项目
 
-请求体：
+请求示例：
 
 ```json
 {
   "routeId": 2,
   "ownerAccountId": 1,
-  "title": "test",
+  "leaderAccountId": 3,
+  "title": "北京历史文化研学",
   "departureDate": "2026-03-12",
-  "maxMembers": 3,
+  "maxMembers": 30,
   "currentMembers": 1,
   "status": "OPEN"
 }
 ```
 
-说明：
-
-- `leaderAccountId` 可选
-
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": null
+    "code": 1,
+    "msg": "success",
+    "data": null
 }
 ```
 
-### 4.15 加入项目
+#### 4.2.5 加入项目
 
 - 方法：`POST`
 - 路径：`/projects/{id}/join`
-- 描述：普通用户加入项目，路径参数 `id` 为项目 ID
+- 描述：普通用户加入项目
 
-请求体：
+请求示例：
 
 ```json
 {
@@ -655,23 +613,23 @@
 }
 ```
 
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": null
+    "code": 1,
+    "msg": "success",
+    "data": null
 }
 ```
 
-### 4.16 指定项目领队
+#### 4.2.6 指定项目领队
 
 - 方法：`POST`
 - 路径：`/projects/{id}/leader`
-- 描述：更新项目信息中的领队账号，实际调用为按 ID 局部更新项目
+- 描述：为项目指定领队账号
 
-请求体示例：
+请求示例：
 
 ```json
 {
@@ -679,262 +637,1343 @@
 }
 ```
 
-成功响应：
+响应结果：
 
 ```json
 {
-  "code": 1,
-  "msg": "success",
-  "data": null
+    "code": 1,
+    "msg": "success",
+    "data": null
 }
 ```
 
-### 4.17 文件上传（OSS）
+### 4.3 路线相关
 
-- 方法：`POST`
-- 路径：`/upload`
-- `Content-Type`：`multipart/form-data`
-- 表单字段：`image`（file）
+#### 4.3.1 获取路线列表
 
-请求示例（curl）：
-
-```bash
-curl -X POST "http://10.6.86.86/upload" \
-  -F "image=@D:/tmp/avatar.png"
-```
-
-成功响应（`data` 为图片 URL）：
-
-```json
-{
-  "code": 1,
-  "msg": "success",
-  "data": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/28afeeb9-afa8-4e16-99e2-4f8aac53a5c3.jpg"
-}
-```
-
-注意事项：
-
-- 单文件限制：`1MB`
-- 请求总大小限制：`10MB`
-
-### 4.18 AI 规划路线
-
-- 方法：`POST`
-- 路径：`/routes/ai/{memoryId}`
-- 接口说明：根据 `message` 调用 AI 生成路线，并返回新建 `routeId`
-
-路径参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| memoryId | string | 是 | AI 对话记忆 ID |
-
-请求参数（query/form）：
-
-| 参数 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| message | string | 是 | 用户的路线规划请求 |
+- 方法：`GET`
+- 路径：`/routes`
+- 描述：按用户偏好分页获取路线列表
 
 请求示例：
 
 ```http
-POST /routes/ai/1?message=帮我规划一条北京两天研学路线
+GET /routes?accountId=1&pageNum=1&pageSize=10
 ```
 
-成功响应示例（`data` 为 `routeId`）：
+请求参数：
+
+- `accountId`：用户 ID（必填）
+- `pageNum`：页码（可选，默认 `1`）
+- `pageSize`：每页数量（可选，默认 `10`）
+
+响应结果：（好吧路线也只有这些）
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "id": 17,
+            "regionAdcode": "320102",
+            "tag": "历史人文",
+            "createdAt": "2026-03-28T19:23:31"
+        },
+        {
+            "id": 4,
+            "regionAdcode": null,
+            "tag": null,
+            "createdAt": "2026-03-15T17:34:04"
+        },
+        {
+            "id": 2,
+            "regionAdcode": null,
+            "tag": null,
+            "createdAt": "2026-03-12T13:54:50"
+        },
+        {
+            "id": 1,
+            "regionAdcode": null,
+            "tag": null,
+            "createdAt": "2026-03-11T20:26:30"
+        }
+    ]
+}
+```
+
+#### 4.3.2 获取路线详情
+
+- 方法：`GET`
+- 路径：`/routes/{id}`
+- 描述：根据路线 ID 获取路线节点
+
+请求示例：
+
+```http
+GET /routes/17
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "routeId": 17,
+            "visitOrder": 1,
+            "poiId": "B00190BMRC",
+            "visitTime": "2026-03-20T09:00:00",
+            "recommendedDuration": 120,
+            "notes": "建议参观时间：9:00-11:00；可乘坐地铁2号线前往下一个景点",
+            "parentPoiId": null,
+            "name": "总统府",
+            "address": "长江路292号",
+            "location": "118.797398,32.044228",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320102",
+            "adname": "玄武区",
+            "type": "风景名胜;风景名胜;国家级景点",
+            "typecode": "110202",
+            "distance": null,
+            "attractionCreatedAt": null,
+            "attractionUpdatedAt": null,
+            "createdAt": "2026-03-28T19:23:30"
+        },
+        {
+            "routeId": 17,
+            "visitOrder": 2,
+            "poiId": "B00190AMPT",
+            "visitTime": "2026-03-20T11:30:00",
+            "recommendedDuration": 90,
+            "notes": "建议参观时间：11:30-13:00；步行约1.3公里或乘坐地铁2号线前往下一个景点",
+            "parentPoiId": "B00191437W",
+            "name": "朝天宫",
+            "address": "朝天宫4号(朝天宫地铁站1号口步行210米)",
+            "location": "118.775320,32.034344",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320104",
+            "adname": "秦淮区",
+            "type": "风景名胜;风景名胜;国家级景点",
+            "typecode": "110202",
+            "distance": null,
+            "attractionCreatedAt": null,
+            "attractionUpdatedAt": null,
+            "createdAt": "2026-03-28T19:23:30"
+        },
+        {
+            "routeId": 17,
+            "visitOrder": 3,
+            "poiId": "B001905325",
+            "visitTime": "2026-03-20T14:00:00",
+            "recommendedDuration": 120,
+            "notes": "建议参观时间：14:00-16:00；乘坐地铁5号线前往下一个景点",
+            "parentPoiId": null,
+            "name": "阅江楼景区",
+            "address": "建宁路202号",
+            "location": "118.748018,32.094477",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320106",
+            "adname": "鼓楼区",
+            "type": "风景名胜;风景名胜;国家级景点",
+            "typecode": "110202",
+            "distance": null,
+            "attractionCreatedAt": null,
+            "attractionUpdatedAt": null,
+            "createdAt": "2026-03-28T19:23:30"
+        },
+        {
+            "routeId": 17,
+            "visitOrder": 4,
+            "poiId": "B001906CHO",
+            "visitTime": "2026-03-21T09:00:00",
+            "recommendedDuration": 120,
+            "notes": "建议参观时间：9:00-11:00；乘坐550路公交前往上一个景点",
+            "parentPoiId": null,
+            "name": "宝船厂遗址公园",
+            "address": "漓江路57号",
+            "location": "118.733421,32.060879",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320106",
+            "adname": "鼓楼区",
+            "type": "风景名胜;风景名胜;省级景点",
+            "typecode": "110203",
+            "distance": null,
+            "attractionCreatedAt": null,
+            "attractionUpdatedAt": null,
+            "createdAt": "2026-03-28T19:23:30"
+        }
+    ]
+}
+```
+
+#### 4.3.3 手动生成路线
+
+- 方法：`POST`
+- 路径：`/routes/manual`
+- 描述：手动提交路线节点并生成路线
+
+请求示例：
+
+```json
+[
+  {
+    "poiId": "B00190BMRC",
+    "visitOrder": 1,
+    "visitTime": "2026-04-01T09:00:00",
+    "recommendedDuration": 120,
+    "notes": "先参观总统府"
+  },
+  {
+    "poiId": "B00190AMPT",
+    "visitOrder": 2,
+    "visitTime": "2026-04-01T11:30:00",
+    "recommendedDuration": 90,
+    "notes": "步行前往朝天宫"
+  },
+  {
+    "poiId": "B001905325",
+    "visitOrder": 3,
+    "visitTime": "2026-04-01T14:00:00",
+    "recommendedDuration": 120,
+    "notes": "下午参观阅江楼"
+  }
+]
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": 18
+}
+```
+
+#### 4.3.4 AI 规划路线
+
+- 方法：`POST`
+- 路径：`/routes/ai/{memoryId}`
+- 描述：根据自然语言请求由 AI 生成并保存路线
+
+请求示例：
+
+```http
+POST /routes/ai/1?message=我要在南京，2026年3月20日开始的两天内进行历史方面的旅游，请给我规划一个路线
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": 19
+}
+```
+
+### 4.4 评论相关
+
+#### 4.4.1 创建评论
+
+- 方法：`POST`
+- 路径：`/reviews`
+- 描述：创建评论并可提交标签分数 （5分制）（reviewType暂时只有USER_TO_LEADER）
+
+请求示例：
+
+```json
+{
+  "projectId": 1,
+  "routeId": 2,
+  "fromAccountId": 1,
+  "toAccountId": 3,
+  "reviewType": "USER_TO_LEADER",
+  "overallScore": 5,
+  "content": "整体体验很好"
+}
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": 1
+}
+```
+
+#### 4.4.2 删除评论
+
+- 方法：`DELETE`
+- 路径：`/reviews/{id}`
+- 描述：按评论 ID 删除评论
+
+请求示例：
+
+```http
+DELETE /reviews/10
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": null
+}
+```
+
+#### 4.4.3 修改评论
+
+- 方法：`PUT`
+- 路径：`/reviews/{id}`
+- 描述：更新评论主体与标签分数
+
+请求示例：
+
+```json
+{
+  "projectId": 1,
+  "routeId": 2,
+  "fromAccountId": 1,
+  "toAccountId": 3,
+  "reviewType": "USER_TO_LEADER",
+  "overallScore": 4,
+  "content": "更新后的评论内容"
+}
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": null
+}
+```
+
+#### 4.4.4 获取评论详情
+
+- 方法：`GET`
+- 路径：`/reviews/{id}`
+- 描述：获取单条评论及其标签分数
+
+请求示例：
+
+```http
+GET /reviews/1
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "id": 1,
+        "projectId": 1,
+        "routeId": 2,
+        "fromAccountId": 1,
+        "toAccountId": 3,
+        "reviewType": "USER_TO_LEADER",
+        "overallScore": 4,
+        "content": "更新后的评论内容",
+        "createdAt": "2026-03-30T19:16:06"
+    }
+}
+```
+
+#### 4.4.5 获取全部评论
+
+- 方法：`GET`
+- 路径：`/reviews`
+- 描述：获取全部评论列表
+
+请求示例：
+
+```http
+GET /reviews
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "id": 1,
+            "projectId": 1,
+            "routeId": 2,
+            "fromAccountId": 1,
+            "toAccountId": 3,
+            "reviewType": "USER_TO_LEADER",
+            "overallScore": 4,
+            "content": "更新后的评论内容",
+            "createdAt": "2026-03-30T19:16:06"
+        },
+        {
+            "id": 2,
+            "projectId": 1,
+            "routeId": 2,
+            "fromAccountId": 1,
+            "toAccountId": 3,
+            "reviewType": "USER_TO_LEADER",
+            "overallScore": 5,
+            "content": "整体体验很好",
+            "createdAt": "2026-03-30T19:21:49"
+        },
+        {
+            "id": 3,
+            "projectId": 1,
+            "routeId": 2,
+            "fromAccountId": 1,
+            "toAccountId": 3,
+            "reviewType": "USER_TO_LEADER",
+            "overallScore": 5,
+            "content": "整体体验很好",
+            "createdAt": "2026-03-30T19:22:26"
+        }
+    ]
+}
+```
+
+#### 4.4.6 按项目查询评论
+
+- 方法：`GET`
+- 路径：`/reviews/project/{projectId}`
+- 描述：查询指定项目的评论
+
+请求示例：
+
+```http
+GET /reviews/project/1
+```
+
+响应结果同上
+
+#### 4.4.7 按路线查询评论
+
+- 方法：`GET`
+- 路径：`/reviews/route/{routeId}`
+- 描述：查询指定路线的评论
+
+请求示例：
+
+```http
+GET /reviews/route/2
+```
+
+响应结果同上
+
+#### 4.4.8 查询领队收到的评论
+
+- 方法：`GET`
+- 路径：`/reviews/leader/{accountId}`
+- 描述：查询目标用户收到的评论列表
+
+请求示例：
+
+```http
+GET /reviews/leader/3
+```
+
+响应结果同上
+
+#### 4.4.9 查询某用户发出的评论
+
+- 方法：`GET`
+- 路径：`/reviews/user/{accountId}`
+- 描述：查询指定用户发出的评论列表
+
+请求示例：
+
+```http
+GET /reviews/user/1
+```
+
+响应结果同上
+
+#### 4.4.10 获取用户平均评分
+
+- 方法：`GET`
+- 路径：`/reviews/average-score/{accountId}`
+- 描述：获取目标用户收到评论的平均分
+
+请求示例：
+
+```http
+GET /reviews/average-score/3
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": 4.6667
+}
+```
+
+### 4.5 聊天相关
+
+#### 4.5.1 创建或获取会话
+
+- 方法：`POST`
+- 路径：`/chat/sessions`
+- 描述：按项目和双方账号创建或复用会话
+
+请求示例：
+
+```json
+{
+  "projectId": 1,
+  "userAccountId": 2,
+  "leaderAccountId": 3
+}
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "id": 1,
+        "projectId": 1,
+        "userAccountId": 2,
+        "leaderAccountId": 3,
+        "createdAt": "2026-03-30T19:45:34"
+    }
+}
+```
+
+#### 4.5.2 查询会话列表
+
+- 方法：`GET`
+- 路径：`/chat/sessions`
+- 描述：按账号与角色查询会话列表
+
+请求示例：
+
+```http
+GET /chat/sessions?accountId=2&role=USER
+```
+
+请求参数：
+
+- `accountId`：账号 ID（必填）
+- `role`：角色（可选，默认 `USER`）
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "id": 1,
+            "projectId": 1,
+            "userAccountId": 2,
+            "leaderAccountId": 3,
+            "createdAt": "2026-03-30T19:45:34"
+        }
+    ]
+}
+```
+
+#### 4.5.3 发送消息
+
+- 方法：`POST`
+- 路径：`/chat/messages`
+- 描述：向会话发送消息（目前先只用文本消息）
+
+请求示例：
+
+```json
+{
+  "sessionId": 1,
+  "senderAccountId": 2,
+  "content": "你好，行程细节可以再确认一下吗？",
+  "msgType": "TEXT"
+}
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": 1
+}
+```
+
+#### 4.5.4 拉取会话消息
+
+- 方法：`GET`
+- 路径：`/chat/sessions/{sessionId}/messages`
+- 描述：拉取指定会话的消息列表
+
+请求示例：
+
+```http
+GET /chat/sessions/1/messages
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "id": 1,
+            "sessionId": 1,
+            "senderAccountId": 2,
+            "content": "你好，行程细节可以再确认一下吗？",
+            "msgType": "TEXT",
+            "sentAt": "2026-03-30T19:52:36"
+        }
+    ]
+}
+```
+
+### 4.6 数据相关（地区与景点）
+
+#### 4.6.1 获取省级地区
+
+- 方法：`GET`
+- 路径：`/regions/provinces`
+- 描述：获取省级行政区列表（注册时用，无港澳台）
+
+请求示例：
+
+```http
+GET /regions/provinces
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "adcode": "110000",
+            "name": "北京市",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": "010",
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "120000",
+            "name": "天津市",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": "022",
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "130000",
+            "name": "河北省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "140000",
+            "name": "山西省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "150000",
+            "name": "内蒙古自治区",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "210000",
+            "name": "辽宁省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "220000",
+            "name": "吉林省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "230000",
+            "name": "黑龙江省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "310000",
+            "name": "上海市",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": "021",
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "320000",
+            "name": "江苏省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "330000",
+            "name": "浙江省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "340000",
+            "name": "安徽省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "350000",
+            "name": "福建省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "360000",
+            "name": "江西省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "370000",
+            "name": "山东省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "410000",
+            "name": "河南省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "420000",
+            "name": "湖北省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "430000",
+            "name": "湖南省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "440000",
+            "name": "广东省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "450000",
+            "name": "广西壮族自治区",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "460000",
+            "name": "海南省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "500000",
+            "name": "重庆市",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": "023",
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "510000",
+            "name": "四川省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "520000",
+            "name": "贵州省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "530000",
+            "name": "云南省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "540000",
+            "name": "西藏自治区",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "610000",
+            "name": "陕西省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "620000",
+            "name": "甘肃省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "630000",
+            "name": "青海省",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "640000",
+            "name": "宁夏回族自治区",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        },
+        {
+            "adcode": "650000",
+            "name": "新疆维吾尔自治区",
+            "level": 1,
+            "parentAdcode": null,
+            "citycode": null,
+            "isVirtual": 0,
+            "hasChildren": 1
+        }
+    ]
+}
+```
+
+#### 4.6.2 获取下级地区
+
+- 方法：`GET`
+- 路径：`/regions/children`
+- 描述：按父级行政区编码查询下级地区（注册时用，一共三级地区）
+
+请求示例：（第二级地区）
+
+```http
+GET /regions/children?parentAdcode=110000
+```
+
+请求参数：
+
+- `parentAdcode`：父级行政区编码（必填）
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "adcode": "110100",
+            "name": "北京市",
+            "level": 2,
+            "parentAdcode": "110000",
+            "citycode": "010",
+            "isVirtual": 1,
+            "hasChildren": 1
+        }
+    ]
+}
+```
+
+请求示例：（第三级地区）
+
+```http
+GET /regions/children?parentAdcode=110100
+```
+
+请求参数：
+
+- `parentAdcode`：父级行政区编码（必填）
+
+响应结果：
 
 ```json
 {
   "code": 1,
   "msg": "success",
-  "data": 4
+  "data": [
+    {
+      "adcode": "110101",
+      "name": "东城区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110102",
+      "name": "西城区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110105",
+      "name": "朝阳区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110106",
+      "name": "丰台区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110107",
+      "name": "石景山区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110108",
+      "name": "海淀区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110109",
+      "name": "门头沟区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110111",
+      "name": "房山区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110112",
+      "name": "通州区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110113",
+      "name": "顺义区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110114",
+      "name": "昌平区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110115",
+      "name": "大兴区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110116",
+      "name": "怀柔区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110117",
+      "name": "平谷区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110118",
+      "name": "密云区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    },
+    {
+      "adcode": "110119",
+      "name": "延庆区",
+      "level": 3,
+      "parentAdcode": "110100",
+      "citycode": "010",
+      "isVirtual": 0,
+      "hasChildren": 0
+    }
+  ]
 }
 ```
 
-## Postman 测试指南
+#### 4.6.3 获取景点列表
 
-### 环境准备
-1. **数据库**：确保MySQL数据库已启动，数据库名为`study_tour`，用户名为`love`，密码为`lovepoems`。
-2. **Java**：确保安装了JDK 17或更高版本。
-3. **Maven**：确保安装了Maven。
-4. **Postman**：下载并安装Postman。
+- 方法：`GET`
+- 路径：`/attractions`
+- 描述：按地区分页查询景点，`regionCode` 为空时查全部
 
-### 启动应用
-1. 进入项目根目录：`cd D:\dachuang\study_tour`
-2. 运行Maven命令：`mvn spring-boot:run`
-3. 应用将在`http://localhost:8080`启动。
+请求示例：
 
-### Postman配置
-- Base URL: `http://localhost:8080`
-- 设置环境变量（如需要）。
+```http
+GET /attractions?regionCode=320100&pageNum=1&pageSize=10
+```
 
-### API测试步骤
+请求参数：
 
-#### 1. 健康检查
-- **方法**: GET
-- **URL**: `/login/ping`
-- **描述**: 检查服务是否正常运行。
-- **预期响应**: `"ok"`
+- `regionCode`：地区编码（可选）
+- `pageNum`：页码（可选，默认 `1`）
+- `pageSize`：每页数量（可选，默认 `10`）
 
-#### 2. 用户注册
-- **方法**: POST
-- **URL**: `/register`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON):
-  ```json
-  {
-    "username": "testuser",
-    "phone": "13800138000",
-    "password": "password123",
-    "confirmPassword": "password123",
-    "role": "USER"
-  }
-  ```
-- **描述**: 注册新用户。
-- **预期响应**: 成功时返回`{"code":1,"msg":"success"}`，失败时返回错误信息。
+响应结果：
 
-#### 3. 用户登录
-- **方法**: POST
-- **URL**: `/login`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON):
-  ```json
-  {
-    "phone": "13800138000",
-    "password": "password123"
-  }
-  ```
-- **描述**: 用户登录，获取JWT token。
-- **预期响应**: 成功时返回`{"code":1,"msg":"success","data":{"account":{...},"token":"jwt_token"}}`。
-- **注意**: 保存token用于后续需要认证的请求。
-
-#### 4. 获取用户信息
-- **方法**: GET
-- **URL**: `/accounts/{id}` (替换{id}为用户ID，如1)
-- **Headers**: `Authorization: Bearer {token}` (如果需要认证)
-- **描述**: 获取指定用户的信息。
-- **预期响应**: 返回用户信息。
-
-#### 5. 获取用户标签偏好
-- **方法**: GET
-- **URL**: `/accounts/{id}/tagPrefs`
-- **描述**: 获取用户的标签偏好。
-- **预期响应**: 返回标签偏好列表。
-
-#### 6. 修改用户标签偏好
-- **方法**: POST
-- **URL**: `/accounts/{id}/tagPrefs`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON): 标签偏好列表
-- **描述**: 修改用户的标签偏好。
-
-#### 7. 获取领队简介
-- **方法**: GET
-- **URL**: `/accounts/{id}/leaderProfile`
-- **描述**: 获取领队的简介。
-
-#### 8. 修改领队简介
-- **方法**: POST
-- **URL**: `/accounts/{id}/intro`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON):
-  ```json
-  {
-    "intro": "新的简介内容"
-  }
-  ```
-
-#### 9. 获取所有景点
-- **方法**: GET
-- **URL**: `/attractions`
-- **描述**: 获取所有景点信息。
-- **预期响应**: 返回景点列表。
-
-#### 10. 获取所有项目
-- **方法**: GET
-- **URL**: `/projects`
-- **描述**: 获取所有项目。
-- **预期响应**: 返回项目列表。
-
-#### 11. 获取项目详情
-- **方法**: GET
-- **URL**: `/projects/{id}`
-- **描述**: 获取指定项目的详情。
-
-#### 12. 获取项目成员
-- **方法**: GET
-- **URL**: `/projects/{id}/members`
-- **描述**: 获取项目的成员列表。
-
-#### 13. 创建项目
-- **方法**: POST
-- **URL**: `/projects`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON): 项目信息
-- **描述**: 创建新项目。
-
-#### 14. 加入项目
-- **方法**: POST
-- **URL**: `/projects/{id}/join`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON):
-  ```json
-  {
-    "accountId": 1
-  }
-  ```
-
-#### 15. 创建聊天会话
-- **方法**: POST
-- **URL**: `/chat/sessions`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON):
-  ```json
-  {
-    "projectId": 1,
-    "userAccountId": 1,
-    "leaderAccountId": 2
-  }
-  ```
-- **描述**: 创建或获取聊天会话。
-
-#### 16. 查询会话列表
-- **方法**: GET
-- **URL**: `/chat/sessions?accountId=1&role=USER`
-- **描述**: 查询用户的会话列表。
-
-#### 17. 发送聊天消息
-- **方法**: POST
-- **URL**: `/chat/messages`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON): 消息内容
-- **描述**: 发送聊天消息。
-
-#### 18. 获取路线
-- **方法**: GET
-- **URL**: `/routes/{id}`
-- **描述**: 获取指定路线。
-
-#### 19. 手动生成路线
-- **方法**: POST
-- **URL**: `/routes/manual`
-- **Headers**: `Content-Type: application/json`
-- **Body** (JSON): 路线景点列表
-- **描述**: 手动生成路线。
-
-#### 20. AI生成路线
-- **方法**: POST
-- **URL**: `/routes/ai`
-- **描述**: AI生成路线（当前未实现，返回null）。
-
-### 注意事项
-- 某些接口可能需要JWT token认证，请在Headers中添加`Authorization: Bearer {token}`。
-- 评价功能（ReviewController）尚未实现。
-- 确保数据库中有相应的数据，否则某些查询可能返回空结果。
-- 如果遇到错误，检查控制台日志或数据库连接。
-
-### 故障排除
-- 如果端口冲突，修改`application.yaml`中的server.port。
-- 确保MySQL服务运行，并数据库已创建。
-- 使用`mvn clean install`重新构建项目。
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "poiId": "B00190513A",
+            "parentPoiId": null,
+            "name": "南京国防园",
+            "address": "虎踞路87号",
+            "location": "118.754817,32.051368",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320106",
+            "adname": "鼓楼区",
+            "type": "风景名胜;风景名胜;省级景点",
+            "typecode": "110203",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B001905179",
+            "parentPoiId": null,
+            "name": "乌龙潭公园",
+            "address": "广州路215号(省人民医院对面)",
+            "location": "118.766475,32.046112",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320106",
+            "adname": "鼓楼区",
+            "type": "风景名胜;风景名胜;省级景点",
+            "typecode": "110203",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B001905325",
+            "parentPoiId": null,
+            "name": "阅江楼景区",
+            "address": "建宁路202号",
+            "location": "118.748018,32.094477",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320106",
+            "adname": "鼓楼区",
+            "type": "风景名胜;风景名胜;国家级景点",
+            "typecode": "110202",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B001905N9D",
+            "parentPoiId": null,
+            "name": "侵华日军南京大屠杀遇难同胞纪念馆",
+            "address": "水西门大街418号",
+            "location": "118.742372,32.035217",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320105",
+            "adname": "建邺区",
+            "type": "风景名胜;风景名胜;纪念馆",
+            "typecode": "110204",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B00190682O",
+            "parentPoiId": null,
+            "name": "中国南京云锦博物馆",
+            "address": "茶亭东街240号",
+            "location": "118.744814,32.036390",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320105",
+            "adname": "建邺区",
+            "type": "科教文化服务;博物馆;博物馆",
+            "typecode": "140100",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B001906CHO",
+            "parentPoiId": null,
+            "name": "宝船厂遗址公园",
+            "address": "漓江路57号",
+            "location": "118.733421,32.060879",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320106",
+            "adname": "鼓楼区",
+            "type": "风景名胜;风景名胜;省级景点",
+            "typecode": "110203",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B001906U94",
+            "parentPoiId": "B001905325",
+            "name": "南京静海寺纪念馆",
+            "address": "建宁路288号",
+            "location": "118.744723,32.092359",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320106",
+            "adname": "鼓楼区",
+            "type": "风景名胜;风景名胜;纪念馆",
+            "typecode": "110204",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B001907IVB",
+            "parentPoiId": null,
+            "name": "中共代表团梅园新村纪念馆",
+            "address": "汉府街18-1",
+            "location": "118.801602,32.042379",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320102",
+            "adname": "玄武区",
+            "type": "风景名胜;风景名胜;纪念馆",
+            "typecode": "110204",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B001908DLT",
+            "parentPoiId": null,
+            "name": "南京美术馆",
+            "address": "四条巷12号(近常府街)",
+            "location": "118.798451,32.034392",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320104",
+            "adname": "秦淮区",
+            "type": "科教文化服务;美术馆;美术馆",
+            "typecode": "140400",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        },
+        {
+            "poiId": "B001909T86",
+            "parentPoiId": null,
+            "name": "江苏科技馆",
+            "address": "石头城路118号",
+            "location": "118.749855,32.066072",
+            "pcode": "320000",
+            "pname": "江苏省",
+            "citycode": "025",
+            "cityname": "南京市",
+            "adcode": "320106",
+            "adname": "鼓楼区",
+            "type": "科教文化服务;科技馆;科技馆",
+            "typecode": "140600",
+            "distance": null,
+            "createdAt": "2026-03-20T18:51:16",
+            "updatedAt": "2026-03-20T18:51:16"
+        }
+    ]
+}
+```

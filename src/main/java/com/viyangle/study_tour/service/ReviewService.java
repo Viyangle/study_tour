@@ -1,17 +1,16 @@
 package com.viyangle.study_tour.service;
 
 import com.viyangle.study_tour.pojo.Review;
-import com.viyangle.study_tour.pojo.ReviewTagScore;
 
 import java.util.List;
 
 public interface ReviewService {
 
-    Long createReview(Review review, List<ReviewTagScore> tagScores);
+    Long createReview(Review review);
 
     boolean deleteReview(Long reviewId);
 
-    boolean updateReview(Review review, List<ReviewTagScore> tagScores);
+    boolean updateReview(Review review);
 
     Review getReviewById(Long reviewId);
 
@@ -28,6 +27,4 @@ public interface ReviewService {
     List<Review> getReviewsByReviewType(String reviewType);
 
     Double getAverageScoreByToAccountId(Long toAccountId);
-
-    List<ReviewTagScore> getTagScoresByReviewId(Long reviewId);
 }

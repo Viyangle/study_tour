@@ -11,6 +11,8 @@ public interface ReviewMapper {
 
     int insert(Review review);
 
+    int deleteReviewRelationsByReviewId(@Param("reviewId") Long reviewId);
+
     int deleteById(@Param("id") Long id);
 
     int updateById(Review review);
