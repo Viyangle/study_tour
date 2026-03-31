@@ -4,7 +4,7 @@
 
 - 项目名称：`study_tour`
 - 技术栈：`Spring Boot 3 + MyBatis + MySQL`
-- 默认服务地址：`http://47.94.95.110` (已重定向为https服务)
+- 默认服务地址：`http://47.94.95.110:8080` (已重定向为https服务)
 - 连接测试：`GET /login/ping`
 - 数据格式：`application/json`
 
