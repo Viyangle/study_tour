@@ -76,9 +76,9 @@ public class AccountServiceImpl implements AccountService {
     @Override
     public Long register(RegisterRequest registerRequest) {
         // 1. 检查用户名是否已存在
-        if (accountMapper.existsByUsername(registerRequest.getUsername())) {
-            return -2L;
-        }
+//        if (accountMapper.existsByUsername(registerRequest.getUsername())) {
+//            return -2L;
+//        }
 
         // 2. 检查手机号是否已存在
         if (accountMapper.existsByPhone(registerRequest.getPhone())) {

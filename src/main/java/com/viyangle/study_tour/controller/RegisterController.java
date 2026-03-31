@@ -35,9 +35,9 @@ public class RegisterController {
         }
 
         Long id = accountService.register(registerRequest);
-        if (id == -2L) {
-            return Result.error("用户名已存在");
-        }
+//        if (id == -2L) {
+//            return Result.error("用户名已存在");
+//        }
         if (id == -1L) {
             return Result.error("手机号已存在");
         }

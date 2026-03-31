@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Global exception handler.
  */
 @Slf4j
-@RestControllerAdvice
+//@RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
