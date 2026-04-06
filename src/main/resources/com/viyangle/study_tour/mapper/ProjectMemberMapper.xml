@@ -40,4 +40,12 @@
         where project_id = #{projectId}
     </select>
 
+    <select id="selectByProjectIdAndAccountId" resultType="com.viyangle.study_tour.pojo.ProjectMember">
+        select id, project_id, account_id, join_status, joined_at
+        from project_members
+        where project_id = #{projectId}
+          and account_id = #{accountId}
+        limit 1
+    </select>
+
 </mapper>

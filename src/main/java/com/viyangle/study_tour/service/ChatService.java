@@ -23,10 +23,10 @@ public interface ChatService {
      * 发送消息
      * @return 新消息id
      */
-    Long sendMessage(SendChatMessageRequest request);
+    Long sendMessage(SendChatMessageRequest request, Long currentAccountId);
 
     /**
      * 拉取会话消息列表
      */
-    List<ChatMessage> listMessages(Long sessionId);
+    List<ChatMessage> listMessages(Long sessionId, Long currentAccountId);
 }

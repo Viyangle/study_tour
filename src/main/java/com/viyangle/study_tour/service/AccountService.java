@@ -32,7 +32,7 @@ public interface AccountService {
      */
     Long register(RegisterRequest registerRequest);
 
-    void changeTagPrefs(List<AccountTagPref> accountTagPrefs);
+    void changeTagPrefs(Long pathAccountId, List<AccountTagPref> accountTagPrefs);
 
     void changeIntro(Long accountId, String intro);
 

@@ -12,7 +12,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class SendChatMessageRequest {
     private Long sessionId;
-    private Long senderAccountId;
     private String content;
     /**
      * 消息类型：TEXT / IMAGE / SYSTEM

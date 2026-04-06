@@ -1,5 +1,7 @@
 package com.viyangle.study_tour.config;
 
+import com.viyangle.study_tour.interceptor.LogInterceptor;
+import com.viyangle.study_tour.interceptor.PermissionInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;

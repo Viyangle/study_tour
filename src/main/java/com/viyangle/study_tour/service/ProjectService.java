@@ -18,5 +18,5 @@ public interface ProjectService {
 
     List<ProjectMember> getProjectMembers(Long id);
 
-    void leaderJoinProject(Project project);
+    void leaderJoinProject(Project project, Long currentAccountId);
 }

@@ -1,5 +1,6 @@
 package com.viyangle.study_tour.config;
 
+import com.viyangle.study_tour.filter.JwtAuthFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

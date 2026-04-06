@@ -1,4 +1,4 @@
-package com.viyangle.study_tour.config;
+package com.viyangle.study_tour.filter;
 
 import com.viyangle.study_tour.utils.JwtUtil;
 import jakarta.servlet.FilterChain;

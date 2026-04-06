@@ -2,25 +2,55 @@ package com.viyangle.study_tour.exception;
 
 import com.viyangle.study_tour.pojo.Result;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-/**
- * Global exception handler.
- */
 @Slf4j
-//@RestControllerAdvice
+@RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(RuntimeException.class)
-    public Result handleRuntimeException(RuntimeException e) {
-        log.error("\u8fd0\u884c\u65f6\u5f02\u5e38: {}", e.getMessage(), e);
+    @ExceptionHandler(UnauthorizedException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result handleUnauthorizedException(UnauthorizedException e) {
+        log.warn("Unauthorized: {}", e.getMessage());
         return Result.error(e.getMessage());
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result handleForbiddenException(ForbiddenException e) {
+        log.warn("Forbidden: {}", e.getMessage());
+        return Result.error(e.getMessage());
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Result handleResourceNotFoundException(ResourceNotFoundException e) {
+        log.warn("Not found: {}", e.getMessage());
+        return Result.error(e.getMessage());
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class, MethodArgumentNotValidException.class})
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result handleBadRequestException(Exception e) {
+        log.warn("Bad request: {}", e.getMessage());
+        return Result.error(e.getMessage());
+    }
+
+    @ExceptionHandler(RuntimeException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public Result handleRuntimeException(RuntimeException e) {
+        log.error("Runtime exception", e);
+        return Result.error("系统繁忙，请稍后再试");
+    }
+
     @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result handleException(Exception e) {
-        log.error("\u7cfb\u7edf\u5f02\u5e38", e);
-        return Result.error("\u7cfb\u7edf\u7e41\u5fd9\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5");
+        log.error("System exception", e);
+        return Result.error("系统繁忙，请稍后再试");
     }
 }

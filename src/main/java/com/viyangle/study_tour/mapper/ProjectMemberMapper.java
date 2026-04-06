@@ -21,4 +21,6 @@ public interface ProjectMemberMapper {
     List<ProjectMember> selectAll();
 
     List<ProjectMember> selectByProjectId(Long id);
+
+    ProjectMember selectByProjectIdAndAccountId(@Param("projectId") Long projectId, @Param("accountId") Long accountId);
 }

@@ -91,7 +91,7 @@ jwt:
 # App custom config
 app:
   security:
-    enabled: false
+    enabled: true
   rag:
     embedding:
       # Whether to ingest classpath:content documents on startup
