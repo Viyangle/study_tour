@@ -39,6 +39,15 @@
         where poi_id = #{poiId}
     </select>
 
+    <select id="selectByPoiIds" resultType="com.viyangle.study_tour.pojo.Attraction">
+        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
+        from attractions
+        where poi_id in
+        <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+            #{poiId}
+        </foreach>
+    </select>
+
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Attraction">
         select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
         from attractions

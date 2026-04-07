@@ -1,14 +1,13 @@
 package com.viyangle.study_tour.service.impl;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.viyangle.study_tour.aiservice.CandidateSelectorService;
 import com.viyangle.study_tour.aiservice.RouteComposerService;
 import com.viyangle.study_tour.mapper.AttractionMapper;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.AIRoutePlan;
 import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
+import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -16,9 +15,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -33,9 +31,6 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     ));
 
     @Autowired
-    private CandidateSelectorService candidateSelectorService;
-
-    @Autowired
     private RouteComposerService routeComposerService;
 
     @Autowired
@@ -47,12 +42,16 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private VectorCandidateRetrieverService vectorCandidateRetrieverService;
+
     @Override
     public AIRoutePlan planRouteV2(String memoryId, String message) throws Exception {
-        String candidatePrompt = buildCandidatePrompt(message);
-        String candidateText = candidateSelectorService.chat(memoryId, candidatePrompt);
-        List<AIRouteItem> candidateItems = parseAiItems(candidateText);
-        List<Attraction> candidates = loadCandidateAttractions(candidateItems);
+        List<String> candidatePoiIds = vectorCandidateRetrieverService.retrieveCandidatePoiIds(message, 15);
+        List<Attraction> candidates = loadCandidateAttractions(candidatePoiIds);
+        if (candidates.size() < 2) {
+            candidates = loadFallbackAttractions(15);
+        }
 
         if (candidates.size() < 2) {
             throw new IllegalArgumentException("Candidate POIs are not enough for routing.");
@@ -66,13 +65,6 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         validateFinalItems(plan.getItems(), candidates);
 
         return plan;
-    }
-
-    private List<AIRouteItem> parseAiItems(String aiText) throws Exception {
-        String json = aiText.replaceAll("(?s)^```json\\s*|\\s*```$", "").trim();
-        List<AIRouteItem> items = objectMapper.readValue(json, new TypeReference<List<AIRouteItem>>() {});
-        validateAiItems(items);
-        return items;
     }
 
     private AIRoutePlan parseAiPlan(String aiText) throws Exception {
@@ -126,43 +118,58 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         }
     }
 
-    private List<Attraction> loadCandidateAttractions(List<AIRouteItem> candidateItems) {
-        Map<String, Integer> orderMap = new LinkedHashMap<>();
-        for (AIRouteItem item : candidateItems) {
-            if (!orderMap.containsKey(item.getPoiId())) {
-                orderMap.put(item.getPoiId(), item.getVisitOrder());
+    private List<Attraction> loadCandidateAttractions(List<String> candidatePoiIds) {
+        if (candidatePoiIds == null || candidatePoiIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<Attraction> loaded = attractionMapper.selectByPoiIds(candidatePoiIds);
+        if (loaded == null || loaded.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, Attraction> attractionMap = new HashMap<>();
+        for (Attraction attraction : loaded) {
+            if (attraction == null || attraction.getPoiId() == null || attraction.getPoiId().isBlank()) {
+                continue;
             }
+            attractionMap.put(attraction.getPoiId(), attraction);
         }
 
         List<Attraction> list = new ArrayList<>();
-        for (String poiId : orderMap.keySet()) {
-            Attraction attraction = attractionMapper.selectByPoiId(poiId);
+        LinkedHashSet<String> uniquePoiIds = new LinkedHashSet<>(candidatePoiIds);
+        for (String poiId : uniquePoiIds) {
+            Attraction attraction = attractionMap.get(poiId);
             if (attraction != null && attraction.getLocation() != null && !attraction.getLocation().isBlank()) {
                 list.add(attraction);
             }
         }
 
-        list.sort(Comparator.comparingInt(a -> orderMap.getOrDefault(a.getPoiId(), Integer.MAX_VALUE)));
-
         if (list.size() > 15) {
             list = new ArrayList<>(list.subList(0, 15));
         }
-//        else if (list.size() < 10) {
-//            List<Attraction> fallback = attractionMapper.selectAll();
-//            for (Attraction a : fallback) {
-//                if (list.size() >= 10) {
-//                    break;
-//                }
-//                if (a.getPoiId() == null || a.getPoiId().isBlank() || a.getLocation() == null || a.getLocation().isBlank()) {
-//                    continue;
-//                }
-//                boolean exists = list.stream().anyMatch(x -> x.getPoiId().equals(a.getPoiId()));
-//                if (!exists) {
-//                    list.add(a);
-//                }
-//            }
-//        }
         return list;
+    }
+
+    private List<Attraction> loadFallbackAttractions(int limit) {
+        List<Attraction> all = attractionMapper.selectAll();
+        if (all == null || all.isEmpty()) {
+            return List.of();
+        }
+        List<Attraction> filtered = new ArrayList<>();
+        for (Attraction attraction : all) {
+            if (attraction == null || attraction.getPoiId() == null || attraction.getPoiId().isBlank()) {
+                continue;
+            }
+            if (attraction.getLocation() == null || attraction.getLocation().isBlank()) {
+                continue;
+            }
+            filtered.add(attraction);
+            if (filtered.size() >= limit) {
+                break;
+            }
+        }
+        return filtered;
     }
 
     private void validateFinalItems(List<AIRouteItem> finalItems, List<Attraction> candidates) {
@@ -175,10 +182,6 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                 throw new IllegalArgumentException("Final route contains poiId outside candidate set: " + item.getPoiId());
             }
         }
-    }
-
-    private String buildCandidatePrompt(String userMessage) {
-        return userMessage;
     }
 
     private String buildFinalPrompt(String userMessage, List<Attraction> candidates, List<AmapTransitClient.TransitEdge> matrix) {

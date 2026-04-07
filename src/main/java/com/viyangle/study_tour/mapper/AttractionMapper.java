@@ -17,6 +17,8 @@ public interface AttractionMapper {
 
     Attraction selectByPoiId(@Param("poiId") String poiId);
 
+    List<Attraction> selectByPoiIds(@Param("poiIds") List<String> poiIds);
+
     List<Attraction> selectAll();
 
     List<Attraction> selectByRegionCode(@Param("regionCode") String regionCode);

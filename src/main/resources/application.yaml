@@ -69,6 +69,10 @@ langchain4j:
     redis:
       host: localhost
       port: 6379
+#      # Use project-scoped vector index settings to avoid default-index collisions
+#      index-name: study-tour-embedding-index
+#      # Must match the embedding model output dimension
+#      dimension: 1536
 
 # HTTPS configuration
 server:
@@ -84,7 +88,7 @@ server:
 jwt:
   secret: ${JWT_SECRET:your-very-long-and-secure-secret-key-at-least-64-characters-for-hs256}
   expiration: 86400000
-  refresh-expiration: 604800000
+  refresh-expiration: 2592000000
   header: Authorization
   prefix: "Bearer "
 
@@ -110,3 +114,6 @@ app:
     transit-timeout-seconds: 20
     transit-cache-ttl-hours: 24
     transit-sleep-millis: 80
+    transit-parallelism: 6
+    transit-qps: 8
+    transit-max-retries: 1

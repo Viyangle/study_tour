@@ -227,8 +227,14 @@
     }
 }
 ```
+### JWT令牌说明
 
-#### 4.1.3 刷新登录 Token （暂时禁用）
+请求头需携带 `Authorization: Bearer <token>`
+
+- token: 登录（有效期24小时，推荐打开APP时自动更新）
+- refreshToken: 更新令牌（有效期30天，之后需重新登录）
+
+#### 4.1.3 刷新登录 Token
 
 - 方法：`POST`
 - 路径：`/login/refresh`
@@ -265,6 +271,8 @@ ok
 ```
 
 #### 4.1.5 获取用户详情
+
+- 鉴权：4.1.5 ~ 4.1.10 接口均需请求头携带 `Authorization: Bearer <token>`
 
 - 方法：`GET`
 - 路径：`/accounts/{id}`
@@ -332,6 +340,7 @@ GET /accounts/6/tagPrefs
 
 - 方法：`POST`
 - 路径：`/accounts/{id}/tagPrefs`
+- 权限：`USER/LEADER`，且仅本人可改；`ADMIN` 可改任意用户
 - 描述：覆盖式更新用户标签偏好
 
 请求示例：
@@ -390,6 +399,7 @@ GET /accounts/3/leaderProfile
 
 - 方法：`POST`
 - 路径：`/accounts/{id}/intro`
+- 权限：`LEADER`，且仅本人可改；`ADMIN` 可改任意用户
 - 描述：更新领队简介
 
 请求示例：
@@ -572,6 +582,7 @@ GET /projects/1/members
 
 - 方法：`POST`
 - 路径：`/projects`
+- 权限：`USER/LEADER`；`ownerAccountId` 由当前登录用户决定（前端传入会被覆盖）
 - 描述：创建项目
 
 请求示例：
@@ -579,7 +590,6 @@ GET /projects/1/members
 ```json
 {
   "routeId": 2,
-  "ownerAccountId": 1,
   "leaderAccountId": 3,
   "title": "北京历史文化研学",
   "departureDate": "2026-03-12",
@@ -603,14 +613,13 @@ GET /projects/1/members
 
 - 方法：`POST`
 - 路径：`/projects/{id}/join`
+- 权限：`USER`；账号从 JWT 获取，无需在请求体传 `accountId`
 - 描述：普通用户加入项目
 
 请求示例：
 
-```json
-{
-  "accountId": 2
-}
+```http
+POST /projects/1/join
 ```
 
 响应结果：
@@ -627,6 +636,7 @@ GET /projects/1/members
 
 - 方法：`POST`
 - 路径：`/projects/{id}/leader`
+- 权限：`USER/LEADER`；且仅项目 owner 可操作
 - 描述：为项目指定领队账号
 
 请求示例：
@@ -1175,18 +1185,17 @@ GET /reviews/average-score/3
 
 - 方法：`GET`
 - 路径：`/chat/sessions`
-- 描述：按账号与角色查询会话列表
+- 描述：查询当前登录用户的会话列表（账号与角色从 JWT 自动识别）
 
 请求示例：
 
 ```http
-GET /chat/sessions?accountId=2&role=USER
+GET /chat/sessions
 ```
 
-请求参数：
+说明：
 
-- `accountId`：账号 ID（必填）
-- `role`：角色（可选，默认 `USER`）
+- `accountId` 与 `role` 由 JWT 自动识别，无需传参
 
 响应结果：
 
@@ -1210,6 +1219,7 @@ GET /chat/sessions?accountId=2&role=USER
 
 - 方法：`POST`
 - 路径：`/chat/messages`
+- 说明：`senderAccountId` 由 JWT 自动识别，前端无需传
 - 描述：向会话发送消息（目前先只用文本消息）
 
 请求示例：
@@ -1217,7 +1227,6 @@ GET /chat/sessions?accountId=2&role=USER
 ```json
 {
   "sessionId": 1,
-  "senderAccountId": 2,
   "content": "你好，行程细节可以再确认一下吗？",
   "msgType": "TEXT"
 }

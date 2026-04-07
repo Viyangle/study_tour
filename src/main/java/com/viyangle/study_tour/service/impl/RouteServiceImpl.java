@@ -24,6 +24,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -123,9 +125,33 @@ public class RouteServiceImpl implements RouteService {
     }
 
     private void upsertRouteAttractions(Long routeId, List<RouteAttraction> routeAttractions) {
+        if (routeAttractions == null || routeAttractions.isEmpty()) {
+            return;
+        }
+
+        List<String> poiIds = routeAttractions.stream()
+                .map(RouteAttraction::getPoiId)
+                .filter(Objects::nonNull)
+                .filter(poiId -> !poiId.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new))
+                .stream()
+                .toList();
+
+        Map<String, Attraction> attractionMap = new HashMap<>();
+        if (!poiIds.isEmpty()) {
+            List<Attraction> attractions = attractionMapper.selectByPoiIds(poiIds);
+            if (attractions != null) {
+                for (Attraction attraction : attractions) {
+                    if (attraction != null && attraction.getPoiId() != null) {
+                        attractionMap.put(attraction.getPoiId(), attraction);
+                    }
+                }
+            }
+        }
+
         for (RouteAttraction routeAttraction : routeAttractions) {
             routeAttraction.setRouteId(routeId);
-            Attraction a = attractionMapper.selectByPoiId(routeAttraction.getPoiId());
+            Attraction a = attractionMap.get(routeAttraction.getPoiId());
             if (a == null) {
                 throw new IllegalArgumentException("Invalid poiId: " + routeAttraction.getPoiId());
             }

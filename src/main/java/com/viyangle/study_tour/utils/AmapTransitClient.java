@@ -21,6 +21,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 public class AmapTransitClient {
@@ -42,6 +47,15 @@ public class AmapTransitClient {
     @Value("${app.amap.transit-sleep-millis:80}")
     private long sleepMillis;
 
+    @Value("${app.amap.transit-parallelism:6}")
+    private int parallelism;
+
+    @Value("${app.amap.transit-qps:8}")
+    private int transitQps;
+
+    @Value("${app.amap.transit-max-retries:1}")
+    private int maxRetries;
+
     @Autowired
     private StringRedisTemplate redisTemplate;
 
@@ -49,28 +63,42 @@ public class AmapTransitClient {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
+    private final AtomicLong nextAllowedRequestTsMs = new AtomicLong(0L);
+
     public List<TransitEdge> buildUndirectedMatrix(List<Attraction> attractions) {
         if (attractions == null || attractions.size() < 2) {
             return List.of();
         }
-        List<TransitEdge> edges = new ArrayList<>();
+
+        List<Pair> pairs = new ArrayList<>();
         for (int i = 0; i < attractions.size(); i++) {
             for (int j = i + 1; j < attractions.size(); j++) {
-                Attraction from = attractions.get(i);
-                Attraction to = attractions.get(j);
-                TransitEdge edge = getTransitEdge(from, to);
+                pairs.add(new Pair(attractions.get(i), attractions.get(j)));
+            }
+        }
+
+        int workerCount = Math.max(1, parallelism);
+        ExecutorService executor = Executors.newFixedThreadPool(workerCount);
+        List<CompletableFuture<TransitEdge>> futures = new ArrayList<>(pairs.size());
+        for (Pair pair : pairs) {
+            futures.add(CompletableFuture.supplyAsync(
+                    () -> getTransitEdgeWithRetry(pair.from(), pair.to()),
+                    executor
+            ));
+        }
+
+        List<TransitEdge> edges = new ArrayList<>(pairs.size());
+        for (CompletableFuture<TransitEdge> future : futures) {
+            try {
+                TransitEdge edge = future.get();
                 if (edge != null) {
                     edges.add(edge);
                 }
-                if (sleepMillis > 0) {
-                    try {
-                        Thread.sleep(sleepMillis);
-                    } catch (InterruptedException ignored) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
+            } catch (Exception ignored) {
+                // Keep matrix generation best-effort; missing edges are tolerated by downstream planner.
             }
         }
+        shutdownExecutor(executor);
         return edges;
     }
 
@@ -108,9 +136,29 @@ public class AmapTransitClient {
         return edge;
     }
 
+    private TransitEdge getTransitEdgeWithRetry(Attraction from, Attraction to) {
+        int retries = Math.max(0, maxRetries);
+        for (int attempt = 0; attempt <= retries; attempt++) {
+            TransitEdge edge = getTransitEdge(from, to);
+            if (edge != null) {
+                return edge;
+            }
+            if (attempt < retries && sleepMillis > 0) {
+                try {
+                    Thread.sleep(Math.min(300L, sleepMillis));
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
     private TransitEdge requestEdge(Attraction from, Attraction to) {
         String url = buildUrl(from, to);
         try {
+            acquireRateLimitSlot();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .timeout(Duration.ofSeconds(timeoutSeconds))
@@ -228,6 +276,45 @@ public class AmapTransitClient {
 
     private static boolean blank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private void acquireRateLimitSlot() {
+        if (transitQps <= 0) {
+            return;
+        }
+        long intervalMs = Math.max(1L, Math.floorDiv(1000L, transitQps));
+        while (true) {
+            long now = System.currentTimeMillis();
+            long current = nextAllowedRequestTsMs.get();
+            long start = Math.max(now, current);
+            long next = start + intervalMs;
+            if (nextAllowedRequestTsMs.compareAndSet(current, next)) {
+                long waitMs = start - now;
+                if (waitMs > 0) {
+                    try {
+                        Thread.sleep(waitMs);
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                return;
+            }
+        }
+    }
+
+    private void shutdownExecutor(ExecutorService executor) {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException ignored) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private record Pair(Attraction from, Attraction to) {
     }
 
     @Data
