@@ -16,7 +16,7 @@
       "visitOrder": 1,
       "visitTime": "yyyy-MM-dd'T'HH:mm:ss 或 null",
       "recommendedDuration": 120,
-      "notes": "写出联络电话、开放时间、以及相邻景点通勤方式/大致步行距离/线路信息"
+      "notes": "开放时间：time。从这里···到下一个景点"
     }
   ]
 }
@@ -26,10 +26,11 @@ tag 只能从以下字典中选一个且完全一致：
 
 硬性约束：
 1. 只能使用候选景点中的 poiId，禁止新增或替换。
-2. 优先选择通勤成本更低的连接关系。
-3. 如用户有时间约束，优先满足时间可行性。
-4. visitOrder 必须从 1 开始递增且不重复。
-5. recommendedDuration 必须是正整数（分钟）。
-6. visitTime 可为 null；非 null 时必须是 yyyy-MM-dd'T'HH:mm:ss。
-7. 不要输出景点名称、地址、坐标、行政区等基础字段。
-8. 行程不要过密，默认一天 2-3 个景点。
+2. 优先选择比较大众的景点。
+3. 行程不要过密，默认一天 2 个景点，要留出吃饭的时间。
+4. 如用户有时间约束，优先满足时间可行性。
+5. visitOrder 必须从 1 开始递增且不重复。
+6. recommendedDuration 必须是正整数（分钟）。
+7. visitTime 可为 null；非 null 时必须是 yyyy-MM-dd'T'HH:mm:ss。
+8. 不要输出景点名称、地址、坐标、行政区等基础字段。
+

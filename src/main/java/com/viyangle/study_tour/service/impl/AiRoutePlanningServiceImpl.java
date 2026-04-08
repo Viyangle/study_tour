@@ -6,6 +6,7 @@ import com.viyangle.study_tour.mapper.AttractionMapper;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.AIRoutePlan;
 import com.viyangle.study_tour.pojo.Attraction;
+import com.viyangle.study_tour.pojo.VectorRetrievalResult;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
@@ -47,7 +48,8 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
     @Override
     public AIRoutePlan planRouteV2(String memoryId, String message) throws Exception {
-        List<String> candidatePoiIds = vectorCandidateRetrieverService.retrieveCandidatePoiIds(message, 15);
+        VectorRetrievalResult retrievalResult = vectorCandidateRetrieverService.retrieveCandidatesWithTexts(message, 15, 0);
+        List<String> candidatePoiIds = retrievalResult.getPoiIds();
         List<Attraction> candidates = loadCandidateAttractions(candidatePoiIds);
         if (candidates.size() < 2) {
             candidates = loadFallbackAttractions(15);
@@ -59,7 +61,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
         List<AmapTransitClient.TransitEdge> matrix = amapTransitClient.buildUndirectedMatrix(candidates);
 
-        String finalPrompt = buildFinalPrompt(message, candidates, matrix);
+        String finalPrompt = buildFinalPrompt(message, candidates, matrix, retrievalResult.getRetrievedTexts());
         String finalText = routeComposerService.chat(memoryId, finalPrompt);
         AIRoutePlan plan = parseAiPlan(finalText);
         validateFinalItems(plan.getItems(), candidates);
@@ -184,9 +186,19 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         }
     }
 
-    private String buildFinalPrompt(String userMessage, List<Attraction> candidates, List<AmapTransitClient.TransitEdge> matrix) {
+    private String buildFinalPrompt(String userMessage, List<Attraction> candidates,
+                                    List<AmapTransitClient.TransitEdge> matrix, List<String> retrievedTexts) {
         StringBuilder sb = new StringBuilder();
         sb.append(userMessage).append("\n\n");
+        sb.append("向量检索原始文本片段:\n");
+        if (retrievedTexts == null || retrievedTexts.isEmpty()) {
+            sb.append("无\n\n");
+        } else {
+            for (int i = 0; i < retrievedTexts.size(); i++) {
+                sb.append(i + 1).append(". ").append(retrievedTexts.get(i)).append("\n");
+            }
+            sb.append("\n");
+        }
 
         sb.append("候选景点列表:\n");
         for (int i = 0; i < candidates.size(); i++) {
