@@ -1,5 +1,6 @@
 package com.viyangle.study_tour.config;
 
+import com.viyangle.study_tour.exception.SecurityExceptionHandler;
 import com.viyangle.study_tour.filter.JwtAuthFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +21,9 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthFilter jwtAuthFilter;
 
+    @Autowired
+    private SecurityExceptionHandler securityExceptionHandler;
+
     @Value("${app.security.enabled:true}")
     private boolean securityEnabled;
 
@@ -39,6 +43,10 @@ public class SecurityConfig {
             http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login/**", "/register", "/register/**").permitAll()
                 .anyRequest().authenticated()
+            );
+            http.exceptionHandling(ex -> ex
+                .authenticationEntryPoint(securityExceptionHandler)
+                .accessDeniedHandler(securityExceptionHandler)
             );
             http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         } else {
