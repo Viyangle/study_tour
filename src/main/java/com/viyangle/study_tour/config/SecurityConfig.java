@@ -41,7 +41,7 @@ public class SecurityConfig {
 
         if (securityEnabled) {
             http.authorizeHttpRequests(auth -> auth
-                .requestMatchers("/login/**", "/register", "/register/**").permitAll()
+                .requestMatchers("/login/**", "/register", "/register/**", "/regions/**").permitAll()
                 .anyRequest().authenticated()
             );
             http.exceptionHandling(ex -> ex
