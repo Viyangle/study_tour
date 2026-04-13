@@ -75,8 +75,8 @@ public class CommonConfig {
     public ContentRetriever contentRetriever() {
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(redisEmbeddingStore)
-                .minScore(0.5)
-                .maxResults(12)
+                .minScore(0.4)
+                .maxResults(30)
                 .embeddingModel(embeddingModel)
                 .build();
     }
