@@ -78,11 +78,11 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         enrichExcludePoiIdsFromNames(state);
 
         String retrievalQuery = buildRetrievalQuery(message, state);
-        VectorRetrievalResult retrievalResult = vectorCandidateRetrieverService.retrieveCandidatesWithTexts(retrievalQuery, 30, 3);
+        VectorRetrievalResult retrievalResult = vectorCandidateRetrieverService.retrieveCandidatesWithTexts(retrievalQuery, 40, 3);
         List<String> candidatePoiIds = applyStateFilterOnPoiIds(retrievalResult.getPoiIds(), state);
         List<Attraction> candidates = loadCandidateAttractions(candidatePoiIds);
         if (candidates.size() < 2) {
-            candidates = loadFallbackAttractions(20);
+            candidates = loadFallbackAttractions(15);
             candidates = applyStateFilterOnAttractions(candidates, state);
         }
 
