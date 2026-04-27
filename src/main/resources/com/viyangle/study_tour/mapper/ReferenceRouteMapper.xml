@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.ReferenceRouteMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.ReferenceRoute"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into reference_routes(region_adcode, tag, created_at)
+        values (#{regionAdcode}, #{tag}, #{createdAt})
+    </insert>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.ReferenceRoute">
+        update reference_routes
+        set region_adcode = #{regionAdcode},
+            tag = #{tag}
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from reference_routes where id = #{id}
+    </delete>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.ReferenceRoute">
+        select id, region_adcode, tag, created_at
+        from reference_routes
+        where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.ReferenceRoute">
+        select id, region_adcode, tag, created_at
+        from reference_routes
+    </select>
+
+    <select id="selectByPreference" resultType="com.viyangle.study_tour.pojo.ReferenceRoute">
+        select id, region_adcode, tag, created_at
+        from reference_routes
+        order by
+        (
+            case
+                when #{regionCode} is null or #{regionCode} = '' then 0
+                when region_adcode = #{regionCode} then 100
+                when left(region_adcode, 4) = left(#{regionCode}, 4) then 50
+                else 0
+            end
+            +
+            case
+                when tag is null or tag = '' then 0
+                <if test="preferredTags != null and preferredTags.size() > 0">
+                    when tag in
+                    <foreach collection="preferredTags" item="tag" open="(" separator="," close=")">
+                        #{tag}
+                    </foreach>
+                    then 80
+                </if>
+                else 0
+            end
+        ) desc,
+        created_at desc
+    </select>
+
+</mapper>
