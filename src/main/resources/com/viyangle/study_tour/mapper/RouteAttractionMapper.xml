@@ -24,6 +24,9 @@
         <result property="type" column="type"/>
         <result property="typecode" column="typecode"/>
         <result property="distance" column="distance"/>
+        <result property="opentimeToday" column="opentime_today"/>
+        <result property="opentimeWeek" column="opentime_week"/>
+        <result property="tel" column="tel"/>
         <result property="attractionCreatedAt" column="attraction_created_at"/>
         <result property="attractionUpdatedAt" column="attraction_updated_at"/>
         <result property="createdAt" column="route_created_at"/>
@@ -49,6 +52,9 @@
         type,
         typecode,
         distance,
+        opentime_today,
+        opentime_week,
+        tel,
         attraction_created_at,
         attraction_updated_at,
         created_at as route_created_at
@@ -56,9 +62,9 @@
 
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.RouteAttraction">
         insert into route_attractions
-        (route_id, visit_order, poi_id, visit_time, recommended_duration, notes, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, attraction_created_at, attraction_updated_at)
+        (route_id, visit_order, poi_id, visit_time, recommended_duration, notes, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, attraction_created_at, attraction_updated_at)
         values
-            (#{routeId}, #{visitOrder}, #{poiId}, #{visitTime}, #{recommendedDuration}, #{notes}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance}, #{attractionCreatedAt}, #{attractionUpdatedAt})
+            (#{routeId}, #{visitOrder}, #{poiId}, #{visitTime}, #{recommendedDuration}, #{notes}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance}, #{opentimeToday}, #{opentimeWeek}, #{tel}, #{attractionCreatedAt}, #{attractionUpdatedAt})
     </insert>
 
     <delete id="deleteByRouteId">

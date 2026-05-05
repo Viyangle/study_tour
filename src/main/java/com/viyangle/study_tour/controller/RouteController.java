@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -89,9 +90,35 @@ public class RouteController {
                 ra.setVisitTime(LocalDateTime.parse(i.getVisitTime()));
             }
             ra.setRecommendedDuration(i.getRecommendedDuration());
-            ra.setNotes(i.getNotes());
+            ra.setNotes(extractCommuteNotes(i.getNotes()));
             return ra;
         }).toList();
+    }
+
+    private String extractCommuteNotes(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "公交/地铁前往下一个景点";
+        }
+        List<String> parts = Arrays.stream(raw.split("[。.!！?？；;]"))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+
+        for (String part : parts) {
+            String lower = part.toLowerCase();
+            if (part.contains("乘坐")
+                    || part.contains("换乘")
+                    || part.contains("公交")
+                    || part.contains("地铁")
+                    || part.contains("步行")
+                    || part.contains("打车")
+                    || part.contains("前往")
+                    || lower.contains("commute")
+                    || lower.contains("transit")) {
+                return part;
+            }
+        }
+        return parts.get(0);
     }
 
     private void validateAiPlan(AIRoutePlan plan) {

@@ -326,6 +326,9 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                     .append(", name=").append(nonNull(a.getName()))
                     .append(", adcode=").append(nonNull(a.getAdcode()))
                     .append(", type=").append(nonNull(a.getType()))
+                    .append(", opentimeToday=").append(nonNull(a.getOpentimeToday()))
+                    .append(", opentimeWeek=").append(nonNull(a.getOpentimeWeek()))
+                    .append(", tel=").append(nonNull(a.getTel()))
                     .append("\n");
         }
 

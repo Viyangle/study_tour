@@ -168,6 +168,9 @@ public class RouteServiceImpl implements RouteService {
             routeAttraction.setType(a.getType());
             routeAttraction.setTypecode(a.getTypecode());
             routeAttraction.setDistance(a.getDistance());
+            routeAttraction.setOpentimeToday(a.getOpentimeToday());
+            routeAttraction.setOpentimeWeek(a.getOpentimeWeek());
+            routeAttraction.setTel(a.getTel());
             routeAttraction.setAttractionCreatedAt(a.getCreatedAt());
             routeAttraction.setAttractionUpdatedAt(a.getUpdatedAt());
             routeAttractionMapper.insert(routeAttraction);

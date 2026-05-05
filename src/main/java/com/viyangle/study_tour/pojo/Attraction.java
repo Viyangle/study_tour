@@ -24,6 +24,9 @@ public class Attraction {
     private String type;
     private String typecode;
     private String distance;
+    private String opentimeToday;
+    private String opentimeWeek;
+    private String tel;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

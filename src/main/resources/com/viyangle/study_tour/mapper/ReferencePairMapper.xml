@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.ReferencePairMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.ReferencePair"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into reference_pairs(tag, notes, region_adcode, from_poi_id, from_poi_name, to_poi_id, to_poi_name, created_at)
+        values (#{tag}, #{notes}, #{regionAdcode}, #{fromPoiId}, #{fromPoiName}, #{toPoiId}, #{toPoiName}, #{createdAt})
+    </insert>
+
+    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.ReferencePair">
+        update reference_pairs
+        <set>
+            <if test="tag != null">tag = #{tag},</if>
+            <if test="notes != null">notes = #{notes},</if>
+            <if test="regionAdcode != null">region_adcode = #{regionAdcode},</if>
+            <if test="fromPoiId != null">from_poi_id = #{fromPoiId},</if>
+            <if test="fromPoiName != null">from_poi_name = #{fromPoiName},</if>
+            <if test="toPoiId != null">to_poi_id = #{toPoiId},</if>
+            <if test="toPoiName != null">to_poi_name = #{toPoiName},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        delete from reference_pairs where id = #{id}
+    </delete>
+
+    <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.ReferencePair">
+        select id, tag, notes, region_adcode, from_poi_id, from_poi_name, to_poi_id, to_poi_name, created_at
+        from reference_pairs
+        where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.ReferencePair">
+        select id, tag, notes, region_adcode, from_poi_id, from_poi_name, to_poi_id, to_poi_name, created_at
+        from reference_pairs
+        order by created_at desc
+    </select>
+
+    <select id="selectByPreference" resultType="com.viyangle.study_tour.pojo.ReferencePair">
+        select id, tag, notes, region_adcode, from_poi_id, from_poi_name, to_poi_id, to_poi_name, created_at
+        from reference_pairs
+        order by
+        (
+            case
+                when #{regionCode} is null or #{regionCode} = '' then 0
+                when region_adcode = #{regionCode} then 100
+                when left(region_adcode, 4) = left(#{regionCode}, 4) then 50
+                else 0
+            end
+            +
+            case
+                when tag is null or tag = '' then 0
+                <if test="preferredTags != null and preferredTags.size() > 0">
+                    when tag in
+                    <foreach collection="preferredTags" item="tag" open="(" separator="," close=")">
+                        #{tag}
+                    </foreach>
+                    then 80
+                </if>
+                else 0
+            end
+        ) desc,
+        created_at desc
+    </select>
+
+</mapper>

@@ -6,9 +6,9 @@
 
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Attraction">
         insert into attractions
-        (poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance)
+        (poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel)
         values
-        (#{poiId}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance})
+        (#{poiId}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance}, #{opentimeToday}, #{opentimeWeek}, #{tel})
     </insert>
 
     <delete id="deleteByPoiId" parameterType="java.lang.String">
@@ -29,18 +29,21 @@
             adname = #{adname},
             type = #{type},
             typecode = #{typecode},
-            distance = #{distance}
+            distance = #{distance},
+            opentime_today = #{opentimeToday},
+            opentime_week = #{opentimeWeek},
+            tel = #{tel}
         where poi_id = #{poiId}
     </update>
 
     <select id="selectByPoiId" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
+        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, created_at, updated_at
         from attractions
         where poi_id = #{poiId}
     </select>
 
     <select id="selectByPoiIds" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
+        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, created_at, updated_at
         from attractions
         where poi_id in
         <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
@@ -49,12 +52,12 @@
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
+        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, created_at, updated_at
         from attractions
     </select>
 
     <select id="selectByRegionCode" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, created_at, updated_at
+        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, created_at, updated_at
         from attractions
         <where>
             <if test="regionCode != null and regionCode != ''">

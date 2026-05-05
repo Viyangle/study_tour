@@ -12,6 +12,7 @@ import com.viyangle.study_tour.pojo.LeaderProfile;
 import com.viyangle.study_tour.pojo.LoginRequest;
 import com.viyangle.study_tour.pojo.RegisterRequest;
 import com.viyangle.study_tour.service.AccountService;
+import com.viyangle.study_tour.utils.PhoneValidator;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +41,9 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     public Account login(LoginRequest loginRequest) {
+        if (loginRequest == null || !PhoneValidator.isValidChineseMainlandMobile(loginRequest.getPhone())) {
+            return null;
+        }
         Account account = accountMapper.selectByPhone(loginRequest.getPhone());
         if (account != null && passwordEncoder.matches(loginRequest.getPassword(), account.getPasswordHash())) {
             return account;
@@ -49,6 +53,9 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     public Long register(RegisterRequest registerRequest) {
+        if (registerRequest == null || !PhoneValidator.isValidChineseMainlandMobile(registerRequest.getPhone())) {
+            throw new IllegalArgumentException("手机号格式不正确");
+        }
         if (accountMapper.existsByPhone(registerRequest.getPhone())) {
             return -1L;
         }
