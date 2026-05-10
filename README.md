@@ -751,6 +751,9 @@ GET /routes/17
             "type": "风景名胜;风景名胜;国家级景点",
             "typecode": "110202",
             "distance": null,
+            "opentimeToday": null,
+            "opentimeWeek": "3月1日-10月14周二至周日:08:30-18:00(17:00停止售票,最入园17:10)；10月15日-次年2月28日)08:30-17:00(16:00停止售票,最入园16:10)；元旦、春节、清明、劳动节、端午、国庆08:30-17:00(16:00停止售票,最入园16:10)；中秋08:30-17:30(16:30停止售票)",
+            "tel": "025-84578716;025-84578888",
             "attractionCreatedAt": null,
             "attractionUpdatedAt": null,
             "createdAt": "2026-03-28T19:23:30"
@@ -775,6 +778,9 @@ GET /routes/17
             "type": "风景名胜;风景名胜;国家级景点",
             "typecode": "110202",
             "distance": null,
+            "opentimeToday": null,
+            "opentimeWeek": "周一关闭(法定节假日正常开放),周二至周日:09:00-18:00(17:00停止售票),2026年2月1日至2026年3月3日周一正常开放",
+            "tel": "025-84200177;025-84466460",
             "attractionCreatedAt": null,
             "attractionUpdatedAt": null,
             "createdAt": "2026-03-28T19:23:30"
@@ -799,6 +805,9 @@ GET /routes/17
             "type": "风景名胜;风景名胜;国家级景点",
             "typecode": "110202",
             "distance": null,
+            "opentimeToday": null,
+            "opentimeWeek": "5月 周一至周日 08:00-21:00；1月至4月 周一至周日 08:00-17:30 最晚进入17:00 05-02至12-31 周一至周日 08:00-17:30 最晚进入17:00",
+            "tel": "025-58815369",
             "attractionCreatedAt": null,
             "attractionUpdatedAt": null,
             "createdAt": "2026-03-28T19:23:30"
@@ -823,6 +832,9 @@ GET /routes/17
             "type": "风景名胜;风景名胜;省级景点",
             "typecode": "110203",
             "distance": null,
+            "opentimeToday": "06:00-20:30",
+            "opentimeWeek": "周一至周日 06:00-20:30",
+            "tel": "025-86227011",
             "attractionCreatedAt": null,
             "attractionUpdatedAt": null,
             "createdAt": "2026-03-28T19:23:30"
