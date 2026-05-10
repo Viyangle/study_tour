@@ -1,7 +1,6 @@
 package com.viyangle.study_tour.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.viyangle.study_tour.aiservice.ConsultantService;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.AIRoutePlan;
 import com.viyangle.study_tour.pojo.Result;
@@ -32,9 +31,6 @@ public class RouteController {
 
     @Autowired
     private RouteService routeService;
-
-    @Autowired
-    private ConsultantService consultantService;
 
     @Autowired
     private AiRoutePlanningService aiRoutePlanningService;

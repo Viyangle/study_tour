@@ -14,7 +14,7 @@ public interface ReferencePairService {
 
     ReferencePair getReferencePairById(Long id);
 
-    List<ReferencePair> getPagedReferencePairsByPreference(Long accountId, Integer pageNum, Integer pageSize);
+    List<ReferencePair> getPagedReferencePairsByTag(String tag, Integer pageNum, Integer pageSize);
 
-    List<ReferencePair> recommendReferencePairs(Long accountId, Integer pageNum, Integer pageSize);
+    List<ReferencePair> recommendReferencePairs(String tag, Integer pageNum, Integer pageSize);
 }

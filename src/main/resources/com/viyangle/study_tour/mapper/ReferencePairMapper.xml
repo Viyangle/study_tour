@@ -40,31 +40,15 @@
         order by created_at desc
     </select>
 
-    <select id="selectByPreference" resultType="com.viyangle.study_tour.pojo.ReferencePair">
+    <select id="selectByTag" resultType="com.viyangle.study_tour.pojo.ReferencePair">
         select id, tag, notes, region_adcode, from_poi_id, from_poi_name, to_poi_id, to_poi_name, created_at
         from reference_pairs
-        order by
-        (
-            case
-                when #{regionCode} is null or #{regionCode} = '' then 0
-                when region_adcode = #{regionCode} then 100
-                when left(region_adcode, 4) = left(#{regionCode}, 4) then 50
-                else 0
-            end
-            +
-            case
-                when tag is null or tag = '' then 0
-                <if test="preferredTags != null and preferredTags.size() > 0">
-                    when tag in
-                    <foreach collection="preferredTags" item="tag" open="(" separator="," close=")">
-                        #{tag}
-                    </foreach>
-                    then 80
-                </if>
-                else 0
-            end
-        ) desc,
-        created_at desc
+        <where>
+            <if test="tag != null and tag != ''">
+                tag = #{tag}
+            </if>
+        </where>
+        order by created_at desc
     </select>
 
 </mapper>

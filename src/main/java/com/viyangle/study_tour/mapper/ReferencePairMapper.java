@@ -19,6 +19,5 @@ public interface ReferencePairMapper {
 
     List<ReferencePair> selectAll();
 
-    List<ReferencePair> selectByPreference(@Param("preferredTags") List<String> preferredTags,
-                                           @Param("regionCode") String regionCode);
+    List<ReferencePair> selectByTag(@Param("tag") String tag);
 }
