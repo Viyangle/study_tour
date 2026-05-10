@@ -342,10 +342,8 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                     .append("\n");
         }
 
-        sb.append("\n严格要求:\n");
-        sb.append("1. 输出的每个poiId必须来自候选景点列表。\n");
-        sb.append("2. 必须遵守excludePoiIds和excludeNameKeywords。\n");
-        sb.append("3. 只输出JSON，不要输出额外解释。\n");
+        sb.append("\n补充约束:\n");
+        sb.append("1. 必须遵守excludePoiIds和excludeNameKeywords。\n");
         return sb.toString();
     }
 
