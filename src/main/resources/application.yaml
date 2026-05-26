@@ -46,7 +46,7 @@ langchain4j:
     chat-model:
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       api-key: ${OPENAI_API_KEY}
-      model-name: qwen-max-2025-01-25
+      model-name: qwen3.6-plus
       log-requests: true
       log-responses: true
       timeout: 120s
@@ -71,10 +71,24 @@ langchain4j:
     redis:
       host: localhost
       port: 6379
-#      # Use project-scoped vector index settings to avoid default-index collisions
-#      index-name: study-tour-embedding-index
-#      # Must match the embedding model output dimension
-#      dimension: 1536
+      # Use project-scoped vector index settings to avoid default-index collisions
+      index-name: study-tour-embedding-index
+      prefix: "study-tour:embedding:"
+      # Must match the embedding model output dimension
+      dimension: 1536
+      metadata-keys:
+        - doc_type
+        - poi_id
+        - poiId
+        - name
+        - tag
+        - tags
+        - citycode
+        - cityname
+        - adcode
+        - adname
+        - typecode
+        - source_file
 
 # HTTPS configuration
 server:
@@ -102,10 +116,16 @@ app:
     embedding:
       # Whether to ingest classpath:content documents on startup
       ingest-enabled: false
+      # Whether to clear the configured Redis embedding index before ingest
+      clear-before-ingest: false
+      # AMap JSON files to convert into RAG documents
+      content-pattern: "classpath*:content/*.json"
       # Whether to split documents before embedding ingest
       splitter-enabled: true
-      splitter-max-segment-size: 200
+      splitter-max-segment-size: 1000
       splitter-max-overlap-size: 20
+      min-score: 0.4
+      max-results: 30
   https:
     # Enable HTTP(8080) -> HTTPS(8443) redirect
     redirect-enabled: true
