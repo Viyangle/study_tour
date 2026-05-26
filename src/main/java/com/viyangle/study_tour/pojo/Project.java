@@ -24,4 +24,8 @@ public class Project {
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    public String getStatusText() {
+        return ProjectStatus.displayNameOf(status);
+    }
 }

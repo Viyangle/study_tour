@@ -74,4 +74,27 @@ public class ProjectController {
         projectService.leaderJoinProject(project, SecurityContextUtil.currentAccountId());
         return Result.success();
     }
+
+    @PostMapping("/{id}/accept")
+    @OperationLog(value = "领队接单", type = "PROJECT_UPDATE")
+    @RequireRole({"LEADER"})
+    public Result acceptProject(@PathVariable Long id) {
+        log.info("领队接单: projectId={}", id);
+        projectService.acceptProject(id, SecurityContextUtil.currentAccountId());
+        return Result.success();
+    }
+
+    @PostMapping("/{id}/status")
+    @OperationLog(value = "更新项目状态", type = "PROJECT_UPDATE")
+    @RequireRole({"USER", "LEADER", "ADMIN"})
+    public Result updateProjectStatus(@PathVariable Long id, @RequestParam String status) {
+        log.info("更新项目状态: projectId={}, status={}", id, status);
+        projectService.transitionProjectStatus(
+                id,
+                status,
+                SecurityContextUtil.currentAccountId(),
+                SecurityContextUtil.currentRole()
+        );
+        return Result.success();
+    }
 }

@@ -18,5 +18,9 @@ public interface ProjectService {
 
     List<ProjectMember> getProjectMembers(Long id);
 
+    void acceptProject(Long id, Long leaderAccountId);
+
     void leaderJoinProject(Project project, Long currentAccountId);
+
+    void transitionProjectStatus(Long id, String targetStatus, Long currentAccountId, String currentRole);
 }
