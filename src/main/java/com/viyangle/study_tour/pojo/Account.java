@@ -17,6 +17,7 @@ public class Account {
     private String passwordHash;
     private String regionCode;
     private String avatarUrl;
+    private String intro;
     private Integer status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

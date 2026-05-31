@@ -94,4 +94,79 @@
         created_at desc
     </select>
 
+    <select id="selectByCompositeFilter" resultType="com.viyangle.study_tour.pojo.Project">
+        select id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
+               status, created_at, updated_at
+        from projects
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    title like concat('%', #{keyword}, '%')
+                    or tag like concat('%', #{keyword}, '%')
+                    or status like concat('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="filterRegionCode != null and filterRegionCode != ''">
+                and (
+                    region_adcode = #{filterRegionCode}
+                    or left(region_adcode, 4) = left(#{filterRegionCode}, 4)
+                )
+            </if>
+            <if test="filterTag != null and filterTag != ''">
+                and tag = #{filterTag}
+            </if>
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="departureDateFrom != null">
+                and departure_date &gt;= #{departureDateFrom}
+            </if>
+            <if test="departureDateTo != null">
+                and departure_date &lt;= #{departureDateTo}
+            </if>
+            <if test="ownerAccountId != null">
+                and owner_account_id = #{ownerAccountId}
+            </if>
+            <if test="leaderAccountId != null">
+                and leader_account_id = #{leaderAccountId}
+            </if>
+            <if test="hasLeader != null">
+                <choose>
+                    <when test="hasLeader">
+                        and leader_account_id is not null
+                    </when>
+                    <otherwise>
+                        and leader_account_id is null
+                    </otherwise>
+                </choose>
+            </if>
+            <if test="onlyAvailable != null and onlyAvailable">
+                and status in ('OPEN', 'MATCHING')
+                and (max_members is null or current_members is null or current_members &lt; max_members)
+            </if>
+        </where>
+        order by
+        (
+            case
+                when #{sortRegionCode} is null or #{sortRegionCode} = '' then 0
+                when region_adcode = #{sortRegionCode} then 100
+                when left(region_adcode, 4) = left(#{sortRegionCode}, 4) then 50
+                else 0
+            end
+            +
+            case
+                when tag is null or tag = '' then 0
+                <if test="preferredTags != null and preferredTags.size() > 0">
+                    when tag in
+                    <foreach collection="preferredTags" item="tag" open="(" separator="," close=")">
+                        #{tag}
+                    </foreach>
+                    then 80
+                </if>
+                else 0
+            end
+        ) desc,
+        created_at desc
+    </select>
+
 </mapper>

@@ -5,6 +5,8 @@ import com.viyangle.study_tour.pojo.AccountTagPref;
 import com.viyangle.study_tour.pojo.LeaderProfile;
 import com.viyangle.study_tour.pojo.LoginRequest;
 import com.viyangle.study_tour.pojo.RegisterRequest;
+import com.viyangle.study_tour.pojo.UpdateAccountProfileRequest;
+import com.viyangle.study_tour.pojo.UpdatePasswordRequest;
 
 import java.util.List;
 
@@ -33,6 +35,14 @@ public interface AccountService {
     Long register(RegisterRequest registerRequest);
 
     void changeTagPrefs(Long pathAccountId, List<AccountTagPref> accountTagPrefs);
+
+    Account updateProfile(Long accountId, UpdateAccountProfileRequest request);
+
+    Account updateRole(Long accountId, String role);
+
+    Account updateUserIntro(Long accountId, String intro);
+
+    void updatePassword(Long accountId, UpdatePasswordRequest request);
 
     void changeIntro(Long accountId, String intro);
 

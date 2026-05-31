@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.viyangle</groupId>
     <artifactId>study_tour</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
     <name>study_tour</name>
     <description>study_tour</description>
     <url/>

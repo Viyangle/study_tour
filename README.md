@@ -49,6 +49,7 @@
   "passwordHash": "123456",
   "regionCode": "210000",
   "avatarUrl": null,
+  "intro": null,
   "status": 1,
   "createdAt": "2026-03-12T21:00:00",
   "updatedAt": "2026-03-12T21:00:00"
@@ -218,6 +219,7 @@
             "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
             "regionCode": "320102",
             "avatarUrl": null,
+            "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
             "status": 1,
             "createdAt": "2026-03-30T16:37:02",
             "updatedAt": "2026-03-30T16:37:02"
@@ -272,7 +274,7 @@ ok
 
 #### 4.1.5 获取用户详情
 
-- 鉴权：4.1.5 ~ 4.1.10 接口均需请求头携带 `Authorization: Bearer <token>`
+- 鉴权：4.1.5 ~ 4.1.14 接口均需请求头携带 `Authorization: Bearer <token>`
 
 - 方法：`GET`
 - 路径：`/accounts/{id}`
@@ -298,6 +300,7 @@ GET /accounts/6
         "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
         "regionCode": "320102",
         "avatarUrl": null,
+        "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
         "status": 1,
         "createdAt": "2026-03-30T16:37:02",
         "updatedAt": "2026-03-30T16:37:02"
@@ -305,7 +308,199 @@ GET /accounts/6
 }
 ```
 
-#### 4.1.6 获取用户标签偏好
+#### 4.1.6 修改个人信息
+
+- 方法：`PUT`
+- 路径：`/accounts/{id}`
+- 权限：仅本人可改；`ADMIN` 可改任意用户
+- 描述：修改账号基础资料。手机号 `phone` 暂不支持修改，若请求体包含 `phone` 应返回错误。角色不通过该接口修改，请使用 `PUT /accounts/{id}/role`。密码不通过该接口修改，请使用 `PUT /accounts/{id}/password`。普通用户简介不通过该接口修改，请使用 `PUT /accounts/{id}/userIntro`。
+
+请求示例：
+
+```json
+{
+  "username": "B同学",
+  "regionCode": "320100",
+  "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png",
+  "status": 1
+}
+```
+
+请求字段：
+
+- `username`：用户名（可选）
+- `regionCode`：所在地区编码（可选）
+- `avatarUrl`：头像 URL（可选，通常先调用 `/upload` 获取）
+- `status`：账号状态（可选）
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "id": 6,
+        "role": "BOTH",
+        "username": "B同学",
+        "phone": "10010001003",
+        "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
+        "regionCode": "320100",
+        "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png",
+        "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
+        "status": 1,
+        "createdAt": "2026-03-30T16:37:02",
+        "updatedAt": "2026-05-31T20:10:00"
+    }
+}
+```
+
+失败示例（尝试修改手机号）：
+
+```json
+{
+    "code": 0,
+    "msg": "手机号暂不支持修改",
+    "data": null
+}
+```
+
+失败示例（尝试在个人信息接口修改角色）：
+
+```json
+{
+    "code": 0,
+    "msg": "角色请使用/accounts/{id}/role接口修改",
+    "data": null
+}
+```
+
+失败示例（尝试在个人信息接口修改简介）：
+
+```json
+{
+    "code": 0,
+    "msg": "普通用户简介请使用/accounts/{id}/userIntro接口修改",
+    "data": null
+}
+```
+
+#### 4.1.7 修改用户角色
+
+- 方法：`PUT`
+- 路径：`/accounts/{id}/role`
+- 权限：仅本人可改；`ADMIN` 可改任意用户。普通用户只能设置 `USER/LEADER/BOTH`，`ADMIN` 角色仅允许管理员设置。
+- 描述：单独修改账号角色。若修改为 `LEADER` 或 `BOTH`，后端会自动补齐领队资料记录。修改当前登录用户自己的角色时，响应会返回新的 `token` 和 `refreshToken`，前端应替换本地旧 token。
+
+请求示例：
+
+```json
+{
+  "role": "LEADER"
+}
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "account": {
+            "id": 6,
+            "role": "LEADER",
+            "username": "B同学",
+            "phone": "10010001003",
+            "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
+            "regionCode": "320100",
+            "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png",
+            "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
+            "status": 1,
+            "createdAt": "2026-03-30T16:37:02",
+            "updatedAt": "2026-05-31T20:15:00"
+        },
+        "token": "new-access-token",
+        "refreshToken": "new-refresh-token"
+    }
+}
+```
+
+#### 4.1.8 修改密码
+
+- 方法：`PUT`
+- 路径：`/accounts/{id}/password`
+- 权限：仅本人可改；`ADMIN` 可重置任意用户密码。本人修改密码必须提供 `oldPassword`，管理员重置他人密码时可不传 `oldPassword`。
+- 描述：修改登录密码。新密码会使用 BCrypt 加密后保存。
+
+请求示例：
+
+```json
+{
+  "oldPassword": "123456",
+  "newPassword": "654321",
+  "confirmPassword": "654321"
+}
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": null
+}
+```
+
+失败示例：
+
+```json
+{
+    "code": 0,
+    "msg": "旧密码错误",
+    "data": null
+}
+```
+
+#### 4.1.9 修改普通用户简介
+
+- 方法：`PUT`
+- 路径：`/accounts/{id}/userIntro`
+- 权限：`USER`，且仅本人可改；`ADMIN` 可改任意普通用户。`BOTH` 账号可修改普通用户简介；纯 `LEADER` 账号的领队简介仍使用 `/accounts/{id}/intro`。
+- 描述：修改 `accounts.intro` 中的普通用户简介，长度不超过 500 个字符。
+
+请求示例：
+
+```json
+{
+  "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。"
+}
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": {
+        "id": 6,
+        "role": "BOTH",
+        "username": "B同学",
+        "phone": "10010001003",
+        "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
+        "regionCode": "320100",
+        "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png",
+        "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
+        "status": 1,
+        "createdAt": "2026-03-30T16:37:02",
+        "updatedAt": "2026-05-31T20:20:00"
+    }
+}
+```
+
+#### 4.1.10 获取用户标签偏好
 
 - 方法：`GET`
 - 路径：`/accounts/{id}/tagPrefs`
@@ -336,7 +531,7 @@ GET /accounts/6/tagPrefs
 }
 ```
 
-#### 4.1.7 修改用户标签偏好
+#### 4.1.11 修改用户标签偏好
 
 - 方法：`POST`
 - 路径：`/accounts/{id}/tagPrefs`
@@ -368,7 +563,7 @@ GET /accounts/6/tagPrefs
 }
 ```
 
-#### 4.1.8 获取领队资料
+#### 4.1.12 获取领队资料
 
 - 方法：`GET`
 - 路径：`/accounts/{id}/leaderProfile`
@@ -395,7 +590,7 @@ GET /accounts/3/leaderProfile
 }
 ```
 
-#### 4.1.9 修改领队简介
+#### 4.1.13 修改领队简介
 
 - 方法：`POST`
 - 路径：`/accounts/{id}/intro`
@@ -420,7 +615,7 @@ GET /accounts/3/leaderProfile
 }
 ```
 
-#### 4.1.10 文件上传（OSS）
+#### 4.1.14 文件上传（OSS）
 
 - 方法：`POST`
 - 路径：`/upload`
@@ -505,7 +700,67 @@ GET /projects?accountId=6&pageNum=1&pageSize=10
 }
 ```
 
-#### 4.2.2 获取项目详情
+#### 4.2.2 复合筛选项目
+
+- 方法：`GET`
+- 路径：`/projects/filter`
+- 描述：按多个条件复合筛选项目。不传筛选参数时，返回未筛选列表，并按 `accountId` 对应账号的地区和标签偏好排序；传入 `regionCode` 或 `tag` 时，会覆盖账号信息中的地区和标签偏好，同时作为筛选条件。
+
+请求示例（未筛选，仅按账号偏好排序）：
+
+```http
+GET /projects/filter?accountId=6&pageNum=1&pageSize=10
+```
+
+请求示例（复合筛选）：
+
+```http
+GET /projects/filter?accountId=6&keyword=南京&regionCode=320100&tag=博物馆研学&status=OPEN&departureDateFrom=2026-05-01&departureDateTo=2026-06-30&onlyAvailable=true&pageNum=1&pageSize=10
+```
+
+请求参数：
+
+- `accountId`：用户 ID（可选，用于默认排序）
+- `pageNum`：页码（可选，默认 `1`，起始为 `1`）
+- `pageSize`：每页数量（可选，默认 `10`）
+- `keyword`：关键字（可选，匹配 `title/tag/status`）
+- `regionCode`：地区编码（可选，精确匹配或同城市前四位匹配；传入后覆盖账号地区）
+- `tag`：研学标签（可选，精确匹配；传入后覆盖账号标签偏好）
+- `status`：项目状态（可选，`OPEN/MATCHING/CONFIRMED/IN_PROGRESS/DONE/CANCELLED`）
+- `departureDateFrom`：出发日期起始值（可选，格式 `yyyy-MM-dd`）
+- `departureDateTo`：出发日期结束值（可选，格式 `yyyy-MM-dd`）
+- `ownerAccountId`：项目创建者账号 ID（可选）
+- `leaderAccountId`：领队账号 ID（可选）
+- `hasLeader`：是否已有领队（可选，`true/false`）
+- `onlyAvailable`：是否只看可报名项目（可选，`true` 时要求 `OPEN/MATCHING` 且未满员）
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "id": 10,
+            "routeId": 38,
+            "regionAdcode": "320100",
+            "tag": "博物馆研学",
+            "ownerAccountId": 86,
+            "leaderAccountId": 80,
+            "title": "南京博物院深度讲解研学团",
+            "departureDate": "2026-05-09",
+            "maxMembers": 21,
+            "currentMembers": 3,
+            "status": "OPEN",
+            "createdAt": "2026-05-05T15:34:07",
+            "updatedAt": "2026-05-15T14:52:02"
+        }
+    ]
+}
+```
+
+#### 4.2.3 获取项目详情
 
 - 方法：`GET`
 - 路径：`/projects/{id}`
@@ -541,7 +796,7 @@ GET /projects/1
 }
 ```
 
-#### 4.2.3 获取项目成员
+#### 4.2.4 获取项目成员
 
 - 方法：`GET`
 - 路径：`/projects/{id}/members`
@@ -578,7 +833,7 @@ GET /projects/1/members
 }
 ```
 
-#### 4.2.4 创建项目
+#### 4.2.5 创建项目
 
 - 方法：`POST`
 - 路径：`/projects`
@@ -609,7 +864,7 @@ GET /projects/1/members
 }
 ```
 
-#### 4.2.5 加入项目
+#### 4.2.6 加入项目
 
 - 方法：`POST`
 - 路径：`/projects/{id}/join`
@@ -632,7 +887,7 @@ POST /projects/1/join
 }
 ```
 
-#### 4.2.6 指定项目领队
+#### 4.2.7 指定项目领队
 
 - 方法：`POST`
 - 路径：`/projects/{id}/leader`

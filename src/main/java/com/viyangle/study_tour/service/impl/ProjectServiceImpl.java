@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -77,36 +78,55 @@ public class ProjectServiceImpl implements ProjectService {
         int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
         int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
 
-        String regionCode = null;
-        List<String> preferredTagNames = Collections.emptyList();
-        if (accountId != null) {
-            Account account = accountMapper.selectById(accountId);
-            if (account != null) {
-                regionCode = account.getRegionCode();
-            }
+        ProjectPreference preference = resolveProjectPreference(accountId);
 
-            List<AccountTagPref> tagPrefs = accountTagPrefMapper.selectByAccountId(accountId);
-            if (tagPrefs != null && !tagPrefs.isEmpty()) {
-                Set<Long> prefTagIds = tagPrefs.stream()
-                        .map(AccountTagPref::getTagId)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet());
+        PageHelper.startPage(page, size);
+        return projectMapper.selectByPreference(preference.preferredTagNames(), preference.regionCode());
+    }
 
-                if (!prefTagIds.isEmpty()) {
-                    Map<Long, String> tagIdNameMap = tagMapper.selectAll().stream()
-                            .collect(Collectors.toMap(Tag::getId, Tag::getName));
+    @Override
+    public List<Project> filterProjects(Long accountId,
+                                        Integer pageNum,
+                                        Integer pageSize,
+                                        String keyword,
+                                        String regionCode,
+                                        String tag,
+                                        String status,
+                                        LocalDate departureDateFrom,
+                                        LocalDate departureDateTo,
+                                        Long ownerAccountId,
+                                        Long leaderAccountId,
+                                        Boolean hasLeader,
+                                        Boolean onlyAvailable) {
+        int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
+        int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
 
-                    preferredTagNames = prefTagIds.stream()
-                            .map(tagIdNameMap::get)
-                            .filter(Objects::nonNull)
-                            .filter(name -> !name.isBlank())
-                            .collect(Collectors.toList());
-                }
-            }
+        ProjectPreference preference = resolveProjectPreference(accountId);
+        String filterRegionCode = trimToNull(regionCode);
+        String filterTag = trimToNull(tag);
+        String sortRegionCode = filterRegionCode == null ? preference.regionCode() : filterRegionCode;
+        List<String> preferredTags = filterTag == null ? preference.preferredTagNames() : List.of(filterTag);
+        String normalizedStatus = normalizeStatus(status);
+
+        if (departureDateFrom != null && departureDateTo != null && departureDateFrom.isAfter(departureDateTo)) {
+            throw new IllegalArgumentException("departureDateFrom不能晚于departureDateTo");
         }
 
         PageHelper.startPage(page, size);
-        return projectMapper.selectByPreference(preferredTagNames, regionCode);
+        return projectMapper.selectByCompositeFilter(
+                preferredTags,
+                sortRegionCode,
+                trimToNull(keyword),
+                filterRegionCode,
+                filterTag,
+                normalizedStatus,
+                departureDateFrom,
+                departureDateTo,
+                ownerAccountId,
+                leaderAccountId,
+                hasLeader,
+                onlyAvailable
+        );
     }
 
     @Override
@@ -279,5 +299,55 @@ public class ProjectServiceImpl implements ProjectService {
             return;
         }
         throw new ForbiddenException("仅项目拥有者或已接单领队可更新项目状态");
+    }
+
+    private ProjectPreference resolveProjectPreference(Long accountId) {
+        String regionCode = null;
+        List<String> preferredTagNames = Collections.emptyList();
+        if (accountId != null) {
+            Account account = accountMapper.selectById(accountId);
+            if (account != null) {
+                regionCode = account.getRegionCode();
+            }
+
+            List<AccountTagPref> tagPrefs = accountTagPrefMapper.selectByAccountId(accountId);
+            if (tagPrefs != null && !tagPrefs.isEmpty()) {
+                Set<Long> prefTagIds = tagPrefs.stream()
+                        .map(AccountTagPref::getTagId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+
+                if (!prefTagIds.isEmpty()) {
+                    Map<Long, String> tagIdNameMap = tagMapper.selectAll().stream()
+                            .collect(Collectors.toMap(Tag::getId, Tag::getName));
+
+                    preferredTagNames = prefTagIds.stream()
+                            .map(tagIdNameMap::get)
+                            .filter(Objects::nonNull)
+                            .filter(name -> !name.isBlank())
+                            .collect(Collectors.toList());
+                }
+            }
+        }
+        return new ProjectPreference(trimToNull(regionCode), preferredTagNames);
+    }
+
+    private String normalizeStatus(String status) {
+        String normalized = trimToNull(status);
+        if (normalized == null) {
+            return null;
+        }
+        return ProjectStatus.from(normalized).name();
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private record ProjectPreference(String regionCode, List<String> preferredTagNames) {
     }
 }

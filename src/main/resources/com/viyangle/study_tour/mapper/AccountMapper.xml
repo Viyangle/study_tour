@@ -17,9 +17,9 @@
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Account"
             useGeneratedKeys="true" keyProperty="id">
         insert into accounts
-        (role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at)
+        (role, username, phone, password_hash, region_code, avatar_url, intro, status, created_at, updated_at)
         values
-        (#{role}, #{username}, #{phone}, #{passwordHash}, #{regionCode}, #{avatarUrl}, #{status}, #{createdAt}, #{updatedAt})
+        (#{role}, #{username}, #{phone}, #{passwordHash}, #{regionCode}, #{avatarUrl}, #{intro}, #{status}, #{createdAt}, #{updatedAt})
     </insert>
 
     <!-- delete：根据id删除账号 -->
@@ -37,6 +37,7 @@
             <if test="passwordHash != null">password_hash = #{passwordHash},</if>
             <if test="regionCode != null">region_code = #{regionCode},</if>
             <if test="avatarUrl != null">avatar_url = #{avatarUrl},</if>
+            <if test="intro != null">intro = #{intro},</if>
             <if test="status != null">status = #{status},</if>
             <if test="updatedAt != null">updated_at = #{updatedAt},</if>
         </set>
@@ -45,14 +46,14 @@
 
     <!-- select：根据id查询账号 -->
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Account">
-        select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
+        select id, role, username, phone, password_hash, region_code, avatar_url, intro, status, created_at, updated_at
         from accounts
         where id = #{id}
     </select>
 
     <!-- select：查询所有账号 -->
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Account">
-        select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
+        select id, role, username, phone, password_hash, region_code, avatar_url, intro, status, created_at, updated_at
         from accounts
     </select>
 
@@ -61,7 +62,7 @@
         #{phone} 和 #{passwordHash} 是 MyBatis 的参数占位符，会自动防止SQL注入
     -->
     <select id="selectByPhoneAndPassword" resultType="com.viyangle.study_tour.pojo.Account">
-        select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
+        select id, role, username, phone, password_hash, region_code, avatar_url, intro, status, created_at, updated_at
         from accounts
         where phone = #{phone} and password_hash = #{passwordHash}
     </select>
@@ -71,7 +72,7 @@
         #{phone} 是 MyBatis 的参数占位符，会自动防止SQL注入
     -->
     <select id="selectByPhone" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.Account">
-        select id, role, username, phone, password_hash, region_code, avatar_url, status, created_at, updated_at
+        select id, role, username, phone, password_hash, region_code, avatar_url, intro, status, created_at, updated_at
         from accounts
         where phone = #{phone}
     </select>
