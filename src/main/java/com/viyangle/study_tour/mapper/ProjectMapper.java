@@ -35,4 +35,12 @@ public interface ProjectMapper {
                                           @Param("leaderAccountId") Long leaderAccountId,
                                           @Param("hasLeader") Boolean hasLeader,
                                           @Param("onlyAvailable") Boolean onlyAvailable);
+
+    int casAcceptProject(@Param("id") Long id, @Param("leaderAccountId") Long leaderAccountId);
+
+    int casTransitionStatus(@Param("id") Long id,
+                            @Param("expectedStatus") String expectedStatus,
+                            @Param("targetStatus") String targetStatus);
+
+    int casIncrementCurrentMembers(@Param("id") Long id);
 }

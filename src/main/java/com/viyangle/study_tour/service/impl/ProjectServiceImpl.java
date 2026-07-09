@@ -129,6 +129,7 @@ public class ProjectServiceImpl implements ProjectService {
         );
     }
 
+    @Transactional
     @Override
     public void joinProject(Long id, Long accountId) {
         if (accountId == null) {
@@ -143,6 +144,11 @@ public class ProjectServiceImpl implements ProjectService {
         ProjectMember existing = projectMemberMapper.selectByProjectIdAndAccountId(id, accountId);
         if (existing != null) {
             throw new ForbiddenException("已加入该项目, projectId=" + id + ", accountId=" + accountId);
+        }
+
+        int affected = projectMapper.casIncrementCurrentMembers(id);
+        if (affected == 0) {
+            throw new ForbiddenException("项目已满员, projectId=" + id);
         }
 
         projectMemberMapper.insert(new ProjectMember(null, id, accountId, "JOINED", LocalDateTime.now()));
@@ -171,24 +177,25 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ResourceNotFoundException("项目不存在, projectId=" + id);
         }
 
-        if (project.getLeaderAccountId() != null && !leaderAccountId.equals(project.getLeaderAccountId())) {
-            throw new ForbiddenException("项目已有领队接单, projectId=" + id);
+        if (ProjectStatus.CONFIRMED.name().equals(project.getStatus())
+                && leaderAccountId.equals(project.getLeaderAccountId())) {
+            return;
         }
 
         ProjectStatus currentStatus = ProjectStatus.from(project.getStatus());
-        ProjectStatus targetStatus = ProjectStatus.CONFIRMED;
-        if (currentStatus == targetStatus && leaderAccountId.equals(project.getLeaderAccountId())) {
-            return;
-        }
-        currentStatus.assertCanTransitionTo(targetStatus);
+        currentStatus.assertCanTransitionTo(ProjectStatus.CONFIRMED);
 
-        Project update = new Project();
-        update.setId(id);
-        update.setLeaderAccountId(leaderAccountId);
-        update.setStatus(targetStatus.name());
-        projectMapper.updateById(update);
+        int affected = projectMapper.casAcceptProject(id, leaderAccountId);
+        if (affected == 0) {
+            Project latest = projectMapper.selectById(id);
+            if (latest != null && latest.getLeaderAccountId() != null) {
+                throw new ForbiddenException("项目已有领队接单, projectId=" + id);
+            }
+            throw new ForbiddenException("接单失败，项目状态已变更, projectId=" + id);
+        }
     }
 
+    @Transactional
     @Override
     public void leaderJoinProject(Project project, Long currentAccountId) {
         if (currentAccountId == null) {
@@ -219,11 +226,14 @@ public class ProjectServiceImpl implements ProjectService {
         }
         currentStatus.assertCanTransitionTo(targetStatus);
 
-        Project update = new Project();
-        update.setId(project.getId());
-        update.setLeaderAccountId(project.getLeaderAccountId());
-        update.setStatus(targetStatus.name());
-        projectMapper.updateById(update);
+        int affected = projectMapper.casAcceptProject(project.getId(), project.getLeaderAccountId());
+        if (affected == 0) {
+            Project latest = projectMapper.selectById(project.getId());
+            if (latest != null && latest.getLeaderAccountId() != null) {
+                throw new ForbiddenException("项目已有领队接单, projectId=" + project.getId());
+            }
+            throw new ForbiddenException("指定领队失败，项目状态已变更, projectId=" + project.getId());
+        }
     }
 
     @Transactional
@@ -248,10 +258,10 @@ public class ProjectServiceImpl implements ProjectService {
         current.assertCanTransitionTo(target);
         validateTargetStatusRequirements(project, target);
 
-        Project update = new Project();
-        update.setId(id);
-        update.setStatus(target.name());
-        projectMapper.updateById(update);
+        int affected = projectMapper.casTransitionStatus(id, current.name(), target.name());
+        if (affected == 0) {
+            throw new ForbiddenException("状态流转失败，项目状态已被其他操作变更, projectId=" + id);
+        }
     }
 
     private void normalizeInitialProjectStatus(Project project) {

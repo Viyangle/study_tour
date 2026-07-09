@@ -169,4 +169,27 @@
         created_at desc
     </select>
 
+    <update id="casAcceptProject">
+        update projects
+        set leader_account_id = #{leaderAccountId},
+            status = 'CONFIRMED'
+        where id = #{id}
+          and status in ('OPEN', 'MATCHING')
+          and leader_account_id is null
+    </update>
+
+    <update id="casTransitionStatus">
+        update projects
+        set status = #{targetStatus}
+        where id = #{id}
+          and status = #{expectedStatus}
+    </update>
+
+    <update id="casIncrementCurrentMembers">
+        update projects
+        set current_members = COALESCE(current_members, 0) + 1
+        where id = #{id}
+          and (max_members is null or COALESCE(current_members, 0) &lt; max_members)
+    </update>
+
 </mapper>
