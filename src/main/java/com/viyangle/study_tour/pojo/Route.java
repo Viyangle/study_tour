@@ -13,5 +13,6 @@ public class Route {
     private Long id;
     private String regionAdcode;
     private String tag;
+    private Boolean containsOutdatedAttractions;
     private LocalDateTime createdAt;
 }

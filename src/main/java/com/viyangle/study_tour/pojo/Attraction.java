@@ -27,6 +27,7 @@ public class Attraction {
     private String opentimeToday;
     private String opentimeWeek;
     private String tel;
+    private String status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

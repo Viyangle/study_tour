@@ -13,6 +13,8 @@ public interface RouteMapper {
 
     int updateById(Route route);
 
+    int refreshOutdatedAttractionFlagById(@Param("id") Long id);
+
     int deleteById(@Param("id") Long id);
 
     Route selectById(@Param("id") Long id);

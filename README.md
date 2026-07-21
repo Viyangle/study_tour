@@ -943,24 +943,28 @@ GET /routes?accountId=1&pageNum=1&pageSize=10
             "id": 17,
             "regionAdcode": "320102",
             "tag": "历史人文",
+            "containsOutdatedAttractions": true,
             "createdAt": "2026-03-28T19:23:31"
         },
         {
             "id": 4,
             "regionAdcode": null,
             "tag": null,
+            "containsOutdatedAttractions": false,
             "createdAt": "2026-03-15T17:34:04"
         },
         {
             "id": 2,
             "regionAdcode": null,
             "tag": null,
+            "containsOutdatedAttractions": false,
             "createdAt": "2026-03-12T13:54:50"
         },
         {
             "id": 1,
             "regionAdcode": null,
             "tag": null,
+            "containsOutdatedAttractions": false,
             "createdAt": "2026-03-11T20:26:30"
         }
     ]

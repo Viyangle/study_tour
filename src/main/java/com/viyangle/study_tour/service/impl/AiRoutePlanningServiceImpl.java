@@ -159,7 +159,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             return List.of();
         }
 
-        List<Attraction> loaded = attractionMapper.selectByPoiIds(candidatePoiIds);
+        List<Attraction> loaded = attractionMapper.selectActiveByPoiIds(candidatePoiIds);
         if (loaded == null || loaded.isEmpty()) {
             return List.of();
         }
@@ -187,7 +187,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     }
 
     private List<Attraction> loadFallbackAttractions(int limit) {
-        List<Attraction> all = attractionMapper.selectAll();
+        List<Attraction> all = attractionMapper.selectAllActive();
         if (all == null || all.isEmpty()) {
             return List.of();
         }

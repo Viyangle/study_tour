@@ -66,6 +66,7 @@ public class RouteServiceImpl implements RouteService {
         route.setRegionAdcode(resolveRegionAdcode(normalized));
         routeMapper.insert(route);
         upsertRouteAttractions(route.getId(), normalized);
+        routeMapper.refreshOutdatedAttractionFlagById(route.getId());
         return route.getId();
     }
 
@@ -102,6 +103,7 @@ public class RouteServiceImpl implements RouteService {
 
         routeAttractionMapper.deleteByRouteId(routeId);
         upsertRouteAttractions(routeId, routeAttractions);
+        routeMapper.refreshOutdatedAttractionFlagById(routeId);
         redisTemplate.opsForValue().set(mappingKey, String.valueOf(routeId), Duration.ofDays(1));
         return routeId;
     }

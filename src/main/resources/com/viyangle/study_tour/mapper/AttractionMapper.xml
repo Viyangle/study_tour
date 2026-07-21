@@ -4,11 +4,19 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.viyangle.study_tour.mapper.AttractionMapper">
 
+    <sql id="attractionColumns">
+        poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, status, created_at, updated_at
+    </sql>
+
+    <sql id="activeStatusCondition">
+        (status is null or status = 'ACTIVE')
+    </sql>
+
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Attraction">
         insert into attractions
-        (poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel)
+        (poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, status)
         values
-        (#{poiId}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance}, #{opentimeToday}, #{opentimeWeek}, #{tel})
+        (#{poiId}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance}, #{opentimeToday}, #{opentimeWeek}, #{tel}, coalesce(#{status}, 'ACTIVE'))
     </insert>
 
     <delete id="deleteByPoiId" parameterType="java.lang.String">
@@ -32,18 +40,19 @@
             distance = #{distance},
             opentime_today = #{opentimeToday},
             opentime_week = #{opentimeWeek},
-            tel = #{tel}
+            tel = #{tel},
+            status = coalesce(#{status}, status)
         where poi_id = #{poiId}
     </update>
 
     <select id="selectByPoiId" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, created_at, updated_at
+        select <include refid="attractionColumns"/>
         from attractions
         where poi_id = #{poiId}
     </select>
 
     <select id="selectByPoiIds" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, created_at, updated_at
+        select <include refid="attractionColumns"/>
         from attractions
         where poi_id in
         <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
@@ -51,13 +60,29 @@
         </foreach>
     </select>
 
+    <select id="selectActiveByPoiIds" resultType="com.viyangle.study_tour.pojo.Attraction">
+        select <include refid="attractionColumns"/>
+        from attractions
+        where <include refid="activeStatusCondition"/>
+          and poi_id in
+        <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+            #{poiId}
+        </foreach>
+    </select>
+
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, created_at, updated_at
+        select <include refid="attractionColumns"/>
         from attractions
     </select>
 
+    <select id="selectAllActive" resultType="com.viyangle.study_tour.pojo.Attraction">
+        select <include refid="attractionColumns"/>
+        from attractions
+        where <include refid="activeStatusCondition"/>
+    </select>
+
     <select id="selectByRegionCode" resultType="com.viyangle.study_tour.pojo.Attraction">
-        select poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, created_at, updated_at
+        select <include refid="attractionColumns"/>
         from attractions
         <where>
             <if test="regionCode != null and regionCode != ''">

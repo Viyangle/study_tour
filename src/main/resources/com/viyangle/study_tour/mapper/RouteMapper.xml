@@ -4,6 +4,10 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.viyangle.study_tour.mapper.RouteMapper">
 
+    <sql id="routeColumns">
+        id, region_adcode, tag, contains_outdated_attractions, created_at
+    </sql>
+
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Route"
             useGeneratedKeys="true" keyProperty="id">
         insert into routes(region_adcode, tag, created_at)
@@ -17,23 +21,35 @@
         where id = #{id}
     </update>
 
+    <update id="refreshOutdatedAttractionFlagById" parameterType="java.lang.Long">
+        update routes r
+        set contains_outdated_attractions = exists(
+            select 1
+            from route_attractions ra
+            join attractions a on a.poi_id = ra.poi_id
+            where ra.route_id = r.id
+              and coalesce(a.status, 'ACTIVE') != 'ACTIVE'
+        )
+        where r.id = #{id}
+    </update>
+
     <delete id="deleteById" parameterType="java.lang.Long">
         delete from routes where id = #{id}
     </delete>
 
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, region_adcode, tag, created_at
+        select <include refid="routeColumns"/>
         from routes
         where id = #{id}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, region_adcode, tag, created_at
+        select <include refid="routeColumns"/>
         from routes
     </select>
 
     <select id="selectByPreference" resultType="com.viyangle.study_tour.pojo.Route">
-        select id, region_adcode, tag, created_at
+        select <include refid="routeColumns"/>
         from routes
         order by
         (
