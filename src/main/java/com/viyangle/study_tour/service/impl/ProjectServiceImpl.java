@@ -8,13 +8,17 @@ import com.viyangle.study_tour.mapper.AccountMapper;
 import com.viyangle.study_tour.mapper.AccountTagPrefMapper;
 import com.viyangle.study_tour.mapper.ProjectMapper;
 import com.viyangle.study_tour.mapper.ProjectMemberMapper;
+import com.viyangle.study_tour.mapper.RouteMapper;
 import com.viyangle.study_tour.mapper.TagMapper;
 import com.viyangle.study_tour.pojo.Account;
 import com.viyangle.study_tour.pojo.AccountTagPref;
 import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.ProjectMember;
 import com.viyangle.study_tour.pojo.ProjectStatus;
+import com.viyangle.study_tour.pojo.Route;
+import com.viyangle.study_tour.pojo.StartPointType;
 import com.viyangle.study_tour.pojo.Tag;
+import com.viyangle.study_tour.service.ChatService;
 import com.viyangle.study_tour.service.ProjectService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +47,9 @@ public class ProjectServiceImpl implements ProjectService {
     private ProjectMemberMapper projectMemberMapper;
 
     @Autowired
+    private RouteMapper routeMapper;
+
+    @Autowired
     private AccountMapper accountMapper;
 
     @Autowired
@@ -51,9 +58,15 @@ public class ProjectServiceImpl implements ProjectService {
     @Autowired
     private TagMapper tagMapper;
 
+    @Autowired
+    private ChatService chatService;
+
     @Transactional
     @Override
-    public void createProject(Project project) {
+    public Long createProject(Project project) {
+        if (project == null) {
+            throw new IllegalArgumentException("项目发布信息不能为空");
+        }
         Long currentAccountId = SecurityContextUtil.currentAccountId();
         if (currentAccountId != null) {
             project.setOwnerAccountId(currentAccountId);
@@ -62,10 +75,25 @@ public class ProjectServiceImpl implements ProjectService {
             throw new UnauthorizedException("未认证用户");
         }
 
+        Route route = requireRoute(project.getRouteId());
+        project.setRegionAdcode(route.getRegionAdcode());
+        project.setTag(route.getTag());
+        int representedCount = normalizeRepresentedCount(project.getRepresentedCount());
+        normalizePublishDetails(project, representedCount);
         normalizeInitialProjectStatus(project);
         validateLeaderAccount(project.getLeaderAccountId());
         projectMapper.insert(project);
-        projectMemberMapper.insert(new ProjectMember(null, project.getId(), project.getOwnerAccountId(), "JOINED", LocalDateTime.now()));
+        projectMemberMapper.insert(new ProjectMember(
+                null,
+                project.getId(),
+                project.getOwnerAccountId(),
+                "JOINED",
+                representedCount,
+                LocalDateTime.now()
+        ));
+        projectMapper.refreshCurrentMembersById(project.getId());
+        syncProjectGroupChat(project, ProjectStatus.from(project.getStatus()));
+        return project.getId();
     }
 
     @Override
@@ -129,15 +157,21 @@ public class ProjectServiceImpl implements ProjectService {
         );
     }
 
+    @Transactional
     @Override
-    public void joinProject(Long id, Long accountId) {
+    public void joinProject(Long id, Long accountId, Integer representedCountValue) {
         if (accountId == null) {
             throw new UnauthorizedException("未认证用户");
         }
+        int representedCount = normalizeRepresentedCount(representedCountValue);
 
-        Project project = projectMapper.selectById(id);
+        Project project = projectMapper.selectByIdForUpdate(id);
         if (project == null) {
             throw new ResourceNotFoundException("项目不存在, projectId=" + id);
+        }
+        ProjectStatus status = ProjectStatus.from(project.getStatus());
+        if (status != ProjectStatus.OPEN && status != ProjectStatus.MATCHING) {
+            throw new ForbiddenException("当前订单状态不可加入, projectId=" + id + ", status=" + status.name());
         }
 
         ProjectMember existing = projectMemberMapper.selectByProjectIdAndAccountId(id, accountId);
@@ -145,7 +179,25 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ForbiddenException("已加入该项目, projectId=" + id + ", accountId=" + accountId);
         }
 
-        projectMemberMapper.insert(new ProjectMember(null, id, accountId, "JOINED", LocalDateTime.now()));
+        Integer currentCountValue = projectMemberMapper.sumRepresentedCountByProjectId(id);
+        int currentCount = currentCountValue == null ? 0 : currentCountValue;
+        if (project.getMaxMembers() != null && currentCount + representedCount > project.getMaxMembers()) {
+            throw new ForbiddenException(
+                    "加入后将超过订单人数上限, current=" + currentCount
+                            + ", representedCount=" + representedCount
+                            + ", max=" + project.getMaxMembers()
+            );
+        }
+
+        projectMemberMapper.insert(new ProjectMember(
+                null,
+                id,
+                accountId,
+                "JOINED",
+                representedCount,
+                LocalDateTime.now()
+        ));
+        projectMapper.refreshCurrentMembersById(id);
     }
 
     @Override
@@ -178,6 +230,7 @@ public class ProjectServiceImpl implements ProjectService {
         ProjectStatus currentStatus = ProjectStatus.from(project.getStatus());
         ProjectStatus targetStatus = ProjectStatus.CONFIRMED;
         if (currentStatus == targetStatus && leaderAccountId.equals(project.getLeaderAccountId())) {
+            chatService.createProjectGroup(id, project.getOwnerAccountId(), leaderAccountId);
             return;
         }
         currentStatus.assertCanTransitionTo(targetStatus);
@@ -187,8 +240,10 @@ public class ProjectServiceImpl implements ProjectService {
         update.setLeaderAccountId(leaderAccountId);
         update.setStatus(targetStatus.name());
         projectMapper.updateById(update);
+        chatService.createProjectGroup(id, project.getOwnerAccountId(), leaderAccountId);
     }
 
+    @Transactional
     @Override
     public void leaderJoinProject(Project project, Long currentAccountId) {
         if (currentAccountId == null) {
@@ -215,6 +270,11 @@ public class ProjectServiceImpl implements ProjectService {
         ProjectStatus targetStatus = ProjectStatus.CONFIRMED;
         if (currentStatus == ProjectStatus.CONFIRMED
                 && project.getLeaderAccountId().equals(existingProject.getLeaderAccountId())) {
+            chatService.createProjectGroup(
+                    existingProject.getId(),
+                    existingProject.getOwnerAccountId(),
+                    existingProject.getLeaderAccountId()
+            );
             return;
         }
         currentStatus.assertCanTransitionTo(targetStatus);
@@ -224,6 +284,11 @@ public class ProjectServiceImpl implements ProjectService {
         update.setLeaderAccountId(project.getLeaderAccountId());
         update.setStatus(targetStatus.name());
         projectMapper.updateById(update);
+        chatService.createProjectGroup(
+                existingProject.getId(),
+                existingProject.getOwnerAccountId(),
+                project.getLeaderAccountId()
+        );
     }
 
     @Transactional
@@ -242,6 +307,7 @@ public class ProjectServiceImpl implements ProjectService {
         ProjectStatus current = ProjectStatus.from(project.getStatus());
         ProjectStatus target = ProjectStatus.from(targetStatus);
         if (current == target) {
+            syncProjectGroupChat(project, target);
             return;
         }
 
@@ -252,6 +318,78 @@ public class ProjectServiceImpl implements ProjectService {
         update.setId(id);
         update.setStatus(target.name());
         projectMapper.updateById(update);
+        syncProjectGroupChat(project, target);
+    }
+
+    private void syncProjectGroupChat(Project project, ProjectStatus status) {
+        if (status == ProjectStatus.CONFIRMED) {
+            chatService.createProjectGroup(
+                    project.getId(),
+                    project.getOwnerAccountId(),
+                    project.getLeaderAccountId()
+            );
+        } else if (status == ProjectStatus.DONE || status == ProjectStatus.CANCELLED) {
+            chatService.deleteProjectGroup(project.getId());
+        }
+    }
+
+    private Route requireRoute(Long routeId) {
+        if (routeId == null) {
+            throw new IllegalArgumentException("路线ID不能为空");
+        }
+        Route route = routeMapper.selectById(routeId);
+        if (route == null) {
+            throw new ResourceNotFoundException("路线不存在, routeId=" + routeId);
+        }
+        return route;
+    }
+
+    private int normalizeRepresentedCount(Integer representedCount) {
+        if (representedCount == null || representedCount <= 0) {
+            throw new IllegalArgumentException("代表参团人数必须是正整数");
+        }
+        return representedCount;
+    }
+
+    private void normalizePublishDetails(Project project, int representedCount) {
+        if (project.getDepartureDate() == null) {
+            throw new IllegalArgumentException("出发日期不能为空");
+        }
+        if (project.getDepartureDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("出发日期不能早于今天");
+        }
+        if (project.getDepartureTime() == null) {
+            throw new IllegalArgumentException("出发时间不能为空");
+        }
+        StartPointType startPointType = StartPointType.from(project.getStartPointType());
+        project.setStartPointType(startPointType.name());
+        project.setStartPoint(trimToNull(project.getStartPoint()));
+        if (project.getStartPoint() == null) {
+            throw new IllegalArgumentException("起点不能为空；当前位置需提交前端解析出的地址或坐标");
+        }
+        if (project.getStartPoint().length() > 255) {
+            throw new IllegalArgumentException("起点长度不能超过255个字符");
+        }
+
+        if (project.getMaxMembers() != null) {
+            if (project.getMaxMembers() <= 0) {
+                throw new IllegalArgumentException("订单人数上限必须是正整数");
+            }
+            if (representedCount > project.getMaxMembers()) {
+                throw new IllegalArgumentException("代表参团人数不能超过订单人数上限");
+            }
+        }
+        project.setCurrentMembers(representedCount);
+        project.setLeaderRequirements(trimToNull(project.getLeaderRequirements()));
+        project.setParticipantRequirements(trimToNull(project.getParticipantRequirements()));
+        project.setTitle(trimToNull(project.getTitle()));
+        if (project.getTitle() == null) {
+            String tag = trimToNull(project.getTag());
+            project.setTitle(tag == null ? "研学路线拼单" : tag + "研学拼单");
+        }
+        if (project.getTitle().length() > 100) {
+            throw new IllegalArgumentException("订单标题长度不能超过100个字符");
+        }
     }
 
     private void normalizeInitialProjectStatus(Project project) {

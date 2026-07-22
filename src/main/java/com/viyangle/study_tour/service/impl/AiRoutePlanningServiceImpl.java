@@ -6,6 +6,7 @@ import com.viyangle.study_tour.mapper.AttractionMapper;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.AIRoutePlan;
 import com.viyangle.study_tour.pojo.Attraction;
+import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.pojo.RouteConstraintState;
 import com.viyangle.study_tour.pojo.VectorRetrievalResult;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
@@ -101,6 +102,142 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         saveState(memoryId, state);
         logPlanningDebug(memoryId, retrievalQuery, retrievalResult, candidatePoiIds, state, plan);
         return plan;
+    }
+
+    @Override
+    public AIRoutePlan optimizeSubmittedRoute(List<RouteAttraction> routeAttractions, String message) throws Exception {
+        List<RouteAttraction> submitted = validateSubmittedRoute(routeAttractions);
+        List<String> submittedPoiIds = submitted.stream()
+                .map(item -> item.getPoiId().trim())
+                .toList();
+
+        List<Attraction> loaded = attractionMapper.selectActiveByPoiIds(submittedPoiIds);
+        Map<String, Attraction> attractionByPoiId = loaded == null ? Map.of() : loaded.stream()
+                .filter(attraction -> attraction != null && attraction.getPoiId() != null)
+                .collect(Collectors.toMap(
+                        attraction -> attraction.getPoiId().trim().toUpperCase(Locale.ROOT),
+                        attraction -> attraction,
+                        (first, ignored) -> first
+                ));
+
+        List<Attraction> candidates = new ArrayList<>(submittedPoiIds.size());
+        for (String poiId : submittedPoiIds) {
+            Attraction attraction = attractionByPoiId.get(poiId.toUpperCase(Locale.ROOT));
+            if (attraction == null) {
+                throw new IllegalArgumentException("Submitted poiId does not exist or is inactive: " + poiId);
+            }
+            candidates.add(attraction);
+        }
+
+        List<AmapTransitClient.TransitEdge> matrix = amapTransitClient.buildUndirectedMatrix(candidates);
+        String prompt = buildSubmittedRouteOptimizationPrompt(submitted, message, candidates, matrix);
+        AIRoutePlan plan = parseAiPlan(routeComposerService.chat(prompt));
+        validateSubmittedOptimization(plan.getItems(), submittedPoiIds);
+        return plan;
+    }
+
+    private List<RouteAttraction> validateSubmittedRoute(List<RouteAttraction> routeAttractions) {
+        if (routeAttractions == null || routeAttractions.size() < 2) {
+            throw new IllegalArgumentException("At least two route attractions are required for optimization");
+        }
+        if (routeAttractions.size() > 20) {
+            throw new IllegalArgumentException("At most 20 route attractions can be optimized at once");
+        }
+
+        Set<String> poiIds = new LinkedHashSet<>();
+        for (int i = 0; i < routeAttractions.size(); i++) {
+            RouteAttraction item = routeAttractions.get(i);
+            if (item == null || item.getPoiId() == null || item.getPoiId().isBlank()) {
+                throw new IllegalArgumentException("Row " + (i + 1) + ": invalid poiId");
+            }
+            String normalizedPoiId = item.getPoiId().trim().toUpperCase(Locale.ROOT);
+            if (!poiIds.add(normalizedPoiId)) {
+                throw new IllegalArgumentException("Duplicated poiId: " + item.getPoiId());
+            }
+        }
+        return routeAttractions;
+    }
+
+    private String buildSubmittedRouteOptimizationPrompt(List<RouteAttraction> submitted,
+                                                         String message,
+                                                         List<Attraction> candidates,
+                                                         List<AmapTransitClient.TransitEdge> matrix) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("任务：优化用户已经提交的完整路线。\n");
+        sb.append("用户补充要求：")
+                .append(message == null || message.isBlank() ? "优先减少通勤，并结合开放时间合理安排游览时间。" : message.trim())
+                .append("\n\n");
+        List<AIRouteItem> originalItems = submitted.stream()
+                .map(item -> new AIRouteItem(
+                        item.getPoiId(),
+                        item.getVisitOrder(),
+                        item.getVisitTime() == null ? null : item.getVisitTime().toString(),
+                        item.getRecommendedDuration(),
+                        item.getNotes()
+                ))
+                .toList();
+        sb.append("原始路线节点(JSON，包含用户已有的顺序和时间信息)：\n")
+                .append(objectMapper.writeValueAsString(originalItems))
+                .append("\n\n");
+
+        sb.append("必须全部保留的景点：\n");
+        for (int i = 0; i < candidates.size(); i++) {
+            Attraction attraction = candidates.get(i);
+            sb.append(i + 1)
+                    .append(". poiId=").append(attraction.getPoiId())
+                    .append(", name=").append(nonNull(attraction.getName()))
+                    .append(", adcode=").append(nonNull(attraction.getAdcode()))
+                    .append(", type=").append(nonNull(attraction.getType()))
+                    .append(", opentimeToday=").append(nonNull(attraction.getOpentimeToday()))
+                    .append(", opentimeWeek=").append(nonNull(attraction.getOpentimeWeek()))
+                    .append("\n");
+        }
+
+        sb.append("\n景点交通矩阵(无向)：\n");
+        for (AmapTransitClient.TransitEdge edge : matrix) {
+            sb.append(edge.getFromPoiId()).append(" <-> ").append(edge.getToPoiId())
+                    .append(" | routeDistanceM=").append(edge.getRouteDistanceM())
+                    .append(", bestTransitDistanceM=").append(edge.getBestTransitDistanceM())
+                    .append(", bestWalkingDistanceM=").append(edge.getBestWalkingDistanceM())
+                    .append(", lines=").append(edge.getBestLines() == null ? "[]" : edge.getBestLines())
+                    .append("\n");
+        }
+
+        sb.append("\n本次优化的硬性约束：\n")
+                .append("1. 输出必须且只能包含上面列出的全部景点，每个poiId恰好出现一次，禁止新增、删除或替换景点。\n")
+                .append("2. 可以调整visitOrder、visitTime、recommendedDuration和notes。\n")
+                .append("3. visitOrder必须从1开始连续递增。\n")
+                .append("4. 在满足用户补充要求和开放时间的前提下，尽量减少折返和通勤成本。\n");
+        return sb.toString();
+    }
+
+    private void validateSubmittedOptimization(List<AIRouteItem> optimizedItems, List<String> submittedPoiIds) {
+        if (optimizedItems == null || optimizedItems.size() != submittedPoiIds.size()) {
+            throw new IllegalArgumentException("Optimized route must keep every submitted attraction");
+        }
+
+        Set<String> expected = submittedPoiIds.stream()
+                .map(poiId -> poiId.trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> actual = optimizedItems.stream()
+                .map(AIRouteItem::getPoiId)
+                .filter(poiId -> poiId != null && !poiId.isBlank())
+                .map(poiId -> poiId.trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (!expected.equals(actual) || actual.size() != optimizedItems.size()) {
+            throw new IllegalArgumentException("Optimized route changed the submitted attraction set");
+        }
+
+        Set<Integer> expectedOrders = new LinkedHashSet<>();
+        for (int order = 1; order <= optimizedItems.size(); order++) {
+            expectedOrders.add(order);
+        }
+        Set<Integer> actualOrders = optimizedItems.stream()
+                .map(AIRouteItem::getVisitOrder)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (!expectedOrders.equals(actualOrders)) {
+            throw new IllegalArgumentException("Optimized visitOrder must start at 1 and be continuous");
+        }
     }
 
     private AIRoutePlan parseAiPlan(String aiText) throws Exception {

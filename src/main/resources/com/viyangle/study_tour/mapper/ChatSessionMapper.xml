@@ -4,58 +4,95 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.viyangle.study_tour.mapper.ChatSessionMapper">
 
-    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.ChatSession"
-            useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertProjectGroup">
         insert into chat_sessions
-        (project_id, user_account_id, leader_account_id)
+        (project_id, user_account_id, leader_account_id, status)
         values
-        (#{projectId}, #{userAccountId}, #{leaderAccountId})
+        (#{projectId}, #{ownerAccountId}, #{leaderAccountId}, 'ACTIVE')
     </insert>
 
-    <delete id="deleteById" parameterType="java.lang.Long">
-        delete from chat_sessions where id = #{id}
-    </delete>
-
-    <update id="updateById" parameterType="com.viyangle.study_tour.pojo.ChatSession">
-        update chat_sessions
-        set project_id = #{projectId},
-            user_account_id = #{userAccountId},
-            leader_account_id = #{leaderAccountId}
-        where id = #{id}
-    </update>
-
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.ChatSession">
-        select id, project_id, user_account_id, leader_account_id, created_at
+        select id, project_id, user_account_id, leader_account_id, status, disabled_at, created_at
         from chat_sessions
         where id = #{id}
     </select>
 
-    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.ChatSession">
-        select id, project_id, user_account_id, leader_account_id, created_at
-        from chat_sessions
-    </select>
-
-    <select id="selectByProjectAndAccounts" resultType="com.viyangle.study_tour.pojo.ChatSession">
-        select id, project_id, user_account_id, leader_account_id, created_at
+    <select id="selectByProjectId" resultType="com.viyangle.study_tour.pojo.ChatSession">
+        select id, project_id, user_account_id, leader_account_id, status, disabled_at, created_at
         from chat_sessions
         where project_id = #{projectId}
-          and user_account_id = #{userAccountId}
-          and leader_account_id = #{leaderAccountId}
         limit 1
     </select>
 
-    <select id="selectByUserAccountId" resultType="com.viyangle.study_tour.pojo.ChatSession">
-        select id, project_id, user_account_id, leader_account_id, created_at
-        from chat_sessions
-        where user_account_id = #{userAccountId}
-        order by created_at desc
+    <update id="deactivateByProjectId">
+        update chat_sessions
+        set status = 'DISABLED', disabled_at = coalesce(disabled_at, current_timestamp)
+        where project_id = #{projectId}
+          and status = 'ACTIVE'
+    </update>
+
+    <delete id="deleteByProjectId">
+        delete from chat_sessions where project_id = #{projectId}
+    </delete>
+
+    <select id="selectByParticipantAccountId" resultType="com.viyangle.study_tour.pojo.ChatSession">
+        select distinct cs.id, cs.project_id, cs.user_account_id, cs.leader_account_id,
+                        cs.status, cs.disabled_at, cs.created_at
+        from chat_sessions cs
+        inner join projects p on p.id = cs.project_id
+        left join project_members pm
+               on pm.project_id = cs.project_id
+              and pm.account_id = #{accountId}
+              and pm.join_status = 'JOINED'
+        where p.owner_account_id = #{accountId}
+           or p.leader_account_id = #{accountId}
+           or pm.id is not null
+        order by cs.created_at desc
     </select>
 
-    <select id="selectByLeaderAccountId" resultType="com.viyangle.study_tour.pojo.ChatSession">
-        select id, project_id, user_account_id, leader_account_id, created_at
-        from chat_sessions
-        where leader_account_id = #{leaderAccountId}
-        order by created_at desc
+    <select id="countParticipant" resultType="int">
+        select count(*)
+        from chat_sessions cs
+        inner join projects p on p.id = cs.project_id
+        left join project_members pm
+               on pm.project_id = cs.project_id
+              and pm.account_id = #{accountId}
+              and pm.join_status = 'JOINED'
+        where cs.id = #{sessionId}
+          and (p.owner_account_id = #{accountId}
+            or p.leader_account_id = #{accountId}
+            or pm.id is not null)
+    </select>
+
+    <select id="selectGroupMembers" resultType="com.viyangle.study_tour.pojo.ChatGroupMember">
+        select a.id as account_id,
+               a.username,
+               a.avatar_url,
+               case
+                   when a.id = p.leader_account_id and pm.id is not null then 'LEADER_PARTICIPANT'
+                   when a.id = p.leader_account_id then 'LEADER'
+                   else 'PARTICIPANT'
+               end as member_role,
+               coalesce(pm.represented_count, 0) as represented_count
+        from chat_sessions cs
+        inner join projects p on p.id = cs.project_id
+        inner join accounts a
+                on a.id = p.leader_account_id
+                or exists (
+                    select 1
+                    from project_members member_check
+                    where member_check.project_id = p.id
+                      and member_check.account_id = a.id
+                      and member_check.join_status = 'JOINED'
+                )
+        left join project_members pm
+               on pm.project_id = p.id
+              and pm.account_id = a.id
+              and pm.join_status = 'JOINED'
+        where cs.id = #{sessionId}
+        order by case when a.id = p.leader_account_id then 0 else 1 end,
+                 pm.joined_at asc,
+                 a.id asc
     </select>
 
 </mapper>

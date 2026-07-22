@@ -8,6 +8,8 @@ import java.util.List;
 public interface RouteService {
     Long generateRouteByManual(List<RouteAttraction> routeAttractions);
 
+    Long saveOptimizedRoute(String tag, List<RouteAttraction> routeAttractions);
+
     Long saveOrUpdateAIConversationRoute(String memoryId, String tag, List<RouteAttraction> routeAttractions);
 
     List<Route> getPagedRoutesByPreference(Long accountId, Integer pageNum, Integer pageSize);

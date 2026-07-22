@@ -9,9 +9,11 @@ import java.util.List;
 @Mapper
 public interface ChatMessageMapper {
 
-    int insert(ChatMessage chatMessage);
+    int insertIfSessionActive(ChatMessage chatMessage);
 
     int deleteById(@Param("id") Long id);
+
+    int deleteBySessionId(@Param("sessionId") Long sessionId);
 
     int updateById(ChatMessage chatMessage);
 

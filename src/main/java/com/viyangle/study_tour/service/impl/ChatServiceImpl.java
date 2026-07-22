@@ -6,19 +6,21 @@ import com.viyangle.study_tour.exception.UnauthorizedException;
 import com.viyangle.study_tour.mapper.ChatMessageMapper;
 import com.viyangle.study_tour.mapper.ChatSessionMapper;
 import com.viyangle.study_tour.pojo.ChatMessage;
+import com.viyangle.study_tour.pojo.ChatGroupMember;
 import com.viyangle.study_tour.pojo.ChatSession;
-import com.viyangle.study_tour.pojo.CreateChatSessionRequest;
 import com.viyangle.study_tour.pojo.SendChatMessageRequest;
 import com.viyangle.study_tour.service.ChatService;
-import com.viyangle.study_tour.utils.SecurityContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class ChatServiceImpl implements ChatService {
+
+    private static final String STATUS_ACTIVE = "ACTIVE";
 
     @Autowired
     private ChatSessionMapper chatSessionMapper;
@@ -27,65 +29,50 @@ public class ChatServiceImpl implements ChatService {
     private ChatMessageMapper chatMessageMapper;
 
     @Override
-    public ChatSession createOrGetSession(CreateChatSessionRequest request) {
-        Long currentAccountId = SecurityContextUtil.currentAccountId();
-        if (currentAccountId == null) {
-            throw new UnauthorizedException("未认证用户");
+    public ChatSession createProjectGroup(Long projectId, Long ownerAccountId, Long leaderAccountId) {
+        if (projectId == null || ownerAccountId == null || leaderAccountId == null) {
+            throw new IllegalArgumentException("创建项目群聊需要项目、发起人和领队账号ID");
         }
 
-        boolean isParticipant = currentAccountId.equals(request.getUserAccountId())
-            || currentAccountId.equals(request.getLeaderAccountId());
-        if (!isParticipant) {
-            throw new ForbiddenException("无权创建或访问该会话");
-        }
-
-        ChatSession existing = chatSessionMapper.selectByProjectAndAccounts(
-            request.getProjectId(),
-            request.getUserAccountId(),
-            request.getLeaderAccountId()
-        );
+        ChatSession existing = chatSessionMapper.selectByProjectId(projectId);
         if (existing != null) {
             return existing;
         }
 
-        ChatSession session = new ChatSession();
-        session.setProjectId(request.getProjectId());
-        session.setUserAccountId(request.getUserAccountId());
-        session.setLeaderAccountId(request.getLeaderAccountId());
-        chatSessionMapper.insert(session);
-        return chatSessionMapper.selectById(session.getId());
+        try {
+            chatSessionMapper.insertProjectGroup(projectId, ownerAccountId, leaderAccountId);
+        } catch (DuplicateKeyException ignored) {
+            // 并发确认领队时由项目唯一索引保证只创建一个群聊。
+        }
+        ChatSession created = chatSessionMapper.selectByProjectId(projectId);
+        if (created == null) {
+            throw new IllegalStateException("项目群聊创建失败, projectId=" + projectId);
+        }
+        return created;
     }
 
     @Override
-    public List<ChatSession> listSessions(Long accountId, String role) {
-        Long currentAccountId = SecurityContextUtil.currentAccountId();
-        String currentRole = SecurityContextUtil.currentRole();
+    @Transactional
+    public void deleteProjectGroup(Long projectId) {
+        if (projectId == null) {
+            return;
+        }
+        ChatSession session = chatSessionMapper.selectByProjectId(projectId);
+        if (session == null) {
+            return;
+        }
+        // 先锁定并停用会话，防止完成订单与发送消息并发时插入漏删消息。
+        chatSessionMapper.deactivateByProjectId(projectId);
+        chatMessageMapper.deleteBySessionId(session.getId());
+        chatSessionMapper.deleteByProjectId(projectId);
+    }
 
-        if (currentAccountId == null) {
+    @Override
+    public List<ChatSession> listSessions(Long accountId) {
+        if (accountId == null) {
             throw new UnauthorizedException("未认证用户");
         }
-
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(currentRole);
-        if (!isAdmin && !currentAccountId.equals(accountId)) {
-            throw new ForbiddenException("无权查看他人会话");
-        }
-
-        if ("LEADER".equalsIgnoreCase(role)) {
-            return chatSessionMapper.selectByLeaderAccountId(accountId);
-        }
-        if ("BOTH".equalsIgnoreCase(role)) {
-            List<ChatSession> userSessions = chatSessionMapper.selectByUserAccountId(accountId);
-            List<ChatSession> leaderSessions = chatSessionMapper.selectByLeaderAccountId(accountId);
-            List<ChatSession> merged = new ArrayList<>(userSessions);
-            for (ChatSession session : leaderSessions) {
-                boolean exists = merged.stream().anyMatch(s -> s.getId().equals(session.getId()));
-                if (!exists) {
-                    merged.add(session);
-                }
-            }
-            return merged;
-        }
-        return chatSessionMapper.selectByUserAccountId(accountId);
+        return chatSessionMapper.selectByParticipantAccountId(accountId);
     }
 
     @Override
@@ -93,15 +80,32 @@ public class ChatServiceImpl implements ChatService {
         if (currentAccountId == null) {
             throw new UnauthorizedException("未认证用户");
         }
+        if (request == null || request.getSessionId() == null) {
+            throw new IllegalArgumentException("会话ID不能为空");
+        }
+        if (request.getContent() == null || request.getContent().isBlank()) {
+            throw new IllegalArgumentException("消息内容不能为空");
+        }
 
-        requireSessionParticipant(request.getSessionId(), currentAccountId);
+        ChatSession session = requireSessionParticipant(request.getSessionId(), currentAccountId);
+        if (!STATUS_ACTIVE.equalsIgnoreCase(session.getStatus())) {
+            throw new ForbiddenException("项目已结束，群聊已禁用");
+        }
 
         ChatMessage msg = new ChatMessage();
         msg.setSessionId(request.getSessionId());
         msg.setSenderAccountId(currentAccountId);
         msg.setContent(request.getContent());
-        msg.setMsgType((request.getMsgType() == null || request.getMsgType().isBlank()) ? "TEXT" : request.getMsgType());
-        chatMessageMapper.insert(msg);
+        String msgType = (request.getMsgType() == null || request.getMsgType().isBlank())
+                ? "TEXT"
+                : request.getMsgType().trim().toUpperCase();
+        if (!"TEXT".equals(msgType)) {
+            throw new IllegalArgumentException("目前仅支持TEXT消息");
+        }
+        msg.setMsgType(msgType);
+        if (chatMessageMapper.insertIfSessionActive(msg) <= 0) {
+            throw new ForbiddenException("项目已结束，群聊已禁用");
+        }
         return msg.getId();
     }
 
@@ -115,15 +119,22 @@ public class ChatServiceImpl implements ChatService {
         return chatMessageMapper.selectBySessionId(sessionId);
     }
 
+    @Override
+    public List<ChatGroupMember> listGroupMembers(Long sessionId, Long currentAccountId) {
+        if (currentAccountId == null) {
+            throw new UnauthorizedException("未认证用户");
+        }
+        requireSessionParticipant(sessionId, currentAccountId);
+        return chatSessionMapper.selectGroupMembers(sessionId);
+    }
+
     private ChatSession requireSessionParticipant(Long sessionId, Long currentAccountId) {
         ChatSession session = chatSessionMapper.selectById(sessionId);
         if (session == null) {
             throw new ResourceNotFoundException("会话不存在, sessionId=" + sessionId);
         }
 
-        boolean isParticipant = currentAccountId.equals(session.getUserAccountId())
-            || currentAccountId.equals(session.getLeaderAccountId());
-        if (!isParticipant) {
+        if (chatSessionMapper.countParticipant(sessionId, currentAccountId) <= 0) {
             throw new ForbiddenException("无权访问该会话");
         }
         return session;

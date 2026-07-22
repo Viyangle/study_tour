@@ -60,10 +60,24 @@ public class RouteServiceImpl implements RouteService {
     @Transactional
     @Override
     public Long generateRouteByManual(List<RouteAttraction> routeAttractions) {
+        return createRoute(null, routeAttractions);
+    }
+
+    @Transactional
+    @Override
+    public Long saveOptimizedRoute(String tag, List<RouteAttraction> routeAttractions) {
+        if (tag == null || tag.isBlank()) {
+            throw new IllegalArgumentException("tag cannot be empty");
+        }
+        return createRoute(tag, routeAttractions);
+    }
+
+    private Long createRoute(String tag, List<RouteAttraction> routeAttractions) {
         List<RouteAttraction> normalized = normalizeManualRouteAttractions(routeAttractions);
         Route route = new Route();
         route.setCreatedAt(LocalDateTime.now());
         route.setRegionAdcode(resolveRegionAdcode(normalized));
+        route.setTag(tag);
         routeMapper.insert(route);
         upsertRouteAttractions(route.getId(), normalized);
         routeMapper.refreshOutdatedAttractionFlagById(route.getId());

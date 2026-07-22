@@ -18,6 +18,10 @@ public interface ProjectMapper {
 
     Project selectById(@Param("id") Long id);
 
+    Project selectByIdForUpdate(@Param("id") Long id);
+
+    int refreshCurrentMembersById(@Param("id") Long id);
+
     List<Project> selectAll();
 
     List<Project> selectByPreference(@Param("preferredTags") List<String> preferredTags,

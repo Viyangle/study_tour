@@ -14,5 +14,6 @@ public class ProjectMember {
     private Long projectId;
     private Long accountId;
     private String joinStatus;
+    private Integer representedCount;
     private LocalDateTime joinedAt;
 }

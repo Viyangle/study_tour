@@ -134,7 +134,12 @@
   "leaderAccountId": 3,
   "title": "北京历史文化研学",
   "departureDate": "2026-03-12",
-  "maxMembers": 30,
+  "departureTime": "08:30:00",
+  "startPointType": "MANUAL",
+  "startPoint": "北京南站北广场",
+  "leaderRequirements": "有博物馆研学带队经验",
+  "participantRequirements": "请准时集合",
+  "maxMembers": null,
   "currentMembers": 10,
   "status": "OPEN",
   "createdAt": "2026-03-12T21:00:00",
@@ -150,9 +155,12 @@
   "projectId": 1,
   "accountId": 2,
   "joinStatus": "JOINED",
+  "representedCount": 3,
   "joinedAt": "2026-03-12T21:00:00"
 }
 ```
+
+`currentMembers` 是所有 `JOINED/COMPLETED` 成员的 `representedCount` 之和，不是账号数量；`maxMembers=null` 表示订单不设总人数上限。
 
 ## 4. 接口列表
 
@@ -820,6 +828,7 @@ GET /projects/1/members
             "projectId": 1,
             "accountId": 1,
             "joinStatus": "JOINED",
+            "representedCount": 3,
             "joinedAt": "2026-03-12T16:38:12"
         },
         {
@@ -827,6 +836,7 @@ GET /projects/1/members
             "projectId": 1,
             "accountId": 2,
             "joinStatus": "JOINED",
+            "representedCount": 2,
             "joinedAt": "2026-03-12T19:18:53"
         }
     ]
@@ -838,7 +848,7 @@ GET /projects/1/members
 - 方法：`POST`
 - 路径：`/projects`
 - 权限：`USER/LEADER`；`ownerAccountId` 由当前登录用户决定（前端传入会被覆盖）
-- 描述：创建项目
+- 描述：兼容的项目创建接口；新前端优先使用 `/routes/{routeId}/publish`
 
 请求示例：
 
@@ -848,8 +858,13 @@ GET /projects/1/members
   "leaderAccountId": 3,
   "title": "北京历史文化研学",
   "departureDate": "2026-03-12",
-  "maxMembers": 30,
-  "currentMembers": 1,
+  "departureTime": "08:30:00",
+  "startPointType": "MANUAL",
+  "startPoint": "北京南站北广场",
+  "leaderRequirements": "有博物馆研学经验",
+  "participantRequirements": "请勿迟到",
+  "representedCount": 3,
+  "maxMembers": null,
   "status": "OPEN"
 }
 ```
@@ -860,7 +875,7 @@ GET /projects/1/members
 {
     "code": 1,
     "msg": "success",
-    "data": null
+    "data": 20
 }
 ```
 
@@ -869,12 +884,14 @@ GET /projects/1/members
 - 方法：`POST`
 - 路径：`/projects/{id}/join`
 - 权限：`USER`；账号从 JWT 获取，无需在请求体传 `accountId`
-- 描述：普通用户加入项目
+- 描述：普通用户携带自己代表的实际参团人数加入项目；后端会锁定订单并校验人数上限
 
 请求示例：
 
-```http
-POST /projects/1/join
+```json
+{
+  "representedCount": 4
+}
 ```
 
 响应结果：
@@ -1102,7 +1119,41 @@ GET /routes/17
 }
 ```
 
-#### 4.3.3 手动生成路线
+#### 4.3.3 发布路线为订单
+
+- 方法：`POST`
+- 路径：`/routes/{routeId}/publish`
+- 权限：`USER/LEADER`
+- 描述：供路线卡片上的“发布”按钮进入独立详情页后提交；路线 ID、地区和标签由后端确定，发布状态固定为 `OPEN`
+
+请求示例：
+
+```json
+{
+  "title": "南京历史研学拼单",
+  "representedCount": 3,
+  "departureDate": "2026-08-01",
+  "departureTime": "08:30:00",
+  "startPointType": "CURRENT_LOCATION",
+  "startPoint": "118.796877,32.060255",
+  "leaderRequirements": "熟悉南京历史，可做讲解",
+  "participantRequirements": "适合10岁以上学生",
+  "maxMembers": null
+}
+```
+
+字段说明：
+
+- `representedCount`：当前发布账号代表的实际参团人数，必填且大于 `0`
+- `departureDate`、`departureTime`：出发日期和时间，必填
+- `startPointType`：`CURRENT_LOCATION` 或 `MANUAL`
+- `startPoint`：必填；当前位置模式提交前端定位得到的地址或经纬度，手动模式提交输入内容
+- `leaderRequirements`、`participantRequirements`：可选
+- `maxMembers`：可选；不传或传 `null` 表示不限额
+
+响应中的 `data` 为订单 ID。
+
+#### 4.3.4 手动生成路线
 
 - 方法：`POST`
 - 路径：`/routes/manual`
@@ -1146,7 +1197,51 @@ GET /routes/17
 }
 ```
 
-#### 4.3.4 AI 规划路线
+#### 4.3.5 优化前端提交的完整路线
+
+- 方法：`POST`
+- 路径：`/routes/optimize`
+- 可选查询参数：`message`，用于补充优化目标
+- 描述：在前端提交的完整 POI 集合内优化顺序、游览时间、建议时长和通勤说明，并保存为一条新路线
+- 限制：一次提交 2～20 个不重复且有效的 POI；优化结果不会新增、删除或替换景点
+
+请求示例：
+
+```http
+POST /routes/optimize?message=尽量减少折返，并保留午餐时间
+Content-Type: application/json
+```
+
+```json
+[
+  {
+    "poiId": "B00190BMRC",
+    "visitOrder": 1,
+    "visitTime": "2026-04-01T09:00:00",
+    "recommendedDuration": 120,
+    "notes": ""
+  },
+  {
+    "poiId": "B00190AMPT",
+    "visitOrder": 2,
+    "visitTime": "2026-04-01T14:00:00",
+    "recommendedDuration": 90,
+    "notes": ""
+  }
+]
+```
+
+响应中的 `data` 是新保存路线的 ID：
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": 20
+}
+```
+
+#### 4.3.6 AI 规划路线
 
 - 方法：`POST`
 - 路径：`/routes/ai/{memoryId}`
@@ -1420,43 +1515,18 @@ GET /reviews/average-score/3
 
 ### 4.5 聊天相关
 
-#### 4.5.1 创建或获取会话
+聊天采用项目群聊，不提供自由建群或好友关系接口：
 
-- 方法：`POST`
-- 路径：`/chat/sessions`
-- 描述：按项目和双方账号创建或复用会话
+- 项目确认领队（状态进入 `CONFIRMED`）时，后端自动创建该项目唯一群聊
+- 项目发起人、`JOINED` 状态的项目成员和已确认领队自动拥有群聊权限，后续加入的项目成员无需手动加群
+- 项目进入 `DONE` 或 `CANCELLED` 后，后端彻底删除群聊和对应消息
+- 升级已有数据库前依次执行 `scripts/alter_projects_add_participation_details.sql`、`scripts/alter_chat_sessions_to_project_groups.sql`
 
-请求示例：
-
-```json
-{
-  "projectId": 1,
-  "userAccountId": 2,
-  "leaderAccountId": 3
-}
-```
-
-响应结果：
-
-```json
-{
-    "code": 1,
-    "msg": "success",
-    "data": {
-        "id": 1,
-        "projectId": 1,
-        "userAccountId": 2,
-        "leaderAccountId": 3,
-        "createdAt": "2026-03-30T19:45:34"
-    }
-}
-```
-
-#### 4.5.2 查询会话列表
+#### 4.5.1 查询群聊列表
 
 - 方法：`GET`
 - 路径：`/chat/sessions`
-- 描述：查询当前登录用户的会话列表（账号与角色从 JWT 自动识别）
+- 描述：查询当前登录用户作为项目成员或领队参与的项目群聊（账号从 JWT 自动识别）
 
 请求示例：
 
@@ -1480,18 +1550,45 @@ GET /chat/sessions
             "projectId": 1,
             "userAccountId": 2,
             "leaderAccountId": 3,
+            "status": "ACTIVE",
+            "disabledAt": null,
             "createdAt": "2026-03-30T19:45:34"
         }
     ]
 }
 ```
 
-#### 4.5.3 发送消息
+#### 4.5.2 查询群成员及代表人数
+
+- 方法：`GET`
+- 路径：`/chat/sessions/{sessionId}/members`
+- 描述：仅群成员可查询；参团账号返回实际代表人数，领队若不参团则返回 `0`
+
+响应示例：
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": [
+    {
+      "accountId": 2,
+      "username": "张三",
+      "avatarUrl": null,
+      "memberRole": "PARTICIPANT",
+      "representedCount": 3,
+      "representationText": "该用户代表3人"
+    }
+  ]
+}
+```
+
+#### 4.5.3 发送群聊消息
 
 - 方法：`POST`
 - 路径：`/chat/messages`
 - 说明：`senderAccountId` 由 JWT 自动识别，前端无需传
-- 描述：向会话发送消息（目前先只用文本消息）
+- 描述：项目群成员发送消息（目前只支持文本）；订单完成后会话不存在，不能继续发送
 
 请求示例：
 
@@ -1513,11 +1610,11 @@ GET /chat/sessions
 }
 ```
 
-#### 4.5.4 拉取会话消息
+#### 4.5.4 拉取群聊消息
 
 - 方法：`GET`
 - 路径：`/chat/sessions/{sessionId}/messages`
-- 描述：拉取指定会话的消息列表
+- 描述：项目群成员拉取指定群聊的历史消息；订单完成后群聊与消息均被删除
 
 请求示例：
 

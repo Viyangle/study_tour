@@ -1,6 +1,5 @@
 package com.viyangle.study_tour.controller;
 
-import com.viyangle.study_tour.pojo.CreateChatSessionRequest;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.pojo.SendChatMessageRequest;
 import com.viyangle.study_tour.service.ChatService;
@@ -22,19 +21,11 @@ public class ChatController {
     @Autowired
     private ChatService chatService;
 
-    @PostMapping("/sessions")
-    public Result createOrGetSession(@RequestBody CreateChatSessionRequest request) {
-        log.info("创建/获取会话: projectId={}, userAccountId={}, leaderAccountId={}",
-            request.getProjectId(), request.getUserAccountId(), request.getLeaderAccountId());
-        return Result.success(chatService.createOrGetSession(request));
-    }
-
     @GetMapping("/sessions")
     public Result listSessions() {
         Long currentAccountId = SecurityContextUtil.currentAccountId();
-        String currentRole = SecurityContextUtil.currentRole();
-        log.info("查询会话列表: accountId={}, role={}", currentAccountId, currentRole);
-        return Result.success(chatService.listSessions(currentAccountId, currentRole));
+        log.info("查询项目群聊列表: accountId={}", currentAccountId);
+        return Result.success(chatService.listSessions(currentAccountId));
     }
 
     @PostMapping("/messages")
@@ -50,5 +41,12 @@ public class ChatController {
         Long currentAccountId = SecurityContextUtil.currentAccountId();
         log.info("拉取消息: sessionId={}, accountId={}", sessionId, currentAccountId);
         return Result.success(chatService.listMessages(sessionId, currentAccountId));
+    }
+
+    @GetMapping("/sessions/{sessionId}/members")
+    public Result listGroupMembers(@PathVariable Long sessionId) {
+        Long currentAccountId = SecurityContextUtil.currentAccountId();
+        log.info("查询群成员: sessionId={}, accountId={}", sessionId, currentAccountId);
+        return Result.success(chatService.listGroupMembers(sessionId, currentAccountId));
     }
 }

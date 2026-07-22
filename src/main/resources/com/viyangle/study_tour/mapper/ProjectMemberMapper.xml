@@ -7,9 +7,9 @@
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.ProjectMember"
             useGeneratedKeys="true" keyProperty="id">
         insert into project_members
-        (project_id, account_id, join_status)
+        (project_id, account_id, join_status, represented_count)
         values
-        (#{projectId}, #{accountId}, #{joinStatus})
+        (#{projectId}, #{accountId}, #{joinStatus}, #{representedCount})
     </insert>
 
     <delete id="deleteById" parameterType="java.lang.Long">
@@ -20,32 +20,40 @@
         update project_members
         set project_id = #{projectId},
             account_id = #{accountId},
-            join_status = #{joinStatus}
+            join_status = #{joinStatus},
+            represented_count = #{representedCount}
         where id = #{id}
     </update>
 
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.ProjectMember">
-        select id, project_id, account_id, join_status, joined_at
+        select id, project_id, account_id, join_status, represented_count, joined_at
         from project_members
         where id = #{id}
     </select>
 
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.ProjectMember">
-        select id, project_id, account_id, join_status, joined_at
+        select id, project_id, account_id, join_status, represented_count, joined_at
         from project_members
     </select>
     <select id="selectByProjectId" resultType="com.viyangle.study_tour.pojo.ProjectMember">
-        select id, project_id, account_id, join_status, joined_at
+        select id, project_id, account_id, join_status, represented_count, joined_at
         from project_members
         where project_id = #{projectId}
     </select>
 
     <select id="selectByProjectIdAndAccountId" resultType="com.viyangle.study_tour.pojo.ProjectMember">
-        select id, project_id, account_id, join_status, joined_at
+        select id, project_id, account_id, join_status, represented_count, joined_at
         from project_members
         where project_id = #{projectId}
           and account_id = #{accountId}
         limit 1
+    </select>
+
+    <select id="sumRepresentedCountByProjectId" resultType="int">
+        select coalesce(sum(represented_count), 0)
+        from project_members
+        where project_id = #{projectId}
+          and join_status in ('JOINED', 'COMPLETED')
     </select>
 
 </mapper>

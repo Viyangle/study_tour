@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface ProjectService {
-    void createProject(Project project);
+    Long createProject(Project project);
 
     List<Project> getAllProjects();
 
@@ -27,7 +27,7 @@ public interface ProjectService {
                                  Boolean hasLeader,
                                  Boolean onlyAvailable);
 
-    void joinProject(Long id, Long accountId);
+    void joinProject(Long id, Long accountId, Integer representedCount);
 
     Project getProjectById(Long id);
 

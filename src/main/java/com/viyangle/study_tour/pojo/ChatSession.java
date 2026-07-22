@@ -14,5 +14,7 @@ public class ChatSession {
     private Long projectId;
     private Long userAccountId;
     private Long leaderAccountId;
+    private String status;
+    private LocalDateTime disabledAt;
     private LocalDateTime createdAt;
 }

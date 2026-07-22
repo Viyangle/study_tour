@@ -4,12 +4,25 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.viyangle.study_tour.mapper.ProjectMapper">
 
+    <sql id="projectColumns">
+        id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title,
+        departure_date, departure_time, start_point_type, start_point,
+        leader_requirements, participant_requirements,
+        max_members, current_members, status, created_at, updated_at
+    </sql>
+
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.Project"
             useGeneratedKeys="true" keyProperty="id">
         insert into projects
-        (route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members, status)
+        (route_id, region_adcode, tag, owner_account_id, leader_account_id, title,
+         departure_date, departure_time, start_point_type, start_point,
+         leader_requirements, participant_requirements,
+         max_members, current_members, status)
         values
-        (#{routeId}, #{regionAdcode}, #{tag}, #{ownerAccountId}, #{leaderAccountId}, #{title}, #{departureDate}, #{maxMembers}, #{currentMembers}, #{status})
+        (#{routeId}, #{regionAdcode}, #{tag}, #{ownerAccountId}, #{leaderAccountId}, #{title},
+         #{departureDate}, #{departureTime}, #{startPointType}, #{startPoint},
+         #{leaderRequirements}, #{participantRequirements},
+         #{maxMembers}, #{currentMembers}, #{status})
     </insert>
 
     <delete id="deleteById" parameterType="java.lang.Long">
@@ -40,6 +53,21 @@
             <if test="departureDate != null">
                 departure_date = #{departureDate},
             </if>
+            <if test="departureTime != null">
+                departure_time = #{departureTime},
+            </if>
+            <if test="startPointType != null">
+                start_point_type = #{startPointType},
+            </if>
+            <if test="startPoint != null">
+                start_point = #{startPoint},
+            </if>
+            <if test="leaderRequirements != null">
+                leader_requirements = #{leaderRequirements},
+            </if>
+            <if test="participantRequirements != null">
+                participant_requirements = #{participantRequirements},
+            </if>
             <if test="maxMembers != null">
                 max_members = #{maxMembers},
             </if>
@@ -54,21 +82,36 @@
     </update>
 
     <select id="selectById" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Project">
-        select id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
-               status, created_at, updated_at
+        select <include refid="projectColumns"/>
         from projects
         where id = #{id}
     </select>
 
+    <select id="selectByIdForUpdate" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.Project">
+        select <include refid="projectColumns"/>
+        from projects
+        where id = #{id}
+        for update
+    </select>
+
+    <update id="refreshCurrentMembersById">
+        update projects p
+        set current_members = (
+            select coalesce(sum(pm.represented_count), 0)
+            from project_members pm
+            where pm.project_id = p.id
+              and pm.join_status in ('JOINED', 'COMPLETED')
+        )
+        where p.id = #{id}
+    </update>
+
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Project">
-        select id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
-               status, created_at, updated_at
+        select <include refid="projectColumns"/>
         from projects
     </select>
 
     <select id="selectByPreference" resultType="com.viyangle.study_tour.pojo.Project">
-        select id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
-               status, created_at, updated_at
+        select <include refid="projectColumns"/>
         from projects
         order by
         (
@@ -95,8 +138,7 @@
     </select>
 
     <select id="selectByCompositeFilter" resultType="com.viyangle.study_tour.pojo.Project">
-        select id, route_id, region_adcode, tag, owner_account_id, leader_account_id, title, departure_date, max_members, current_members,
-               status, created_at, updated_at
+        select <include refid="projectColumns"/>
         from projects
         <where>
             <if test="keyword != null and keyword != ''">

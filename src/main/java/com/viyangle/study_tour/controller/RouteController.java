@@ -1,13 +1,16 @@
 package com.viyangle.study_tour.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.viyangle.study_tour.annotation.RequireRole;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.AIRoutePlan;
 import com.viyangle.study_tour.pojo.Result;
+import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.Route;
 import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.service.RouteService;
+import com.viyangle.study_tour.service.ProjectService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +34,9 @@ public class RouteController {
 
     @Autowired
     private RouteService routeService;
+
+    @Autowired
+    private ProjectService projectService;
 
     @Autowired
     private AiRoutePlanningService aiRoutePlanningService;
@@ -57,6 +63,29 @@ public class RouteController {
     public Result generateRouteByManual(@RequestBody List<RouteAttraction> routeAttractions) {
         log.info("Generate manual route");
         return Result.success(routeService.generateRouteByManual(routeAttractions));
+    }
+
+    @PostMapping("/{id}/publish")
+    @RequireRole({"USER", "LEADER"})
+    public Result publishRoute(@PathVariable Long id, @RequestBody Project project) {
+        project.setRouteId(id);
+        project.setLeaderAccountId(null);
+        project.setStatus("OPEN");
+        log.info("Publish route as project, routeId={}, representedCount={}", id, project.getRepresentedCount());
+        return Result.success(projectService.createProject(project));
+    }
+
+    @PostMapping("/optimize")
+    public Result optimizeSubmittedRoute(@RequestBody List<RouteAttraction> routeAttractions,
+                                         @RequestParam(required = false) String message) throws Exception {
+        long startMs = System.currentTimeMillis();
+        log.info("Optimize submitted route start, attractionCount={}",
+                routeAttractions == null ? 0 : routeAttractions.size());
+        AIRoutePlan optimized = aiRoutePlanningService.optimizeSubmittedRoute(routeAttractions, message);
+        Long routeId = routeService.saveOptimizedRoute(optimized.getTag(), toRouteAttractions(optimized.getItems()));
+        log.info("Optimize submitted route done, routeId={}, costMs={}",
+                routeId, System.currentTimeMillis() - startMs);
+        return Result.success(routeId);
     }
 
     @PostMapping("/ai/{memoryId}")

@@ -3,6 +3,7 @@ package com.viyangle.study_tour.controller;
 import com.viyangle.study_tour.annotation.OperationLog;
 import com.viyangle.study_tour.annotation.RequireRole;
 import com.viyangle.study_tour.pojo.Project;
+import com.viyangle.study_tour.pojo.JoinProjectRequest;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.service.ProjectService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
@@ -89,16 +90,20 @@ public class ProjectController {
     @RequireRole({"USER", "LEADER"})
     public Result createProject(@RequestBody Project project) {
         log.info("创建项目");
-        projectService.createProject(project);
-        return Result.success();
+        return Result.success(projectService.createProject(project));
     }
 
     @PostMapping("/{id}/join")
     @OperationLog(value = "加入项目", type = "PROJECT_JOIN")
     @RequireRole({"USER"})
-    public Result joinProject(@PathVariable Long id) {
-        log.info("加入项目: {}", id);
-        projectService.joinProject(id, SecurityContextUtil.currentAccountId());
+    public Result joinProject(@PathVariable Long id, @RequestBody JoinProjectRequest request) {
+        log.info("加入项目: {}, representedCount={}", id,
+                request == null ? null : request.getRepresentedCount());
+        projectService.joinProject(
+                id,
+                SecurityContextUtil.currentAccountId(),
+                request == null ? null : request.getRepresentedCount()
+        );
         return Result.success();
     }
 

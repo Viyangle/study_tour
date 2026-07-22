@@ -1,6 +1,7 @@
 package com.viyangle.study_tour.mapper;
 
 import com.viyangle.study_tour.pojo.ChatSession;
+import com.viyangle.study_tour.pojo.ChatGroupMember;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -9,32 +10,21 @@ import java.util.List;
 @Mapper
 public interface ChatSessionMapper {
 
-    int insert(ChatSession chatSession);
-
-    int deleteById(@Param("id") Long id);
-
-    int updateById(ChatSession chatSession);
+    int insertProjectGroup(@Param("projectId") Long projectId,
+                           @Param("ownerAccountId") Long ownerAccountId,
+                           @Param("leaderAccountId") Long leaderAccountId);
 
     ChatSession selectById(@Param("id") Long id);
 
-    List<ChatSession> selectAll();
+    ChatSession selectByProjectId(@Param("projectId") Long projectId);
 
-    /**
-     * 按项目+双方账号查会话（用于“存在则返回，不存在则创建”）
-     */
-    ChatSession selectByProjectAndAccounts(
-        @Param("projectId") Long projectId,
-        @Param("userAccountId") Long userAccountId,
-        @Param("leaderAccountId") Long leaderAccountId
-    );
+    int deactivateByProjectId(@Param("projectId") Long projectId);
 
-    /**
-     * 按用户账号查会话列表
-     */
-    List<ChatSession> selectByUserAccountId(@Param("userAccountId") Long userAccountId);
+    int deleteByProjectId(@Param("projectId") Long projectId);
 
-    /**
-     * 按领队账号查会话列表
-     */
-    List<ChatSession> selectByLeaderAccountId(@Param("leaderAccountId") Long leaderAccountId);
+    List<ChatSession> selectByParticipantAccountId(@Param("accountId") Long accountId);
+
+    int countParticipant(@Param("sessionId") Long sessionId, @Param("accountId") Long accountId);
+
+    List<ChatGroupMember> selectGroupMembers(@Param("sessionId") Long sessionId);
 }
