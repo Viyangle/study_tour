@@ -15,6 +15,7 @@ import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.ProjectMember;
 import com.viyangle.study_tour.pojo.ProjectStatus;
 import com.viyangle.study_tour.pojo.Tag;
+import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ProjectService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,9 @@ public class ProjectServiceImpl implements ProjectService {
     @Autowired
     private TagMapper tagMapper;
 
+    @Autowired
+    private KnowledgeGraphRecommendService kgRecommendService;
+
     @Transactional
     @Override
     public void createProject(Project project) {
@@ -78,8 +82,26 @@ public class ProjectServiceImpl implements ProjectService {
         int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
         int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
 
-        ProjectPreference preference = resolveProjectPreference(accountId);
+        // 优先使用知识图谱推荐
+        if (kgRecommendService != null) {
+            try {
+                List<Project> kgResult = kgRecommendService.recommendProjects(accountId, page * size);
+                if (kgResult != null && !kgResult.isEmpty()) {
+                    // 手动分页
+                    int fromIndex = (page - 1) * size;
+                    if (fromIndex >= kgResult.size()) {
+                        return List.of();
+                    }
+                    int toIndex = Math.min(fromIndex + size, kgResult.size());
+                    return kgResult.subList(fromIndex, toIndex);
+                }
+            } catch (Exception e) {
+                // KG 推荐失败，降级到 SQL 方式
+            }
+        }
 
+        // 降级：原有 SQL 加权排序
+        ProjectPreference preference = resolveProjectPreference(accountId);
         PageHelper.startPage(page, size);
         return projectMapper.selectByPreference(preference.preferredTagNames(), preference.regionCode());
     }

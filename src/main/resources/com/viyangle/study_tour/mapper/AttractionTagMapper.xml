@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.AttractionTagMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.AttractionTag">
+        insert into attraction_tag(poi_id, tag_id, source, created_at)
+        values (#{poiId}, #{tagId}, #{source}, #{createdAt})
+    </insert>
+
+    <insert id="batchInsert">
+        insert into attraction_tag(poi_id, tag_id, source, created_at)
+        values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.poiId}, #{item.tagId}, #{item.source}, #{item.createdAt})
+        </foreach>
+    </insert>
+
+    <delete id="deleteByPoiId" parameterType="java.lang.String">
+        delete from attraction_tag where poi_id = #{poiId}
+    </delete>
+
+    <delete id="deleteByPoiIdAndTagId">
+        delete from attraction_tag where poi_id = #{poiId} and tag_id = #{tagId}
+    </delete>
+
+    <select id="selectByPoiId" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.AttractionTag">
+        select poi_id, tag_id, source, created_at
+        from attraction_tag
+        where poi_id = #{poiId}
+    </select>
+
+    <select id="selectByTagId" parameterType="java.lang.Long" resultType="com.viyangle.study_tour.pojo.AttractionTag">
+        select poi_id, tag_id, source, created_at
+        from attraction_tag
+        where tag_id = #{tagId}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.AttractionTag">
+        select poi_id, tag_id, source, created_at
+        from attraction_tag
+    </select>
+
+    <select id="selectPoiIdsByTagName" parameterType="java.lang.String" resultType="java.lang.String">
+        select at2.poi_id
+        from attraction_tag at2
+        inner join tags t on at2.tag_id = t.id
+        where t.name = #{tagName}
+    </select>
+
+    <select id="selectPoiIdsByTagNames" resultType="java.lang.String">
+        select distinct at2.poi_id
+        from attraction_tag at2
+        inner join tags t on at2.tag_id = t.id
+        where t.name in
+        <foreach collection="tagNames" item="name" open="(" separator="," close=")">
+            #{name}
+        </foreach>
+    </select>
+
+</mapper>

@@ -29,7 +29,7 @@ public class CommonConfig {
     private EmbeddingModel embeddingModel;
     @Autowired
     private ChatMemoryStore redisChatMemoryStore;
-    @Autowired
+    @Autowired(required = false)
     private RedisEmbeddingStore redisEmbeddingStore;
     @Autowired
     private AmapAttractionRagDocumentLoader amapAttractionRagDocumentLoader;
@@ -59,6 +59,10 @@ public class CommonConfig {
             @Value("${app.rag.embedding.splitter-max-segment-size:200}") int maxSegmentSize,
             @Value("${app.rag.embedding.splitter-max-overlap-size:20}") int maxOverlapSize) {
         return args -> {
+            if (redisEmbeddingStore == null) {
+                log.warn("RedisEmbeddingStore not available (Redis Stack required for vector search), skipping ingest");
+                return;
+            }
             if (!ingestEnabled) {
                 log.info("RAG embedding ingest skipped, app.rag.embedding.ingest-enabled=false");
                 return;
@@ -94,6 +98,11 @@ public class CommonConfig {
     public ContentRetriever contentRetriever(
             @Value("${app.rag.embedding.min-score:0.4}") double minScore,
             @Value("${app.rag.embedding.max-results:30}") int maxResults) {
+        if (redisEmbeddingStore == null) {
+            log.warn("RedisEmbeddingStore not available, ContentRetriever will return empty results. " +
+                     "Vector search disabled, using Knowledge Graph for candidate retrieval.");
+            return query -> List.of();
+        }
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(redisEmbeddingStore)
                 .minScore(minScore)

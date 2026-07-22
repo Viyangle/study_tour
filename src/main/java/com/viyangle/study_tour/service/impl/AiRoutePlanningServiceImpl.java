@@ -9,6 +9,7 @@ import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.pojo.RouteConstraintState;
 import com.viyangle.study_tour.pojo.VectorRetrievalResult;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
+import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +65,9 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     private VectorCandidateRetrieverService vectorCandidateRetrieverService;
 
     @Autowired
+    private KnowledgeGraphRecommendService kgRecommendService;
+
+    @Autowired
     private StringRedisTemplate redisTemplate;
 
     @Override
@@ -80,14 +84,26 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         String retrievalQuery = buildRetrievalQuery(message, state);
         VectorRetrievalResult retrievalResult = vectorCandidateRetrieverService.retrieveCandidatesWithTexts(retrievalQuery, 40, 3);
         List<String> candidatePoiIds = applyStateFilterOnPoiIds(retrievalResult.getPoiIds(), state);
+
+        // 知识图谱补充召回：从图谱中按标签+地区检索候选景点
+        List<String> kgPoiIds = retrieveCandidatesFromGraph(message, state);
+        if (!kgPoiIds.isEmpty()) {
+            // 合并向量检索和图谱检索的结果，去重
+            LinkedHashSet<String> merged = new LinkedHashSet<>(candidatePoiIds);
+            merged.addAll(kgPoiIds);
+            candidatePoiIds = new ArrayList<>(merged);
+        }
         List<Attraction> candidates = loadCandidateAttractions(candidatePoiIds);
+        log.info("AI路线规划调试: 向量+图谱候选数量={}", candidates.size());
         if (candidates.size() < 2) {
             candidates = loadFallbackAttractions(15);
+            log.info("AI路线规划调试: fallback候选数量={}", candidates.size());
             candidates = applyStateFilterOnAttractions(candidates, state);
+            log.info("AI路线规划调试: 过滤后候选数量={}, excludePoiIds={}", candidates.size(), state.getExcludePoiIds());
         }
 
         if (candidates.size() < 2) {
-            throw new IllegalArgumentException("Candidate POIs are not enough for routing after applying constraints.");
+            throw new IllegalArgumentException("Candidate POIs are not enough for routing after applying constraints. 当前候选数: " + candidates.size());
         }
 
         List<AmapTransitClient.TransitEdge> matrix = amapTransitClient.buildUndirectedMatrix(candidates);
@@ -188,15 +204,19 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
     private List<Attraction> loadFallbackAttractions(int limit) {
         List<Attraction> all = attractionMapper.selectAll();
+        log.info("loadFallbackAttractions: 数据库总景点数={}", all == null ? 0 : all.size());
         if (all == null || all.isEmpty()) {
             return List.of();
         }
         List<Attraction> filtered = new ArrayList<>();
+        int noPoiId = 0, noLocation = 0;
         for (Attraction attraction : all) {
             if (attraction == null || attraction.getPoiId() == null || attraction.getPoiId().isBlank()) {
+                noPoiId++;
                 continue;
             }
             if (attraction.getLocation() == null || attraction.getLocation().isBlank()) {
+                noLocation++;
                 continue;
             }
             filtered.add(attraction);
@@ -204,6 +224,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                 break;
             }
         }
+        log.info("loadFallbackAttractions: 过滤统计: noPoiId={}, noLocation={}, 有效={}", noPoiId, noLocation, filtered.size());
         return filtered;
     }
 
@@ -537,5 +558,51 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
     private String nonNull(String s) {
         return s == null ? "" : s;
+    }
+
+    /**
+     * 从知识图谱中检索候选景点。
+     * 从用户消息中提取标签和地区信息，调用图谱服务检索。
+     */
+    private List<String> retrieveCandidatesFromGraph(String message, RouteConstraintState state) {
+        if (kgRecommendService == null) {
+            return List.of();
+        }
+        try {
+            // 从消息中提取匹配的研学标签
+            List<String> matchedTags = new ArrayList<>();
+            for (String tag : ALLOWED_TAGS) {
+                if (message != null && message.contains(tag)) {
+                    matchedTags.add(tag);
+                }
+            }
+
+            // 从历史消息中也提取标签
+            if (state.getUserMessages() != null) {
+                for (String msg : state.getUserMessages()) {
+                    for (String tag : ALLOWED_TAGS) {
+                        if (msg.contains(tag) && !matchedTags.contains(tag)) {
+                            matchedTags.add(tag);
+                        }
+                    }
+                }
+            }
+
+            // 地区暂时从消息中简单提取（后续可扩展）
+            String regionCode = null;
+
+            if (matchedTags.isEmpty() && regionCode == null) {
+                return List.of();
+            }
+
+            List<Attraction> kgCandidates = kgRecommendService.retrieveCandidatesByGraph(matchedTags, regionCode, 15);
+            List<String> kgPoiIds = applyStateFilterOnPoiIds(
+                    kgCandidates.stream().map(Attraction::getPoiId).toList(), state);
+            log.info("KG candidate retrieval: matchedTags={}, kgPoiIds={}", matchedTags, kgPoiIds);
+            return kgPoiIds;
+        } catch (Exception e) {
+            log.warn("KG candidate retrieval failed: {}", e.getMessage());
+            return List.of();
+        }
     }
 }
