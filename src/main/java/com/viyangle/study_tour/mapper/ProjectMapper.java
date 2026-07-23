@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 @Mapper
@@ -22,10 +23,20 @@ public interface ProjectMapper {
 
     int refreshCurrentMembersById(@Param("id") Long id);
 
+    int countByLeaderAccountId(@Param("leaderAccountId") Long leaderAccountId);
+
+    int countByLeaderAccountIdAndStatus(@Param("leaderAccountId") Long leaderAccountId,
+                                        @Param("status") String status);
+
     List<Project> selectAll();
 
     List<Project> selectByPreference(@Param("preferredTags") List<String> preferredTags,
                                      @Param("regionCode") String regionCode);
+
+    List<Project> selectAvailableForLeader(@Param("preferredTags") List<String> preferredTags,
+                                           @Param("regionCode") String regionCode,
+                                           @Param("departureDate") LocalDate departureDate,
+                                           @Param("departureTime") LocalTime departureTime);
 
     List<Project> selectByCompositeFilter(@Param("preferredTags") List<String> preferredTags,
                                           @Param("sortRegionCode") String sortRegionCode,

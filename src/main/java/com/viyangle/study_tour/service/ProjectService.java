@@ -13,6 +13,8 @@ public interface ProjectService {
 
     List<Project> getPagedProjectsByPreference(Long accountId, Integer pageNum, Integer pageSize);
 
+    List<Project> getAvailableProjectsForLeader(Long accountId, Integer pageNum, Integer pageSize);
+
     List<Project> filterProjects(Long accountId,
                                  Integer pageNum,
                                  Integer pageSize,

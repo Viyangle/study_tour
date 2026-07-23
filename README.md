@@ -190,6 +190,133 @@
 }
 ```
 
+## 领队端页面接口（前端对照）
+
+领队端仓库当前没有网络层，以下接口按页面交互提供，可直接作为 Retrofit 接口定义。所有接口都需要 `Authorization: Bearer <token>`；`LEADER` 和 `BOTH` 角色可访问，账号 ID 均从 JWT 获取。
+
+### 可接订单列表
+
+- 方法：`GET`
+- 路径：`/leader/orders`
+- 参数：`pageNum`（默认 `1`）、`pageSize`（默认 `10`，最大 `100`）
+- 描述：仅返回尚无领队、状态为 `OPEN/MATCHING` 且未过出发时间的订单；按领队地区和标签偏好排序。
+
+```http
+GET /leader/orders?pageNum=1&pageSize=10
+```
+
+列表项同时包含订单、发起人和路线卡片所需数据：
+
+```json
+{
+  "id": 20,
+  "routeId": 38,
+  "ownerAccountId": 86,
+  "customerName": "刘佳琪",
+  "customerAvatarUrl": null,
+  "title": "南京博物院深度讲解研学团",
+  "departureDate": "2026-08-09",
+  "departureTime": "08:30:00",
+  "startPointType": "MANUAL",
+  "startPoint": "南京南站",
+  "leaderRequirements": "有博物馆讲解经验",
+  "participantRequirements": "请准时集合",
+  "attractionNames": ["南京博物院", "六朝博物馆"],
+  "routeAttractions": [],
+  "estimatedDurationMinutes": 300,
+  "tag": "博物馆研学",
+  "peopleCount": 6,
+  "maxMembers": 20,
+  "projectStatus": "OPEN",
+  "orderStatus": "AVAILABLE",
+  "canAccept": true
+}
+```
+
+`orderStatus` 可为 `AVAILABLE`、`ACCEPTED_BY_ME`、`TAKEN_BY_OTHER`、`EXPIRED`。可接列表固定返回 `AVAILABLE`；其余状态用于详情页在并发接单后刷新按钮状态。
+
+### 领队订单详情
+
+- 方法：`GET`
+- 路径：`/leader/orders/{projectId}`
+- 描述：返回与列表相同的聚合结构，其中 `routeAttractions` 是完整、按游览顺序排列的路线节点。
+
+```http
+GET /leader/orders/20
+```
+
+### 接单
+
+- 方法：`POST`
+- 路径：`/projects/{projectId}/accept`
+- 请求体：无
+- 描述：复用项目接单接口。后端使用数据库行锁保证同一订单只能被一个领队接到；已过出发时间、已被他人接单或状态不可转换时返回失败。
+
+```http
+POST /projects/20/accept
+Authorization: Bearer <token>
+```
+
+### 我的资料看板
+
+- 方法：`GET`
+- 路径：`/leader/profile`
+- 描述：一次返回头像、姓名、领队简介、真实评价统计、接单统计、偏好标签和最近三条评价。
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": {
+    "accountId": 80,
+    "username": "王若彤",
+    "avatarUrl": null,
+    "regionCode": "320100",
+    "intro": "南京研学领队",
+    "averageRating": 4.75,
+    "ratingCount": 12,
+    "acceptedOrderCount": 18,
+    "completedOrderCount": 15,
+    "tagNames": ["历史人文", "博物馆研学"],
+    "recentReviews": []
+  }
+}
+```
+
+头像更换继续使用 `POST /upload` 上传后，再调用 `PUT /accounts/{id}` 提交 `avatarUrl`；领队简介继续使用 `POST /accounts/{id}/intro`。
+
+### 领队评价列表
+
+- 方法：`GET`
+- 路径：`/leader/reviews`
+- 参数：`pageNum`（默认 `1`）、`pageSize`（默认 `20`，最大 `100`）
+- 描述：只返回 `USER_TO_LEADER` 类型评价，并附带评价人姓名和头像，按时间倒序排列。
+
+```json
+{
+  "id": 3,
+  "projectId": 20,
+  "routeId": 38,
+  "reviewerAccountId": 86,
+  "reviewerName": "刘佳琪",
+  "reviewerAvatarUrl": null,
+  "overallScore": 5,
+  "content": "讲解很专业",
+  "createdAt": "2026-07-20T18:30:00"
+}
+```
+
+### 消息页复用接口
+
+消息页继续使用 `GET /chat/sessions`、`GET /chat/sessions/{sessionId}/messages`、`GET /chat/sessions/{sessionId}/members` 和 `POST /chat/messages`。会话列表项额外返回：
+
+- `projectTitle`：项目群聊标题
+- `latestMessage`：最后一条消息内容
+- `latestMessageAt`：最后消息时间
+- `latestMessageSenderAccountId`：最后消息发送人
+
+前端仓库中的 `txtPrice`、路线图片和评价标签目前只有布局占位，没有对应请求字段或业务数据模型，因此本次没有虚构价格、图片或评价标签接口。
+
 `currentMembers` 是所有 `JOINED/COMPLETED` 成员的 `representedCount` 之和，不是账号数量；`maxMembers=null` 表示订单不设总人数上限。
 
 ## 4. 接口列表

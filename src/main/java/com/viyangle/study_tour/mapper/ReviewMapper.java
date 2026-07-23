@@ -1,6 +1,7 @@
 package com.viyangle.study_tour.mapper;
 
 import com.viyangle.study_tour.pojo.Review;
+import com.viyangle.study_tour.pojo.LeaderReviewView;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -32,4 +33,13 @@ public interface ReviewMapper {
     List<Review> selectByReviewType(@Param("reviewType") String reviewType);
     
     Double selectAverageScoreByToAccountId(@Param("toAccountId") Long toAccountId);
+
+    Double selectLeaderAverageScoreByToAccountId(@Param("toAccountId") Long toAccountId);
+
+    int countLeaderReviewsByToAccountId(@Param("toAccountId") Long toAccountId);
+
+    List<LeaderReviewView> selectLeaderReviews(@Param("toAccountId") Long toAccountId);
+
+    List<LeaderReviewView> selectRecentLeaderReviews(@Param("toAccountId") Long toAccountId,
+                                                     @Param("limit") int limit);
 }

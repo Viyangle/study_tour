@@ -17,4 +17,8 @@ public class ChatSession {
     private String status;
     private LocalDateTime disabledAt;
     private LocalDateTime createdAt;
+    private String projectTitle;
+    private String latestMessage;
+    private LocalDateTime latestMessageAt;
+    private Long latestMessageSenderAccountId;
 }

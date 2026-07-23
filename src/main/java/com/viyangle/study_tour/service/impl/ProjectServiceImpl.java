@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -135,6 +136,20 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public List<Project> getAvailableProjectsForLeader(Long accountId, Integer pageNum, Integer pageSize) {
+        int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
+        int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
+        ProjectPreference preference = resolveProjectPreference(accountId);
+        PageHelper.startPage(page, size);
+        return projectMapper.selectAvailableForLeader(
+                preference.preferredTagNames(),
+                preference.regionCode(),
+                LocalDate.now(),
+                LocalTime.now()
+        );
+    }
+
+    @Override
     public List<Project> filterProjects(Long accountId,
                                         Integer pageNum,
                                         Integer pageSize,
@@ -191,6 +206,9 @@ public class ProjectServiceImpl implements ProjectService {
         if (project == null) {
             throw new ResourceNotFoundException("项目不存在, projectId=" + id);
         }
+        if (hasDeparted(project)) {
+            throw new ForbiddenException("订单已过出发时间, projectId=" + id);
+        }
         ProjectStatus status = ProjectStatus.from(project.getStatus());
         if (status != ProjectStatus.OPEN && status != ProjectStatus.MATCHING) {
             throw new ForbiddenException("当前订单状态不可加入, projectId=" + id + ", status=" + status.name());
@@ -237,9 +255,12 @@ public class ProjectServiceImpl implements ProjectService {
         }
         validateLeaderAccount(leaderAccountId);
 
-        Project project = projectMapper.selectById(id);
+        Project project = projectMapper.selectByIdForUpdate(id);
         if (project == null) {
             throw new ResourceNotFoundException("项目不存在, projectId=" + id);
+        }
+        if (hasDeparted(project)) {
+            throw new ForbiddenException("订单已过出发时间, projectId=" + id);
         }
 
         if (ProjectStatus.CONFIRMED.name().equals(project.getStatus())
@@ -260,6 +281,17 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ForbiddenException("接单失败，项目状态已变更, projectId=" + id);
         }
         chatService.createProjectGroup(id, project.getOwnerAccountId(), leaderAccountId);
+    }
+
+    private boolean hasDeparted(Project project) {
+        if (project.getDepartureDate() == null) {
+            return false;
+        }
+        LocalTime departureTime = project.getDepartureTime() == null
+                ? LocalTime.MAX
+                : project.getDepartureTime();
+        return LocalDateTime.of(project.getDepartureDate(), departureTime)
+                .isBefore(LocalDateTime.now());
     }
 
     @Transactional

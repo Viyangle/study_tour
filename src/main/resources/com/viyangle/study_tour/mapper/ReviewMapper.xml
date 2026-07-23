@@ -79,4 +79,49 @@
         where to_account_id = #{toAccountId}
     </select>
 
+    <select id="selectLeaderAverageScoreByToAccountId" resultType="java.lang.Double">
+        select avg(overall_score)
+        from reviews
+        where to_account_id = #{toAccountId}
+          and review_type = 'USER_TO_LEADER'
+    </select>
+
+    <select id="countLeaderReviewsByToAccountId" resultType="int">
+        select count(*)
+        from reviews
+        where to_account_id = #{toAccountId}
+          and review_type = 'USER_TO_LEADER'
+    </select>
+
+    <sql id="leaderReviewViewColumns">
+        r.id,
+        r.project_id,
+        r.route_id,
+        r.from_account_id as reviewer_account_id,
+        reviewer.username as reviewer_name,
+        reviewer.avatar_url as reviewer_avatar_url,
+        r.overall_score,
+        r.content,
+        r.created_at
+    </sql>
+
+    <select id="selectLeaderReviews" resultType="com.viyangle.study_tour.pojo.LeaderReviewView">
+        select <include refid="leaderReviewViewColumns"/>
+        from reviews r
+        inner join accounts reviewer on reviewer.id = r.from_account_id
+        where r.to_account_id = #{toAccountId}
+          and r.review_type = 'USER_TO_LEADER'
+        order by r.created_at desc, r.id desc
+    </select>
+
+    <select id="selectRecentLeaderReviews" resultType="com.viyangle.study_tour.pojo.LeaderReviewView">
+        select <include refid="leaderReviewViewColumns"/>
+        from reviews r
+        inner join accounts reviewer on reviewer.id = r.from_account_id
+        where r.to_account_id = #{toAccountId}
+          and r.review_type = 'USER_TO_LEADER'
+        order by r.created_at desc, r.id desc
+        limit #{limit}
+    </select>
+
 </mapper>

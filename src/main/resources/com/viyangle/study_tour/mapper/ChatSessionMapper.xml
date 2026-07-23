@@ -37,9 +37,21 @@
 
     <select id="selectByParticipantAccountId" resultType="com.viyangle.study_tour.pojo.ChatSession">
         select distinct cs.id, cs.project_id, cs.user_account_id, cs.leader_account_id,
-                        cs.status, cs.disabled_at, cs.created_at
+                        cs.status, cs.disabled_at, cs.created_at,
+                        p.title as project_title,
+                        latest_message.content as latest_message,
+                        latest_message.sent_at as latest_message_at,
+                        latest_message.sender_account_id as latest_message_sender_account_id
         from chat_sessions cs
         inner join projects p on p.id = cs.project_id
+        left join chat_messages latest_message
+               on latest_message.id = (
+                   select cm.id
+                   from chat_messages cm
+                   where cm.session_id = cs.id
+                   order by cm.sent_at desc, cm.id desc
+                   limit 1
+               )
         left join project_members pm
                on pm.project_id = cs.project_id
               and pm.account_id = #{accountId}
@@ -47,7 +59,7 @@
         where p.owner_account_id = #{accountId}
            or p.leader_account_id = #{accountId}
            or pm.id is not null
-        order by cs.created_at desc
+        order by coalesce(latest_message.sent_at, cs.created_at) desc
     </select>
 
     <select id="countParticipant" resultType="int">

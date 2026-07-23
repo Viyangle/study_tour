@@ -105,6 +105,20 @@
         where p.id = #{id}
     </update>
 
+    <select id="countByLeaderAccountId" resultType="int">
+        select count(*)
+        from projects
+        where leader_account_id = #{leaderAccountId}
+          and status != 'CANCELLED'
+    </select>
+
+    <select id="countByLeaderAccountIdAndStatus" resultType="int">
+        select count(*)
+        from projects
+        where leader_account_id = #{leaderAccountId}
+          and status = #{status}
+    </select>
+
     <select id="selectAll" resultType="com.viyangle.study_tour.pojo.Project">
         select <include refid="projectColumns"/>
         from projects
@@ -134,6 +148,44 @@
                 else 0
             end
         ) desc,
+        created_at desc
+    </select>
+
+    <select id="selectAvailableForLeader" resultType="com.viyangle.study_tour.pojo.Project">
+        select <include refid="projectColumns"/>
+        from projects
+        where leader_account_id is null
+          and status in ('OPEN', 'MATCHING')
+          and (
+              departure_date &gt; #{departureDate}
+              or (
+                  departure_date = #{departureDate}
+                  and (departure_time is null or departure_time &gt;= #{departureTime})
+              )
+          )
+        order by
+        (
+            case
+                when #{regionCode} is null or #{regionCode} = '' then 0
+                when region_adcode = #{regionCode} then 100
+                when left(region_adcode, 4) = left(#{regionCode}, 4) then 50
+                else 0
+            end
+            +
+            case
+                when tag is null or tag = '' then 0
+                <if test="preferredTags != null and preferredTags.size() > 0">
+                    when tag in
+                    <foreach collection="preferredTags" item="tag" open="(" separator="," close=")">
+                        #{tag}
+                    </foreach>
+                    then 80
+                </if>
+                else 0
+            end
+        ) desc,
+        departure_date asc,
+        departure_time asc,
         created_at desc
     </select>
 
