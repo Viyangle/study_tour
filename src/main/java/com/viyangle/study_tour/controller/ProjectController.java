@@ -35,8 +35,13 @@ public class ProjectController {
     @OperationLog(value = "分页获取项目", type = "PROJECT_QUERY")
     public Result getAllProjects(@RequestParam(defaultValue = "1") Integer pageNum,
                                  @RequestParam(defaultValue = "10") Integer pageSize,
-                                 @RequestParam Long accountId) {
-        log.info("分页获取项目, accountId={}, pageNum={}, pageSize={}", accountId, pageNum, pageSize);
+                                 @RequestParam Long accountId,
+                                 @RequestParam(defaultValue = "false") Boolean withExplanation) {
+        log.info("分页获取项目, accountId={}, pageNum={}, pageSize={}, withExplanation={}", accountId, pageNum, pageSize, withExplanation);
+        if (Boolean.TRUE.equals(withExplanation)) {
+            int limit = pageNum * pageSize;
+            return Result.success(recommendService.recommendWithExplanation(accountId, limit));
+        }
         return Result.success(projectService.getPagedProjectsByPreference(accountId, pageNum, pageSize));
     }
 
@@ -139,14 +144,4 @@ public class ProjectController {
         return Result.success();
     }
 
-    /**
-     * 知识图谱推荐项目（带解释）。
-     */
-    @GetMapping("/recommend")
-    @OperationLog(value = "知识图谱推荐项目", type = "PROJECT_QUERY")
-    public Result recommendProjects(@RequestParam(required = false) Long accountId,
-                                    @RequestParam(defaultValue = "10") Integer limit) {
-        log.info("知识图谱推荐项目, accountId={}, limit={}", accountId, limit);
-        return Result.success(recommendService.recommendWithExplanation(accountId, limit));
-    }
 }

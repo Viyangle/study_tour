@@ -675,12 +675,18 @@ curl -X POST "http://10.6.86.86/upload" \
 
 - 方法：`GET`
 - 路径：`/projects`
-- 描述：按用户偏好分页获取项目列表
+- 描述：按用户偏好分页获取项目列表，支持返回推荐理由
 
-请求示例：
+请求示例（普通分页）：
 
 ```http
 GET /projects?accountId=6&pageNum=1&pageSize=10
+```
+
+请求示例（带推荐理由）：
+
+```http
+GET /projects?accountId=6&pageNum=1&pageSize=10&withExplanation=true
 ```
 
 请求参数：
@@ -688,6 +694,7 @@ GET /projects?accountId=6&pageNum=1&pageSize=10
 - `accountId`：用户 ID（必填）
 - `pageNum`：页码（可选，默认 `1`， 起始为`1`）
 - `pageSize`：每页数量（可选，默认 `10`）
+- `withExplanation`：是否返回推荐理由（可选，默认 `false`；传 `true` 时返回推荐分数和理由）
 
 响应结果：（好吧目前没有太多project）
 
@@ -989,57 +996,6 @@ POST /projects/1/status?status=IN_PROGRESS
     "code": 1,
     "msg": "success",
     "data": null
-}
-```
-
-#### 4.2.10 知识图谱首页推荐项目
-
-- 方法：`GET`
-- 路径：`/projects/recommend`
-- 描述：基于知识图谱的项目推荐，返回推荐项目及推荐理由（包含标签匹配、协同过滤、PPR 多跳打分、地区匹配等维度的解释）
-
-请求示例：
-
-```http
-GET /projects/recommend?accountId=6&limit=10
-```
-
-请求参数：
-
-- `accountId`：用户 ID（可选，传入后会结合用户偏好进行个性化推荐）
-- `limit`：返回数量上限（可选，默认 `10`）
-
-响应结果：
-
-```json
-{
-    "code": 1,
-    "msg": "success",
-    "data": [
-        {
-            "project": {
-                "id": 10,
-                "routeId": 38,
-                "regionAdcode": "320100",
-                "tag": "博物馆研学",
-                "ownerAccountId": 86,
-                "leaderAccountId": 80,
-                "title": "南京博物院深度讲解研学团",
-                "departureDate": "2026-05-09",
-                "maxMembers": 21,
-                "currentMembers": 3,
-                "status": "OPEN",
-                "createdAt": "2026-05-05T15:34:07",
-                "updatedAt": "2026-05-15T14:52:02"
-            },
-            "score": 85.5,
-            "reasons": [
-                "因为你偏好[博物馆研学]，该项目路线包含相关景点（如南京博物院）",
-                "与你兴趣相似的人也参与了该项目",
-                "项目评分较高（4.8分）"
-            ]
-        }
-    ]
 }
 ```
 
