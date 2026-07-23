@@ -86,8 +86,8 @@ public class KnowledgeGraphAutoInitializer {
                         if (amapKey == null || amapKey.isBlank()) {
                             log.warn("知识图谱自动检测: {} 个景点未算相邻关系，但 AMAP_KEY 未配置，跳过自动计算", withoutAdj);
                         } else {
-                            log.info("知识图谱自动检测: {} 个景点未算相邻关系，开始自动执行相邻计算...", withoutAdj);
-                            AttractionAdjacencyCalculator.processAll(conn, amapKey);
+                            log.info("知识图谱自动检测: {} 个景点未算相邻关系，开始增量计算...", withoutAdj);
+                            AttractionAdjacencyCalculator.processIncremental(conn, amapKey);
                             adjacencyProcessed = true;
                         }
                     } else {

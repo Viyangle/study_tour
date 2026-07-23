@@ -49,9 +49,16 @@ public class AttractionTagBatchLabeler {
     private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "");
 
     private static final List<String> TAG_DICTIONARY = List.of(
+            // INTEREST（研学兴趣）
             "历史人文", "博物馆研学", "非遗体验", "科技探索", "自然生态",
             "地理地质", "航天航空", "农耕劳动", "艺术美育", "红色教育",
-            "高校参访", "职业启蒙", "英语实践", "摄影记录", "亲子互动"
+            "高校参访", "职业启蒙", "英语实践", "摄影记录", "亲子互动",
+            // ROUTE_STYLE（路线风格）
+            "深度研学", "轻松休闲", "城市漫游", "郊野徒步", "营地露营",
+            "户外挑战", "夜游体验", "多城联动", "单城深挖", "主题线路",
+            // SCENIC（景点类型）
+            "5A景区", "历史古镇", "红色基地", "科技馆", "天文馆",
+            "动植物园", "海滨海岛", "山地森林", "湖泊湿地", "校园博物馆"
     );
 
     private static final int BATCH_SIZE = 10;
@@ -167,7 +174,7 @@ public class AttractionTagBatchLabeler {
             ArrayNode messages = requestBody.putArray("messages");
             ObjectNode sysMsg = messages.addObject();
             sysMsg.put("role", "system");
-            sysMsg.put("content", "你是一个研学旅游标签分类专家。根据景点信息，从标签字典中选择合适的标签。只输出JSON，不要解释。");
+            sysMsg.put("content", "你是一个研学旅游标签分类专家。根据景点信息，从标签字典中选择合适的标签。标签分为三类：研学兴趣（15个）、路线风格（10个）、景点类型（10个）。每个景点选2-5个标签，覆盖不同类别。只输出JSON，不要解释。");
 
             ObjectNode userMsg = messages.addObject();
             userMsg.put("role", "user");
@@ -219,7 +226,7 @@ public class AttractionTagBatchLabeler {
         sb.append("  \"poiId1\": [\"标签1\", \"标签2\"],\n");
         sb.append("  \"poiId2\": [\"标签3\"]\n");
         sb.append("}\n");
-        sb.append("每个景点1-3个标签，没有合适标签的景点可以返回空数组。");
+        sb.append("每个景点2-5个标签，尽量覆盖不同类别（研学兴趣+路线风格+景点类型），没有合适标签的景点可以返回空数组。");
         return sb.toString();
     }
 

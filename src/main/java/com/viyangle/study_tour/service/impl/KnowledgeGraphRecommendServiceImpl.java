@@ -564,7 +564,7 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
                         if (attractionTags.contains(tag)) {
                             matchedTags.add(tag);
                             Attraction a = graph.getAttraction(poiId);
-                            if (a != null && matchedAttractions.size() < 2) {
+                            if (a != null && !matchedAttractions.contains(a.getName()) && matchedAttractions.size() < 2) {
                                 matchedAttractions.add(a.getName());
                             }
                         }
@@ -606,6 +606,9 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
             if (routeId != null) {
                 List<String> routePois = graph.getRouteAttractions(routeId);
                 for (String poiId : routePois) {
+                    // 如果路线上的景点本身就是用户兴趣点，跳过（避免闭环）
+                    if (userTagAttractions.contains(poiId)) continue;
+                    
                     List<String> neighbors = graph.getNeighbors(poiId);
                     for (String neighbor : neighbors) {
                         if (userTagAttractions.contains(neighbor)) {

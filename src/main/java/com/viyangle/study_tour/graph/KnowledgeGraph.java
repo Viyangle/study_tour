@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
  * 边类型：
  *   ATTRACTION → TAG       （景点适合什么研学主题）
  *   ATTRACTION → REGION    （景点属于哪个地区）
- *   ATTRACTION → ATTRACTION（相邻景点，公交30分钟内）
+ *   ATTRACTION → ATTRACTION（相邻景点，直线距离10km）
  *   ROUTE → ATTRACTION     （路线包含哪些景点）
  *   PROJECT → ROUTE        （项目用了哪条路线）
  *   ACCOUNT → TAG          （用户偏好标签）
@@ -492,6 +492,8 @@ public class KnowledgeGraph {
         if (list != null) {
             for (AttractionAdjacency adj : list) {
                 if (adj == null || adj.getFromPoiId() == null || adj.getToPoiId() == null) continue;
+                // 跳过自引用的占位记录（from_poi_id == to_poi_id 表示该景点已计算过但无有效邻居）
+                if (adj.getFromPoiId().equals(adj.getToPoiId())) continue;
                 attractionNeighbors.computeIfAbsent(adj.getFromPoiId(), k -> new ArrayList<>())
                         .add(adj.getToPoiId());
             }

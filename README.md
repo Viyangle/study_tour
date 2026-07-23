@@ -75,23 +75,53 @@
   "tagId": 2
 }
 ```
-| tagId | tagName |
-|------|---------|
-| 1 | 历史人文 |
-| 2 | 博物馆研学 |
-| 3 | 非遗体验 |
-| 4 | 科技探索 |
-| 5 | 自然生态 |
-| 6 | 地理地质 |
-| 7 | 航天航空 |
-| 8 | 农耕劳动 |
-| 9 | 艺术美育 |
-| 10 | 红色教育 |
-| 11 | 高校参访 |
-| 12 | 职业启蒙 |
-| 13 | 英语实践 |
-| 14 | 摄影记录 |
-| 15 | 亲子互动 |
+| tagId | tagName | 分类 |
+|------|---------|------|
+| 1 | 历史人文 | INTEREST |
+| 2 | 博物馆研学 | INTEREST |
+| 3 | 非遗体验 | INTEREST |
+| 4 | 科技探索 | INTEREST |
+| 5 | 自然生态 | INTEREST |
+| 6 | 地理地质 | INTEREST |
+| 7 | 航天航空 | INTEREST |
+| 8 | 农耕劳动 | INTEREST |
+| 9 | 艺术美育 | INTEREST |
+| 10 | 红色教育 | INTEREST |
+| 11 | 高校参访 | INTEREST |
+| 12 | 职业启蒙 | INTEREST |
+| 13 | 英语实践 | INTEREST |
+| 14 | 摄影记录 | INTEREST |
+| 15 | 亲子互动 | INTEREST |
+| 16 | 徒步拉练 | ROUTE_STYLE |
+| 17 | 骑行观光 | ROUTE_STYLE |
+| 18 | 公交串联 | ROUTE_STYLE |
+| 19 | 地铁打卡 | ROUTE_STYLE |
+| 20 | 自驾漫游 | ROUTE_STYLE |
+| 21 | 水上游览 | ROUTE_STYLE |
+| 22 | 夜游专场 | ROUTE_STYLE |
+| 23 | 一日速览 | ROUTE_STYLE |
+| 24 | 多日慢游 | ROUTE_STYLE |
+| 25 | 定制私享 | ROUTE_STYLE |
+| 26 | 亲子家庭 | CROWD |
+| 27 | 学生团体 | CROWD |
+| 28 | 情侣出游 | CROWD |
+| 29 | 银发长者 | CROWD |
+| 30 | 企业团建 | CROWD |
+| 31 | 朋友结伴 | CROWD |
+| 32 | 单人独行 | CROWD |
+| 33 | 师生研学 | CROWD |
+| 34 | 外宾接待 | CROWD |
+| 35 | 无障碍友好 | CROWD |
+| 36 | 世界遗产 | SCENIC |
+| 37 | 5A景区 | SCENIC |
+| 38 | 4A景区 | SCENIC |
+| 39 | 红色基地 | SCENIC |
+| 40 | 非遗工坊 | SCENIC |
+| 41 | 特色小镇 | SCENIC |
+| 42 | 古村落 | SCENIC |
+| 43 | 主题公园 | SCENIC |
+| 44 | 动植物园 | SCENIC |
+| 45 | 科技馆/博物馆 | SCENIC |
 
 ### 3.4 Attraction
 
@@ -912,6 +942,107 @@ POST /projects/1/join
 }
 ```
 
+#### 4.2.8 领队接单
+
+- 方法：`POST`
+- 路径：`/projects/{id}/accept`
+- 权限：`LEADER`；且当前登录用户须为该项目的指定领队
+- 描述：领队确认接单，接单后项目状态流转
+
+请求示例：
+
+```http
+POST /projects/1/accept
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": null
+}
+```
+
+#### 4.2.9 更新项目状态
+
+- 方法：`POST`
+- 路径：`/projects/{id}/status`
+- 权限：`USER/LEADER/ADMIN`
+- 描述：更新项目状态（状态流转需符合业务规则）
+
+请求示例：
+
+```http
+POST /projects/1/status?status=IN_PROGRESS
+```
+
+请求参数：
+
+- `status`：目标状态（必填），可选值：`OPEN/MATCHING/CONFIRMED/IN_PROGRESS/DONE/CANCELLED`
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": null
+}
+```
+
+#### 4.2.10 知识图谱首页推荐项目
+
+- 方法：`GET`
+- 路径：`/projects/recommend`
+- 描述：基于知识图谱的项目推荐，返回推荐项目及推荐理由（包含标签匹配、协同过滤、PPR 多跳打分、地区匹配等维度的解释）
+
+请求示例：
+
+```http
+GET /projects/recommend?accountId=6&limit=10
+```
+
+请求参数：
+
+- `accountId`：用户 ID（可选，传入后会结合用户偏好进行个性化推荐）
+- `limit`：返回数量上限（可选，默认 `10`）
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "project": {
+                "id": 10,
+                "routeId": 38,
+                "regionAdcode": "320100",
+                "tag": "博物馆研学",
+                "ownerAccountId": 86,
+                "leaderAccountId": 80,
+                "title": "南京博物院深度讲解研学团",
+                "departureDate": "2026-05-09",
+                "maxMembers": 21,
+                "currentMembers": 3,
+                "status": "OPEN",
+                "createdAt": "2026-05-05T15:34:07",
+                "updatedAt": "2026-05-15T14:52:02"
+            },
+            "score": 85.5,
+            "reasons": [
+                "因为你偏好[博物馆研学]，该项目路线包含相关景点（如南京博物院）",
+                "与你兴趣相似的人也参与了该项目",
+                "项目评分较高（4.8分）"
+            ]
+        }
+    ]
+}
+```
+
 ### 4.3 路线相关
 
 #### 4.3.1 获取路线列表
@@ -1148,11 +1279,22 @@ GET /routes/17
 - 路径：`/routes/ai/{memoryId}`
 - 描述：根据自然语言请求由 AI 生成并保存路线
 
-请求示例：
+请求示例（不带用户偏好）：
 
 ```http
 POST /routes/ai/1?message=我要在南京，2026年3月20日开始的两天内进行历史方面的旅游，请给我规划一个路线
 ```
+
+请求示例（带用户偏好推荐）：
+
+```http
+POST /routes/ai/1?message=我想去南京玩两天&accountId=6
+```
+
+请求参数：
+
+- `message`：用户的自然语言需求（必填）
+- `accountId`：用户 ID（可选，传入后会融合用户长期偏好标签，使 AI 生成的路线更贴合个人兴趣）
 
 响应结果：
 

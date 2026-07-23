@@ -68,7 +68,7 @@ public class AttractionAdjacencyCalculator {
     }
 
     /**
-     * 核心处理逻辑，可被外部调用（传入 Connection 和 amapKey）。
+     * 核心处理逻辑（全量），可被外部调用（传入 Connection 和 amapKey）。
      * 返回新增相邻关系数，0 表示无需处理。
      */
     public static int processAll(Connection conn, String amapKey) throws Exception {
@@ -76,14 +76,9 @@ public class AttractionAdjacencyCalculator {
         System.out.println("共加载 " + attractions.size() + " 个景点");
 
         // 按城市分组 (adcode 前4位)
-        Map<String, List<AttractionInfo>> cityGroups = new LinkedHashMap<>();
-        for (AttractionInfo info : attractions) {
-            if (info.adcode == null || info.adcode.length() < 4) continue;
-            String cityKey = info.adcode.substring(0, 4);
-            cityGroups.computeIfAbsent(cityKey, k -> new ArrayList<>()).add(info);
-        }
+        Map<String, List<AttractionInfo>> cityGroups = groupByCity(attractions);
 
-        // 生成所有需要查询的 pair
+        // 生成所有 pair
         List<Pair> allPairs = new ArrayList<>();
         for (List<AttractionInfo> group : cityGroups.values()) {
             for (int i = 0; i < group.size(); i++) {
@@ -97,16 +92,93 @@ public class AttractionAdjacencyCalculator {
         }
         System.out.println("共 " + cityGroups.size() + " 个城市, " + allPairs.size() + " 个景点对需要查询");
 
-        // 并行查询
+        // 先清空旧数据
+        try (PreparedStatement del = conn.prepareStatement("DELETE FROM attraction_adjacency")) {
+            del.executeUpdate();
+        }
+
+        // 收集所有参与计算的 poiId
+        List<String> allPoiIds = new ArrayList<>();
+        for (AttractionInfo info : attractions) {
+            allPoiIds.add(info.poiId);
+        }
+
+        return queryAndSave(conn, amapKey, allPairs, allPoiIds);
+    }
+
+    /**
+     * 增量处理：只计算没有相邻关系的景点与同城市其他景点的相邻关系。
+     * 不删除已有数据，只追加新记录。
+     * 返回新增相邻关系数，0 表示无需处理。
+     */
+    public static int processIncremental(Connection conn, String amapKey) throws Exception {
+        // 1. 找出没有相邻关系的景点
+        List<AttractionInfo> unprocessed = loadAttractionsWithoutAdjacency(conn);
+        if (unprocessed.isEmpty()) {
+            System.out.println("所有景点已有相邻关系，无需增量计算");
+            return 0;
+        }
+        System.out.println("增量计算: " + unprocessed.size() + " 个景点缺少相邻关系");
+
+        // 2. 加载所有景点用于同城市匹配
+        List<AttractionInfo> allAttractions = loadAttractions(conn);
+        Map<String, List<AttractionInfo>> cityGroups = groupByCity(allAttractions);
+
+        // 3. 只生成涉及未处理景点的 pair
+        List<Pair> pairs = new ArrayList<>();
+        for (AttractionInfo unproc : unprocessed) {
+            if (unproc.adcode == null || unproc.adcode.length() < 4) continue;
+            String cityKey = unproc.adcode.substring(0, 4);
+            List<AttractionInfo> sameCity = cityGroups.getOrDefault(cityKey, List.of());
+            for (AttractionInfo other : sameCity) {
+                if (other.poiId.equals(unproc.poiId)) continue;
+                if (unproc.location == null || other.location == null) continue;
+                pairs.add(new Pair(unproc, other));
+            }
+        }
+        System.out.println("增量计算: " + pairs.size() + " 个景点对需要查询");
+
+        // 收集参与计算的 poiId（用于插入占位记录）
+        List<String> processedPoiIds = new ArrayList<>();
+        for (AttractionInfo unproc : unprocessed) {
+            processedPoiIds.add(unproc.poiId);
+        }
+
+        if (pairs.isEmpty()) {
+            // 即使没有 pair 可查，也要为这些景点插入占位记录
+            return insertPlaceholders(conn, processedPoiIds);
+        }
+        return queryAndSaveAppend(conn, amapKey, pairs, processedPoiIds);
+    }
+
+    /**
+     * 查询 API 并保存结果（追加模式，不删旧数据）。
+     */
+    private static int queryAndSaveAppend(Connection conn, String amapKey, List<Pair> pairs, List<String> processedPoiIds) throws Exception {
+        List<AdjacencyResult> results = queryPairs(amapKey, pairs);
+        return saveResults(conn, results, false, processedPoiIds);
+    }
+
+    /**
+     * 查询 API 并保存结果（全量模式，先删旧数据）。
+     */
+    private static int queryAndSave(Connection conn, String amapKey, List<Pair> pairs, List<String> processedPoiIds) throws Exception {
+        List<AdjacencyResult> results = queryPairs(amapKey, pairs);
+        return saveResults(conn, results, true, processedPoiIds);
+    }
+
+    /**
+     * 并行查询所有景点对。
+     */
+    private static List<AdjacencyResult> queryPairs(String amapKey, List<Pair> pairs) throws Exception {
         int workerCount = Math.max(1, PARALLELISM);
         ExecutorService executor = Executors.newFixedThreadPool(workerCount);
         List<CompletableFuture<AdjacencyResult>> futures = new ArrayList<>();
-        for (Pair pair : allPairs) {
+        for (Pair pair : pairs) {
             futures.add(CompletableFuture.supplyAsync(
                     () -> queryTransit(amapKey, pair), executor));
         }
 
-        // 收集结果
         List<AdjacencyResult> results = new ArrayList<>();
         for (CompletableFuture<AdjacencyResult> f : futures) {
             try {
@@ -121,7 +193,7 @@ public class AttractionAdjacencyCalculator {
 
         System.out.println("有效结果: " + results.size());
 
-        // 统计距离分布用于调试
+        // 统计距离分布
         int inRange = 0;
         for (AdjacencyResult r : results) {
             if (r.distanceM >= 0 && r.distanceM <= DISTANCE_THRESHOLD_METERS) {
@@ -129,21 +201,33 @@ public class AttractionAdjacencyCalculator {
             }
         }
         System.out.println("距离<=" + DISTANCE_THRESHOLD_METERS + "m的景点对: " + inRange);
+        return results;
+    }
 
-        // 过滤并写入数据库
-        int saved = 0;
-        // 先清空旧数据
-        try (PreparedStatement del = conn.prepareStatement("DELETE FROM attraction_adjacency")) {
-            del.executeUpdate();
+    /**
+     * 保存结果到数据库。
+     * @param clearExisting true=先清空再写入（全量模式），false=只追加不重复的
+     * @param processedPoiIds 参与计算的景点poiId集合，用于插入占位记录
+     */
+    private static int saveResults(Connection conn, List<AdjacencyResult> results, boolean clearExisting, List<String> processedPoiIds) throws Exception {
+        if (clearExisting) {
+            try (PreparedStatement del = conn.prepareStatement("DELETE FROM attraction_adjacency")) {
+                del.executeUpdate();
+            }
         }
 
+        // 记录哪些景点已有有效相邻记录
+        java.util.Set<String> hasNeighbor = new java.util.HashSet<>();
+
+        int saved = 0;
         String sql = "INSERT INTO attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, created_at) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (AdjacencyResult r : results) {
-                // 只根据距离判断：10km内视为相邻
                 if (r.distanceM < 0 || r.distanceM > DISTANCE_THRESHOLD_METERS) {
                     continue;
                 }
+                hasNeighbor.add(r.fromPoiId);
+                hasNeighbor.add(r.toPoiId);
                 // 双向写入
                 ps.setString(1, r.fromPoiId);
                 ps.setString(2, r.toPoiId);
@@ -164,8 +248,62 @@ public class AttractionAdjacencyCalculator {
             ps.executeBatch();
         }
 
-        System.out.println("完成! 保存了 " + saved + " 条相邻关系");
+        // 为没有有效邻居的景点插入占位记录（自引用，distance=-1）
+        // 这样 NOT EXISTS 检查就能识别出"已计算过但没有邻居"
+        if (processedPoiIds != null && !processedPoiIds.isEmpty()) {
+            int placeholders = 0;
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                for (String poiId : processedPoiIds) {
+                    if (!hasNeighbor.contains(poiId)) {
+                        ps.setString(1, poiId);
+                        ps.setString(2, poiId); // 自引用
+                        ps.setInt(3, -1);
+                        ps.setInt(4, -1);       // 占位
+                        ps.setTimestamp(5, java.sql.Timestamp.valueOf(LocalDateTime.now()));
+                        ps.addBatch();
+                        placeholders++;
+                    }
+                }
+                ps.executeBatch();
+            }
+            if (placeholders > 0) {
+                System.out.println("插入占位记录: " + placeholders + " 个景点无有效邻居");
+            }
+        }
+
         return saved;
+    }
+
+    /**
+     * 为没有同城市 pair 可查的景点插入占位记录。
+     */
+    private static int insertPlaceholders(Connection conn, List<String> poiIds) throws Exception {
+        String sql = "INSERT INTO attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, created_at) VALUES (?, ?, ?, ?, ?)";
+        int count = 0;
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (String poiId : poiIds) {
+                ps.setString(1, poiId);
+                ps.setString(2, poiId);
+                ps.setInt(3, -1);
+                ps.setInt(4, -1);
+                ps.setTimestamp(5, java.sql.Timestamp.valueOf(LocalDateTime.now()));
+                ps.addBatch();
+                count++;
+            }
+            ps.executeBatch();
+        }
+        System.out.println("插入占位记录: " + count + " 个景点");
+        return count;
+    }
+
+    private static Map<String, List<AttractionInfo>> groupByCity(List<AttractionInfo> attractions) {
+        Map<String, List<AttractionInfo>> cityGroups = new LinkedHashMap<>();
+        for (AttractionInfo info : attractions) {
+            if (info.adcode == null || info.adcode.length() < 4) continue;
+            String cityKey = info.adcode.substring(0, 4);
+            cityGroups.computeIfAbsent(cityKey, k -> new ArrayList<>()).add(info);
+        }
+        return cityGroups;
     }
 
     /**
@@ -179,6 +317,31 @@ public class AttractionAdjacencyCalculator {
              ResultSet rs = ps.executeQuery()) {
             return rs.next() ? rs.getInt(1) : 0;
         }
+    }
+
+    /**
+     * 加载没有相邻关系的景点列表（用于增量计算）。
+     */
+    private static List<AttractionInfo> loadAttractionsWithoutAdjacency(Connection conn) throws Exception {
+        String sql = "SELECT a.poi_id, a.name, a.location, a.citycode, a.adcode " +
+                "FROM attractions a " +
+                "WHERE a.location IS NOT NULL AND a.location != '' " +
+                "AND NOT EXISTS (SELECT 1 FROM attraction_adjacency adj WHERE adj.from_poi_id = a.poi_id) " +
+                "ORDER BY a.adcode, a.poi_id";
+        List<AttractionInfo> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                AttractionInfo info = new AttractionInfo();
+                info.poiId = rs.getString("poi_id");
+                info.name = rs.getString("name");
+                info.location = rs.getString("location");
+                info.citycode = rs.getString("citycode");
+                info.adcode = rs.getString("adcode");
+                list.add(info);
+            }
+        }
+        return list;
     }
 
     private static AdjacencyResult queryTransit(String amapKey, Pair pair) {
