@@ -89,13 +89,13 @@ public class RouteController {
     }
 
     @PostMapping("/ai/{memoryId}")
-    public Result generateRouteByAIV2(@PathVariable String memoryId, @RequestParam String message) throws Exception {
+    public Result generateRouteByAIV2(@PathVariable String memoryId, @RequestParam String message, @RequestParam(required = false) Long accountId) throws Exception {
         long startMs = System.currentTimeMillis();
-        log.info("Generate route by AI v2 start, memoryId={}", memoryId);
-        AIRoutePlan aiRoutePlan = aiRoutePlanningService.planRouteV2(memoryId, message);
+        log.info("Generate route by AI v2 start, memoryId={}, accountId={}", memoryId, accountId);
+        AIRoutePlan aiRoutePlan = aiRoutePlanningService.planRouteV2(memoryId, message, accountId);
         Result result = Result.success(routeService.saveOrUpdateAIConversationRoute(memoryId, aiRoutePlan.getTag(), toRouteAttractions(aiRoutePlan.getItems())));
         long costMs = System.currentTimeMillis() - startMs;
-        log.info("Generate route by AI v2 done, memoryId={}, costMs={}", memoryId, costMs);
+        log.info("Generate route by AI v2 done, memoryId={}, accountId={}, costMs={}", memoryId, accountId, costMs);
         return result;
     }
 

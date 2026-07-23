@@ -24,9 +24,9 @@ public class AmapAttractionBusinessBackfill {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/study_tour?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai";
-    private static final String DB_USER = "root";
-    private static final String DB_PASS = "123456";
+    private static final String DB_URL = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/study_tour?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai");
+    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "root");
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "");
 
     public static void main(String[] args) throws Exception {
         String amapKey = System.getenv("AMAP_KEY");

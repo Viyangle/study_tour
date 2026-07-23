@@ -19,6 +19,7 @@ import com.viyangle.study_tour.pojo.Route;
 import com.viyangle.study_tour.pojo.StartPointType;
 import com.viyangle.study_tour.pojo.Tag;
 import com.viyangle.study_tour.service.ChatService;
+import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ProjectService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,6 +61,9 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Autowired
     private ChatService chatService;
+
+    @Autowired
+    private KnowledgeGraphRecommendService kgRecommendService;
 
     @Transactional
     @Override
@@ -106,8 +110,26 @@ public class ProjectServiceImpl implements ProjectService {
         int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
         int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
 
-        ProjectPreference preference = resolveProjectPreference(accountId);
+        // 优先使用知识图谱推荐
+        if (kgRecommendService != null) {
+            try {
+                List<Project> kgResult = kgRecommendService.recommendProjects(accountId, page * size);
+                if (kgResult != null && !kgResult.isEmpty()) {
+                    // 手动分页
+                    int fromIndex = (page - 1) * size;
+                    if (fromIndex >= kgResult.size()) {
+                        return List.of();
+                    }
+                    int toIndex = Math.min(fromIndex + size, kgResult.size());
+                    return kgResult.subList(fromIndex, toIndex);
+                }
+            } catch (Exception e) {
+                // KG 推荐失败，降级到 SQL 方式
+            }
+        }
 
+        // 降级：原有 SQL 加权排序
+        ProjectPreference preference = resolveProjectPreference(accountId);
         PageHelper.startPage(page, size);
         return projectMapper.selectByPreference(preference.preferredTagNames(), preference.regionCode());
     }
@@ -179,12 +201,10 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ForbiddenException("已加入该项目, projectId=" + id + ", accountId=" + accountId);
         }
 
-        Integer currentCountValue = projectMemberMapper.sumRepresentedCountByProjectId(id);
-        int currentCount = currentCountValue == null ? 0 : currentCountValue;
-        if (project.getMaxMembers() != null && currentCount + representedCount > project.getMaxMembers()) {
+        int affected = projectMapper.casIncrementCurrentMembers(id, representedCount);
+        if (affected == 0) {
             throw new ForbiddenException(
-                    "加入后将超过订单人数上限, current=" + currentCount
-                            + ", representedCount=" + representedCount
+                    "加入后将超过订单人数上限, representedCount=" + representedCount
                             + ", max=" + project.getMaxMembers()
             );
         }
@@ -197,7 +217,6 @@ public class ProjectServiceImpl implements ProjectService {
                 representedCount,
                 LocalDateTime.now()
         ));
-        projectMapper.refreshCurrentMembersById(id);
     }
 
     @Override
@@ -223,23 +242,23 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ResourceNotFoundException("项目不存在, projectId=" + id);
         }
 
-        if (project.getLeaderAccountId() != null && !leaderAccountId.equals(project.getLeaderAccountId())) {
-            throw new ForbiddenException("项目已有领队接单, projectId=" + id);
-        }
-
-        ProjectStatus currentStatus = ProjectStatus.from(project.getStatus());
-        ProjectStatus targetStatus = ProjectStatus.CONFIRMED;
-        if (currentStatus == targetStatus && leaderAccountId.equals(project.getLeaderAccountId())) {
+        if (ProjectStatus.CONFIRMED.name().equals(project.getStatus())
+                && leaderAccountId.equals(project.getLeaderAccountId())) {
             chatService.createProjectGroup(id, project.getOwnerAccountId(), leaderAccountId);
             return;
         }
-        currentStatus.assertCanTransitionTo(targetStatus);
 
-        Project update = new Project();
-        update.setId(id);
-        update.setLeaderAccountId(leaderAccountId);
-        update.setStatus(targetStatus.name());
-        projectMapper.updateById(update);
+        ProjectStatus currentStatus = ProjectStatus.from(project.getStatus());
+        currentStatus.assertCanTransitionTo(ProjectStatus.CONFIRMED);
+
+        int affected = projectMapper.casAcceptProject(id, leaderAccountId);
+        if (affected == 0) {
+            Project latest = projectMapper.selectById(id);
+            if (latest != null && latest.getLeaderAccountId() != null) {
+                throw new ForbiddenException("项目已有领队接单, projectId=" + id);
+            }
+            throw new ForbiddenException("接单失败，项目状态已变更, projectId=" + id);
+        }
         chatService.createProjectGroup(id, project.getOwnerAccountId(), leaderAccountId);
     }
 
@@ -279,11 +298,14 @@ public class ProjectServiceImpl implements ProjectService {
         }
         currentStatus.assertCanTransitionTo(targetStatus);
 
-        Project update = new Project();
-        update.setId(project.getId());
-        update.setLeaderAccountId(project.getLeaderAccountId());
-        update.setStatus(targetStatus.name());
-        projectMapper.updateById(update);
+        int affected = projectMapper.casAcceptProject(project.getId(), project.getLeaderAccountId());
+        if (affected == 0) {
+            Project latest = projectMapper.selectById(project.getId());
+            if (latest != null && latest.getLeaderAccountId() != null) {
+                throw new ForbiddenException("项目已有领队接单, projectId=" + project.getId());
+            }
+            throw new ForbiddenException("指定领队失败，项目状态已变更, projectId=" + project.getId());
+        }
         chatService.createProjectGroup(
                 existingProject.getId(),
                 existingProject.getOwnerAccountId(),
@@ -314,10 +336,10 @@ public class ProjectServiceImpl implements ProjectService {
         current.assertCanTransitionTo(target);
         validateTargetStatusRequirements(project, target);
 
-        Project update = new Project();
-        update.setId(id);
-        update.setStatus(target.name());
-        projectMapper.updateById(update);
+        int affected = projectMapper.casTransitionStatus(id, current.name(), target.name());
+        if (affected == 0) {
+            throw new ForbiddenException("状态流转失败，项目状态已被其他操作变更, projectId=" + id);
+        }
         syncProjectGroupChat(project, target);
     }
 

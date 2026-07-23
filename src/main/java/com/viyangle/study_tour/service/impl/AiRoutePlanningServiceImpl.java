@@ -2,14 +2,20 @@ package com.viyangle.study_tour.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.viyangle.study_tour.aiservice.RouteComposerService;
+import com.viyangle.study_tour.graph.KnowledgeGraph;
+import com.viyangle.study_tour.mapper.AccountTagPrefMapper;
 import com.viyangle.study_tour.mapper.AttractionMapper;
+import com.viyangle.study_tour.mapper.TagMapper;
 import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.AIRoutePlan;
+import com.viyangle.study_tour.pojo.AccountTagPref;
 import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.pojo.RouteConstraintState;
+import com.viyangle.study_tour.pojo.Tag;
 import com.viyangle.study_tour.pojo.VectorRetrievalResult;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
+import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import lombok.extern.slf4j.Slf4j;
@@ -65,10 +71,22 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     private VectorCandidateRetrieverService vectorCandidateRetrieverService;
 
     @Autowired
+    private KnowledgeGraphRecommendService kgRecommendService;
+
+    @Autowired
+    private KnowledgeGraph knowledgeGraph;
+
+    @Autowired
+    private AccountTagPrefMapper accountTagPrefMapper;
+
+    @Autowired
+    private TagMapper tagMapper;
+
+    @Autowired
     private StringRedisTemplate redisTemplate;
 
     @Override
-    public AIRoutePlan planRouteV2(String memoryId, String message) throws Exception {
+    public AIRoutePlan planRouteV2(String memoryId, String message, Long accountId) throws Exception {
         RouteConstraintState state = loadOrCreateState(memoryId, message);
         if (containsAnyKeyword(message, RESET_KEYWORDS)) {
             state = new RouteConstraintState();
@@ -81,18 +99,49 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         String retrievalQuery = buildRetrievalQuery(message, state);
         VectorRetrievalResult retrievalResult = vectorCandidateRetrieverService.retrieveCandidatesWithTexts(retrievalQuery, 40, 3);
         List<String> candidatePoiIds = applyStateFilterOnPoiIds(retrievalResult.getPoiIds(), state);
+
+        // 知识图谱补充召回：从图谱中按标签+地区检索候选景点
+        List<String> kgPoiIds = retrieveCandidatesFromGraph(message, state, accountId);
+        if (!kgPoiIds.isEmpty()) {
+            // 合并向量检索和图谱检索的结果，去重
+            LinkedHashSet<String> merged = new LinkedHashSet<>(candidatePoiIds);
+            merged.addAll(kgPoiIds);
+            candidatePoiIds = new ArrayList<>(merged);
+        }
+        
+        // 计算 PPR 分数（用于后续排序）
+        Map<String, Double> pprScores = computePPRScores(message, accountId);
+        
         List<Attraction> candidates = loadCandidateAttractions(candidatePoiIds);
+        
+        // 用 PPR 分数对候选景点做加权排序
+        if (!pprScores.isEmpty()) {
+            candidates.sort((a, b) -> {
+                double scoreA = getCombinedScore(a.getPoiId(), pprScores);
+                double scoreB = getCombinedScore(b.getPoiId(), pprScores);
+                return Double.compare(scoreB, scoreA); // 降序
+            });
+            log.info("AI路线规划调试: 经PPR加权排序后候选数量={}", candidates.size());
+        }
+        
+        log.info("AI路线规划调试: 向量+图谱候选数量={}", candidates.size());
         if (candidates.size() < 2) {
             candidates = loadFallbackAttractions(15);
+            log.info("AI路线规划调试: fallback候选数量={}", candidates.size());
             candidates = applyStateFilterOnAttractions(candidates, state);
+            log.info("AI路线规划调试: 过滤后候选数量={}, excludePoiIds={}", candidates.size(), state.getExcludePoiIds());
         }
 
         if (candidates.size() < 2) {
-            throw new IllegalArgumentException("Candidate POIs are not enough for routing after applying constraints.");
+            throw new IllegalArgumentException("Candidate POIs are not enough for routing after applying constraints. 当前候选数: " + candidates.size());
         }
 
         List<AmapTransitClient.TransitEdge> matrix = amapTransitClient.buildUndirectedMatrix(candidates);
-        String finalPrompt = buildFinalPrompt(message, state, candidates, matrix, retrievalResult.getRetrievedTexts());
+        
+        // 提取用户偏好标签，用于 prompt 中说明
+        List<String> userPrefTags = extractUserPreferenceTags(accountId);
+        
+        String finalPrompt = buildFinalPrompt(message, state, candidates, matrix, retrievalResult.getRetrievedTexts(), userPrefTags);
         String finalText = routeComposerService.chat(finalPrompt);
 
         AIRoutePlan plan = parseAiPlan(finalText);
@@ -325,15 +374,19 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
     private List<Attraction> loadFallbackAttractions(int limit) {
         List<Attraction> all = attractionMapper.selectAllActive();
+        log.info("loadFallbackAttractions: 数据库总景点数={}", all == null ? 0 : all.size());
         if (all == null || all.isEmpty()) {
             return List.of();
         }
         List<Attraction> filtered = new ArrayList<>();
+        int noPoiId = 0, noLocation = 0;
         for (Attraction attraction : all) {
             if (attraction == null || attraction.getPoiId() == null || attraction.getPoiId().isBlank()) {
+                noPoiId++;
                 continue;
             }
             if (attraction.getLocation() == null || attraction.getLocation().isBlank()) {
+                noLocation++;
                 continue;
             }
             filtered.add(attraction);
@@ -341,6 +394,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                 break;
             }
         }
+        log.info("loadFallbackAttractions: 过滤统计: noPoiId={}, noLocation={}, 有效={}", noPoiId, noLocation, filtered.size());
         return filtered;
     }
 
@@ -426,7 +480,8 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                                     RouteConstraintState state,
                                     List<Attraction> candidates,
                                     List<AmapTransitClient.TransitEdge> matrix,
-                                    List<String> retrievedTexts) {
+                                    List<String> retrievedTexts,
+                                    List<String> userPrefTags) {
         StringBuilder sb = new StringBuilder();
         sb.append("用户历史输入(按时间顺序):\n");
         if (state.getUserMessages() == null || state.getUserMessages().isEmpty()) {
@@ -437,6 +492,14 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             }
         }
         sb.append("\n用户最新需求:\n").append(userMessage).append("\n\n");
+
+        // 用户偏好标签（长期兴趣）
+        if (userPrefTags != null && !userPrefTags.isEmpty()) {
+            sb.append("【用户背景】\n");
+            sb.append("- 长期偏好标签：[").append(String.join(", ", userPrefTags)).append("]\n");
+            sb.append("- 本次需求关键词：从上方“用户最新需求”中提取\n");
+            sb.append("- 编排原则：以本次需求为主导，同时适当兼顾用户长期偏好。如果本次需求与长期偏好冲突，优先满足本次需求。\n\n");
+        }
 
         sb.append("约束(JSON):\n");
         sb.append("{");
@@ -672,7 +735,169 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         return false;
     }
 
+    /**
+     * 提取用户偏好标签（从 account_tag_pref 表）
+     */
+    private List<String> extractUserPreferenceTags(Long accountId) {
+        if (accountId == null) {
+            return List.of();
+        }
+        try {
+            List<AccountTagPref> userPrefs = accountTagPrefMapper.selectByAccountId(accountId);
+            if (userPrefs == null || userPrefs.isEmpty()) {
+                return List.of();
+            }
+            List<String> tagNames = new ArrayList<>();
+            for (AccountTagPref pref : userPrefs) {
+                Tag tag = tagMapper.selectById(pref.getTagId());
+                if (tag != null && ALLOWED_TAGS.contains(tag.getName())) {
+                    tagNames.add(tag.getName());
+                }
+            }
+            return tagNames;
+        } catch (Exception e) {
+            log.warn("Failed to extract user preference tags for accountId={}", accountId, e);
+            return List.of();
+        }
+    }
+
     private String nonNull(String s) {
         return s == null ? "" : s;
+    }
+
+    /**
+     * 计算 PPR 分数：从用户本次意图 + 长期偏好的景点出发，做多跳随机游走。
+     */
+    private Map<String, Double> computePPRScores(String message, Long accountId) {
+        if (knowledgeGraph == null || !knowledgeGraph.isLoaded()) {
+            return Map.of();
+        }
+        try {
+            // 1. 确定个人节点集合（本次意图 + 长期偏好）
+            Set<String> personalNodes = new HashSet<>();
+            
+            // 本次意图匹配的景点
+            for (String tag : ALLOWED_TAGS) {
+                if (message != null && message.contains(tag)) {
+                    Set<String> tagAttractions = knowledgeGraph.getAttractionsByTags(List.of(tag));
+                    personalNodes.addAll(tagAttractions);
+                }
+            }
+            
+            // 长期偏好匹配的景点
+            if (accountId != null) {
+                List<AccountTagPref> userPrefs = accountTagPrefMapper.selectByAccountId(accountId);
+                if (userPrefs != null && !userPrefs.isEmpty()) {
+                    for (AccountTagPref pref : userPrefs) {
+                        Tag tag = tagMapper.selectById(pref.getTagId());
+                        if (tag != null && ALLOWED_TAGS.contains(tag.getName())) {
+                            Set<String> tagAttractions = knowledgeGraph.getAttractionsByTags(List.of(tag.getName()));
+                            personalNodes.addAll(tagAttractions);
+                        }
+                    }
+                }
+            }
+            
+            if (personalNodes.isEmpty()) {
+                log.info("PPR: 无个人节点，跳过计算");
+                return Map.of();
+            }
+            
+            // 2. 跑 PPR
+            log.info("PPR: 从{}个个人节点出发计算", personalNodes.size());
+            Map<String, Double> pprScores = knowledgeGraph.personalizedPageRank(personalNodes, 30, 0.85);
+            
+            // 3. 过滤掉分数太低的（噪音）
+            double threshold = 0.001;
+            Map<String, Double> filtered = pprScores.entrySet().stream()
+                    .filter(e -> e.getValue() >= threshold)
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            
+            log.info("PPR: 计算完成，有效节点数={}", filtered.size());
+            return filtered;
+            
+        } catch (Exception e) {
+            log.warn("PPR 计算失败: {}", e.getMessage(), e);
+            return Map.of();
+        }
+    }
+
+    /**
+     * 综合打分：标签匹配度（基础分）+ PPR 分数（多跳相关性）
+     * @param poiId 景点ID
+     * @param pprScores PPR 分数映射
+     * @return 综合分数（越高越相关）
+     */
+    private double getCombinedScore(String poiId, Map<String, Double> pprScores) {
+        // 标签匹配度作为基础分（这里简化为 1.0，实际可以从 retrieveCandidatesFromGraph 里传过来）
+        double tagMatchScore = 1.0;
+        
+        // PPR 分数（可能为空）
+        double pprScore = pprScores.getOrDefault(poiId, 0.0);
+        
+        // 融合：60% 标签匹配 + 40% PPR
+        double lambda = 0.6;
+        return lambda * tagMatchScore + (1 - lambda) * pprScore * 10; // PPR 放大 10 倍以平衡量级
+    }
+
+    /**
+     * 从知识图谱中检索候选景点。
+     * 从用户消息中提取标签和地区信息，调用图谱服务检索。
+     * @param accountId 用户ID（可选），用于融合个人偏好标签
+     */
+    private List<String> retrieveCandidatesFromGraph(String message, RouteConstraintState state, Long accountId) {
+        if (kgRecommendService == null) {
+            return List.of();
+        }
+        try {
+            // 从消息中提取匹配的研学标签
+            List<String> matchedTags = new ArrayList<>();
+            for (String tag : ALLOWED_TAGS) {
+                if (message != null && message.contains(tag)) {
+                    matchedTags.add(tag);
+                }
+            }
+
+            // 从历史消息中也提取标签
+            if (state.getUserMessages() != null) {
+                for (String msg : state.getUserMessages()) {
+                    for (String tag : ALLOWED_TAGS) {
+                        if (msg.contains(tag) && !matchedTags.contains(tag)) {
+                            matchedTags.add(tag);
+                        }
+                    }
+                }
+            }
+
+            // 融合用户个人偏好标签
+            if (accountId != null) {
+                List<AccountTagPref> userPrefs = accountTagPrefMapper.selectByAccountId(accountId);
+                if (userPrefs != null && !userPrefs.isEmpty()) {
+                    for (AccountTagPref pref : userPrefs) {
+                        Tag tag = tagMapper.selectById(pref.getTagId());
+                        if (tag != null && ALLOWED_TAGS.contains(tag.getName()) && !matchedTags.contains(tag.getName())) {
+                            matchedTags.add(tag.getName());
+                        }
+                    }
+                    log.info("用户{}有{}个偏好标签，已融合到matchedTags", accountId, userPrefs.size());
+                }
+            }
+
+            // 地区暂时从消息中简单提取（后续可扩展）
+            String regionCode = null;
+
+            if (matchedTags.isEmpty() && regionCode == null) {
+                return List.of();
+            }
+
+            List<Attraction> kgCandidates = kgRecommendService.retrieveCandidatesByGraph(matchedTags, regionCode, 15);
+            List<String> kgPoiIds = applyStateFilterOnPoiIds(
+                    kgCandidates.stream().map(Attraction::getPoiId).toList(), state);
+            log.info("KG candidate retrieval: matchedTags={}, kgPoiIds={}", matchedTags, kgPoiIds);
+            return kgPoiIds;
+        } catch (Exception e) {
+            log.warn("KG candidate retrieval failed: {}", e.getMessage());
+            return List.of();
+        }
     }
 }

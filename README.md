@@ -75,23 +75,53 @@
   "tagId": 2
 }
 ```
-| tagId | tagName |
-|------|---------|
-| 1 | 历史人文 |
-| 2 | 博物馆研学 |
-| 3 | 非遗体验 |
-| 4 | 科技探索 |
-| 5 | 自然生态 |
-| 6 | 地理地质 |
-| 7 | 航天航空 |
-| 8 | 农耕劳动 |
-| 9 | 艺术美育 |
-| 10 | 红色教育 |
-| 11 | 高校参访 |
-| 12 | 职业启蒙 |
-| 13 | 英语实践 |
-| 14 | 摄影记录 |
-| 15 | 亲子互动 |
+| tagId | tagName | 分类 |
+|------|---------|------|
+| 1 | 历史人文 | INTEREST |
+| 2 | 博物馆研学 | INTEREST |
+| 3 | 非遗体验 | INTEREST |
+| 4 | 科技探索 | INTEREST |
+| 5 | 自然生态 | INTEREST |
+| 6 | 地理地质 | INTEREST |
+| 7 | 航天航空 | INTEREST |
+| 8 | 农耕劳动 | INTEREST |
+| 9 | 艺术美育 | INTEREST |
+| 10 | 红色教育 | INTEREST |
+| 11 | 高校参访 | INTEREST |
+| 12 | 职业启蒙 | INTEREST |
+| 13 | 英语实践 | INTEREST |
+| 14 | 摄影记录 | INTEREST |
+| 15 | 亲子互动 | INTEREST |
+| 16 | 徒步拉练 | ROUTE_STYLE |
+| 17 | 骑行观光 | ROUTE_STYLE |
+| 18 | 公交串联 | ROUTE_STYLE |
+| 19 | 地铁打卡 | ROUTE_STYLE |
+| 20 | 自驾漫游 | ROUTE_STYLE |
+| 21 | 水上游览 | ROUTE_STYLE |
+| 22 | 夜游专场 | ROUTE_STYLE |
+| 23 | 一日速览 | ROUTE_STYLE |
+| 24 | 多日慢游 | ROUTE_STYLE |
+| 25 | 定制私享 | ROUTE_STYLE |
+| 26 | 亲子家庭 | CROWD |
+| 27 | 学生团体 | CROWD |
+| 28 | 情侣出游 | CROWD |
+| 29 | 银发长者 | CROWD |
+| 30 | 企业团建 | CROWD |
+| 31 | 朋友结伴 | CROWD |
+| 32 | 单人独行 | CROWD |
+| 33 | 师生研学 | CROWD |
+| 34 | 外宾接待 | CROWD |
+| 35 | 无障碍友好 | CROWD |
+| 36 | 世界遗产 | SCENIC |
+| 37 | 5A景区 | SCENIC |
+| 38 | 4A景区 | SCENIC |
+| 39 | 红色基地 | SCENIC |
+| 40 | 非遗工坊 | SCENIC |
+| 41 | 特色小镇 | SCENIC |
+| 42 | 古村落 | SCENIC |
+| 43 | 主题公园 | SCENIC |
+| 44 | 动植物园 | SCENIC |
+| 45 | 科技馆/博物馆 | SCENIC |
 
 ### 3.4 Attraction
 
@@ -653,12 +683,18 @@ curl -X POST "http://10.6.86.86/upload" \
 
 - 方法：`GET`
 - 路径：`/projects`
-- 描述：按用户偏好分页获取项目列表
+- 描述：按用户偏好分页获取项目列表，支持返回推荐理由
 
-请求示例：
+请求示例（普通分页）：
 
 ```http
 GET /projects?accountId=6&pageNum=1&pageSize=10
+```
+
+请求示例（带推荐理由）：
+
+```http
+GET /projects?accountId=6&pageNum=1&pageSize=10&withExplanation=true
 ```
 
 请求参数：
@@ -666,6 +702,7 @@ GET /projects?accountId=6&pageNum=1&pageSize=10
 - `accountId`：用户 ID（必填）
 - `pageNum`：页码（可选，默认 `1`， 起始为`1`）
 - `pageSize`：每页数量（可选，默认 `10`）
+- `withExplanation`：是否返回推荐理由（可选，默认 `false`；传 `true` 时返回推荐分数和理由）
 
 响应结果：（好吧目前没有太多project）
 
@@ -918,6 +955,56 @@ GET /projects/1/members
   "leaderAccountId": 3
 }
 ```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": null
+}
+```
+
+#### 4.2.8 领队接单
+
+- 方法：`POST`
+- 路径：`/projects/{id}/accept`
+- 权限：`LEADER`；且当前登录用户须为该项目的指定领队
+- 描述：领队确认接单，接单后项目状态流转
+
+请求示例：
+
+```http
+POST /projects/1/accept
+```
+
+响应结果：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": null
+}
+```
+
+#### 4.2.9 更新项目状态
+
+- 方法：`POST`
+- 路径：`/projects/{id}/status`
+- 权限：`USER/LEADER/ADMIN`
+- 描述：更新项目状态（状态流转需符合业务规则）
+
+请求示例：
+
+```http
+POST /projects/1/status?status=IN_PROGRESS
+```
+
+请求参数：
+
+- `status`：目标状态（必填），可选值：`OPEN/MATCHING/CONFIRMED/IN_PROGRESS/DONE/CANCELLED`
 
 响应结果：
 
@@ -1247,11 +1334,22 @@ Content-Type: application/json
 - 路径：`/routes/ai/{memoryId}`
 - 描述：根据自然语言请求由 AI 生成并保存路线
 
-请求示例：
+请求示例（不带用户偏好）：
 
 ```http
 POST /routes/ai/1?message=我要在南京，2026年3月20日开始的两天内进行历史方面的旅游，请给我规划一个路线
 ```
+
+请求示例（带用户偏好推荐）：
+
+```http
+POST /routes/ai/1?message=我想去南京玩两天&accountId=6
+```
+
+请求参数：
+
+- `message`：用户的自然语言需求（必填）
+- `accountId`：用户 ID（可选，传入后会融合用户长期偏好标签，使 AI 生成的路线更贴合个人兴趣）
 
 响应结果：
 

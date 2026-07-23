@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.AttractionAdjacencyMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.AttractionAdjacency">
+        insert into attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, created_at)
+        values (#{fromPoiId}, #{toPoiId}, #{transitMinutes}, #{distanceM}, #{createdAt})
+    </insert>
+
+    <insert id="batchInsert">
+        insert into attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, created_at)
+        values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.fromPoiId}, #{item.toPoiId}, #{item.transitMinutes}, #{item.distanceM}, #{item.createdAt})
+        </foreach>
+    </insert>
+
+    <delete id="deleteByFromPoiId" parameterType="java.lang.String">
+        delete from attraction_adjacency where from_poi_id = #{fromPoiId}
+    </delete>
+
+    <select id="selectByFromPoiId" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.AttractionAdjacency">
+        select from_poi_id, to_poi_id, transit_minutes, distance_m, created_at
+        from attraction_adjacency
+        where from_poi_id = #{fromPoiId}
+    </select>
+
+    <select id="selectByToPoiId" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.AttractionAdjacency">
+        select from_poi_id, to_poi_id, transit_minutes, distance_m, created_at
+        from attraction_adjacency
+        where to_poi_id = #{toPoiId}
+    </select>
+
+    <select id="selectNeighbors" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.AttractionAdjacency">
+        select from_poi_id, to_poi_id, transit_minutes, distance_m, created_at
+        from attraction_adjacency
+        where from_poi_id = #{poiId} or to_poi_id = #{poiId}
+    </select>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.AttractionAdjacency">
+        select from_poi_id, to_poi_id, transit_minutes, distance_m, created_at
+        from attraction_adjacency
+    </select>
+
+</mapper>

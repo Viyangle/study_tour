@@ -505,9 +505,9 @@ public class RegionExcelImporter {
 
     private static class Config {
         private Path excelPath = Paths.get("src/main/resources/AMap_adcode_citycode.xlsx");
-        private String jdbcUrl = "jdbc:mysql://localhost:3306/study_tour";
-        private String username = "root";
-        private String password = "123456";
+        private String jdbcUrl = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/study_tour");
+        private String username = System.getenv().getOrDefault("DB_USER", "root");
+        private String password = System.getenv().getOrDefault("DB_PASS", "");
         private String tableName = "region";
         private boolean truncate = true;
 

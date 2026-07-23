@@ -5,6 +5,7 @@ import com.viyangle.study_tour.annotation.RequireRole;
 import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.JoinProjectRequest;
 import com.viyangle.study_tour.pojo.Result;
+import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ProjectService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -28,12 +29,20 @@ public class ProjectController {
     @Autowired
     private ProjectService projectService;
 
+    @Autowired
+    private KnowledgeGraphRecommendService recommendService;
+
     @GetMapping
     @OperationLog(value = "分页获取项目", type = "PROJECT_QUERY")
     public Result getAllProjects(@RequestParam(defaultValue = "1") Integer pageNum,
                                  @RequestParam(defaultValue = "10") Integer pageSize,
-                                 @RequestParam Long accountId) {
-        log.info("分页获取项目, accountId={}, pageNum={}, pageSize={}", accountId, pageNum, pageSize);
+                                 @RequestParam Long accountId,
+                                 @RequestParam(defaultValue = "false") Boolean withExplanation) {
+        log.info("分页获取项目, accountId={}, pageNum={}, pageSize={}, withExplanation={}", accountId, pageNum, pageSize, withExplanation);
+        if (Boolean.TRUE.equals(withExplanation)) {
+            int limit = pageNum * pageSize;
+            return Result.success(recommendService.recommendWithExplanation(accountId, limit));
+        }
         return Result.success(projectService.getPagedProjectsByPreference(accountId, pageNum, pageSize));
     }
 
@@ -139,4 +148,5 @@ public class ProjectController {
         );
         return Result.success();
     }
+
 }
