@@ -80,11 +80,41 @@ public class ProjectController {
         ));
     }
 
+    @GetMapping("/available")
+    @RequireRole({"LEADER"})
+    @OperationLog(value = "查询可接项目", type = "PROJECT_QUERY")
+    public Result getAvailableProjects(@RequestParam(defaultValue = "1") Integer pageNum,
+                                       @RequestParam(defaultValue = "10") Integer pageSize) {
+        Long accountId = SecurityContextUtil.currentAccountId();
+        log.info("查询可接项目: accountId={}, pageNum={}, pageSize={}", accountId, pageNum, pageSize);
+        return Result.success(projectService.getAvailableProjectPage(accountId, pageNum, pageSize));
+    }
+
+    @GetMapping("/mine")
+    @OperationLog(value = "查询我的项目", type = "PROJECT_QUERY")
+    public Result getMyProjects(@RequestParam(defaultValue = "ALL") String relation,
+                                @RequestParam(required = false) String status,
+                                @RequestParam(defaultValue = "1") Integer pageNum,
+                                @RequestParam(defaultValue = "10") Integer pageSize) {
+        Long accountId = SecurityContextUtil.currentAccountId();
+        log.info("查询我的项目: accountId={}, relation={}, status={}", accountId, relation, status);
+        return Result.success(projectService.getMyProjects(
+                accountId,
+                relation,
+                status,
+                pageNum,
+                pageSize
+        ));
+    }
+
     @GetMapping("/{id}")
     @OperationLog(value = "获取项目详情", type = "PROJECT_QUERY")
     public Result getProjectById(@PathVariable Long id) {
         log.info("获取项目: {}", id);
-        return Result.success(projectService.getProjectById(id));
+        return Result.success(projectService.getProjectDetail(
+                SecurityContextUtil.currentAccountId(),
+                id
+        ));
     }
 
     @GetMapping("/{id}/members")

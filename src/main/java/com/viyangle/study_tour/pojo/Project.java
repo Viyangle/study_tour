@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -32,9 +33,27 @@ public class Project {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    /** 创建订单时，当前账号实际代表的参团人数；不属于 projects 表。 */
+    /** 创建项目时，当前账号实际代表的参团人数；不属于 projects 表。 */
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private Integer representedCount;
+
+    /*
+     * Response-only fields used by project lists and details. These are not
+     * columns in the projects table.
+     */
+    private String publisherName;
+    private String publisherAvatarUrl;
+    private String leaderName;
+    private String leaderAvatarUrl;
+    private List<String> attractionNames;
+    private List<RouteAttraction> routeAttractions;
+    private Integer estimatedDurationMinutes;
+    private String availabilityStatus;
+    private String viewerRole;
+    private Boolean canAccept;
+    private Boolean canJoin;
+    private Boolean canManageGroup;
+    private Long groupId;
 
     public String getStatusText() {
         return ProjectStatus.displayNameOf(status);

@@ -21,4 +21,6 @@ public class ChatSession {
     private String latestMessage;
     private LocalDateTime latestMessageAt;
     private Long latestMessageSenderAccountId;
+    private String currentUserRole;
+    private Integer memberCount;
 }

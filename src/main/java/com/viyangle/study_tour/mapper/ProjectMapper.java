@@ -38,6 +38,10 @@ public interface ProjectMapper {
                                            @Param("departureDate") LocalDate departureDate,
                                            @Param("departureTime") LocalTime departureTime);
 
+    List<Project> selectByAccountRelation(@Param("accountId") Long accountId,
+                                          @Param("relation") String relation,
+                                          @Param("status") String status);
+
     List<Project> selectByCompositeFilter(@Param("preferredTags") List<String> preferredTags,
                                           @Param("sortRegionCode") String sortRegionCode,
                                           @Param("keyword") String keyword,

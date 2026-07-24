@@ -2,6 +2,7 @@ package com.viyangle.study_tour.service;
 
 import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.ProjectMember;
+import com.viyangle.study_tour.pojo.PageResponse;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -13,7 +14,13 @@ public interface ProjectService {
 
     List<Project> getPagedProjectsByPreference(Long accountId, Integer pageNum, Integer pageSize);
 
-    List<Project> getAvailableProjectsForLeader(Long accountId, Integer pageNum, Integer pageSize);
+    PageResponse<Project> getAvailableProjectPage(Long accountId, Integer pageNum, Integer pageSize);
+
+    PageResponse<Project> getMyProjects(Long accountId,
+                                        String relation,
+                                        String status,
+                                        Integer pageNum,
+                                        Integer pageSize);
 
     List<Project> filterProjects(Long accountId,
                                  Integer pageNum,
@@ -31,7 +38,7 @@ public interface ProjectService {
 
     void joinProject(Long id, Long accountId, Integer representedCount);
 
-    Project getProjectById(Long id);
+    Project getProjectDetail(Long accountId, Long id);
 
     List<ProjectMember> getProjectMembers(Long id);
 

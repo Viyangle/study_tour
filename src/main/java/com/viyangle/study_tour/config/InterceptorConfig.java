@@ -25,7 +25,7 @@ public class InterceptorConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         if (securityEnabled) {
             registry.addInterceptor(permissionInterceptor)
-                .addPathPatterns("/projects/**", "/routes/**", "/reviews/**", "/accounts/**", "/leader/**")
+                .addPathPatterns("/projects/**", "/routes/**", "/reviews/**", "/accounts/**", "/leader/**", "/chat/**")
                 .excludePathPatterns("/login/**", "/register/**", "/login/ping");
         }
 

@@ -189,6 +189,44 @@
         created_at desc
     </select>
 
+    <select id="selectByAccountRelation" resultType="com.viyangle.study_tour.pojo.Project">
+        select distinct
+               p.id, p.route_id, p.region_adcode, p.tag, p.owner_account_id, p.leader_account_id, p.title,
+               p.departure_date, p.departure_time, p.start_point_type, p.start_point,
+               p.leader_requirements, p.participant_requirements,
+               p.max_members, p.current_members, p.status, p.created_at, p.updated_at
+        from projects p
+        left join project_members viewer_member
+               on viewer_member.project_id = p.id
+              and viewer_member.account_id = #{accountId}
+              and viewer_member.join_status in ('JOINED', 'COMPLETED')
+        <where>
+            <choose>
+                <when test="relation == 'PUBLISHED'">
+                    p.owner_account_id = #{accountId}
+                </when>
+                <when test="relation == 'LEADING'">
+                    p.leader_account_id = #{accountId}
+                </when>
+                <when test="relation == 'JOINED'">
+                    viewer_member.id is not null
+                    and p.owner_account_id != #{accountId}
+                </when>
+                <otherwise>
+                    (
+                        p.owner_account_id = #{accountId}
+                        or p.leader_account_id = #{accountId}
+                        or viewer_member.id is not null
+                    )
+                </otherwise>
+            </choose>
+            <if test="status != null and status != ''">
+                and p.status = #{status}
+            </if>
+        </where>
+        order by p.departure_date desc, p.departure_time desc, p.created_at desc
+    </select>
+
     <select id="selectByCompositeFilter" resultType="com.viyangle.study_tour.pojo.Project">
         select <include refid="projectColumns"/>
         from projects

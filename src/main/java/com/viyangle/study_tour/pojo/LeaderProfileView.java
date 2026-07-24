@@ -20,8 +20,8 @@ public class LeaderProfileView {
     private String intro;
     private Double averageRating;
     private Integer ratingCount;
-    private Integer acceptedOrderCount;
-    private Integer completedOrderCount;
+    private Integer acceptedProjectCount;
+    private Integer completedProjectCount;
     private List<String> tagNames;
     private List<LeaderReviewView> recentReviews;
 }

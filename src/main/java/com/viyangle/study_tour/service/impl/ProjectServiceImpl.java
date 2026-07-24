@@ -1,26 +1,32 @@
 package com.viyangle.study_tour.service.impl;
 
 import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageInfo;
 import com.viyangle.study_tour.exception.ForbiddenException;
 import com.viyangle.study_tour.exception.ResourceNotFoundException;
 import com.viyangle.study_tour.exception.UnauthorizedException;
 import com.viyangle.study_tour.mapper.AccountMapper;
 import com.viyangle.study_tour.mapper.AccountTagPrefMapper;
+import com.viyangle.study_tour.mapper.ChatSessionMapper;
 import com.viyangle.study_tour.mapper.ProjectMapper;
 import com.viyangle.study_tour.mapper.ProjectMemberMapper;
 import com.viyangle.study_tour.mapper.RouteMapper;
 import com.viyangle.study_tour.mapper.TagMapper;
 import com.viyangle.study_tour.pojo.Account;
 import com.viyangle.study_tour.pojo.AccountTagPref;
+import com.viyangle.study_tour.pojo.ChatSession;
+import com.viyangle.study_tour.pojo.PageResponse;
 import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.ProjectMember;
 import com.viyangle.study_tour.pojo.ProjectStatus;
 import com.viyangle.study_tour.pojo.Route;
+import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.pojo.StartPointType;
 import com.viyangle.study_tour.pojo.Tag;
 import com.viyangle.study_tour.service.ChatService;
 import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ProjectService;
+import com.viyangle.study_tour.service.RouteService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -31,6 +37,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -62,6 +69,12 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Autowired
     private ChatService chatService;
+
+    @Autowired
+    private ChatSessionMapper chatSessionMapper;
+
+    @Autowired
+    private RouteService routeService;
 
     @Autowired
     private KnowledgeGraphRecommendService kgRecommendService;
@@ -135,8 +148,7 @@ public class ProjectServiceImpl implements ProjectService {
         return projectMapper.selectByPreference(preference.preferredTagNames(), preference.regionCode());
     }
 
-    @Override
-    public List<Project> getAvailableProjectsForLeader(Long accountId, Integer pageNum, Integer pageSize) {
+    private List<Project> getAvailableProjectsForLeader(Long accountId, Integer pageNum, Integer pageSize) {
         int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
         int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
         ProjectPreference preference = resolveProjectPreference(accountId);
@@ -147,6 +159,43 @@ public class ProjectServiceImpl implements ProjectService {
                 LocalDate.now(),
                 LocalTime.now()
         );
+    }
+
+    @Override
+    public PageResponse<Project> getAvailableProjectPage(Long accountId,
+                                                         Integer pageNum,
+                                                         Integer pageSize) {
+        Account viewer = requireAccount(accountId);
+        if (!isLeader(viewer)) {
+            throw new ForbiddenException("当前账号不是领队");
+        }
+        int page = normalizePage(pageNum);
+        int size = normalizePageSize(pageSize);
+        List<Project> projects = getAvailableProjectsForLeader(accountId, page, size);
+        PageInfo<Project> pageInfo = new PageInfo<>(projects);
+        projects.forEach(project -> enrichProject(project, viewer));
+        return PageResponse.of(projects, pageInfo.getTotal(), page, size);
+    }
+
+    @Override
+    public PageResponse<Project> getMyProjects(Long accountId,
+                                               String relation,
+                                               String status,
+                                               Integer pageNum,
+                                               Integer pageSize) {
+        Account viewer = requireAccount(accountId);
+        int page = normalizePage(pageNum);
+        int size = normalizePageSize(pageSize);
+
+        PageHelper.startPage(page, size);
+        List<Project> projects = projectMapper.selectByAccountRelation(
+                accountId,
+                normalizeRelation(relation),
+                normalizeStatus(status)
+        );
+        PageInfo<Project> pageInfo = new PageInfo<>(projects);
+        projects.forEach(project -> enrichProject(project, viewer));
+        return PageResponse.of(projects, pageInfo.getTotal(), page, size);
     }
 
     @Override
@@ -207,11 +256,11 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ResourceNotFoundException("项目不存在, projectId=" + id);
         }
         if (hasDeparted(project)) {
-            throw new ForbiddenException("订单已过出发时间, projectId=" + id);
+            throw new ForbiddenException("项目已过出发时间, projectId=" + id);
         }
         ProjectStatus status = ProjectStatus.from(project.getStatus());
         if (status != ProjectStatus.OPEN && status != ProjectStatus.MATCHING) {
-            throw new ForbiddenException("当前订单状态不可加入, projectId=" + id + ", status=" + status.name());
+            throw new ForbiddenException("当前项目状态不可加入, projectId=" + id + ", status=" + status.name());
         }
 
         ProjectMember existing = projectMemberMapper.selectByProjectIdAndAccountId(id, accountId);
@@ -222,7 +271,7 @@ public class ProjectServiceImpl implements ProjectService {
         int affected = projectMapper.casIncrementCurrentMembers(id, representedCount);
         if (affected == 0) {
             throw new ForbiddenException(
-                    "加入后将超过订单人数上限, representedCount=" + representedCount
+                    "加入后将超过项目人数上限, representedCount=" + representedCount
                             + ", max=" + project.getMaxMembers()
             );
         }
@@ -235,11 +284,21 @@ public class ProjectServiceImpl implements ProjectService {
                 representedCount,
                 LocalDateTime.now()
         ));
+        chatService.joinProjectGroup(id, accountId);
     }
 
     @Override
-    public Project getProjectById(Long id) {
-        return projectMapper.selectById(id);
+    public Project getProjectDetail(Long accountId, Long id) {
+        Account viewer = requireAccount(accountId);
+        if (id == null) {
+            throw new IllegalArgumentException("项目ID不能为空");
+        }
+        Project project = projectMapper.selectById(id);
+        if (project == null) {
+            throw new ResourceNotFoundException("项目不存在, projectId=" + id);
+        }
+        enrichProject(project, viewer);
+        return project;
     }
 
     @Override
@@ -260,7 +319,7 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ResourceNotFoundException("项目不存在, projectId=" + id);
         }
         if (hasDeparted(project)) {
-            throw new ForbiddenException("订单已过出发时间, projectId=" + id);
+            throw new ForbiddenException("项目已过出发时间, projectId=" + id);
         }
 
         if (ProjectStatus.CONFIRMED.name().equals(project.getStatus())
@@ -376,7 +435,10 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     private void syncProjectGroupChat(Project project, ProjectStatus status) {
-        if (status == ProjectStatus.CONFIRMED) {
+        if (status == ProjectStatus.OPEN
+                || status == ProjectStatus.MATCHING
+                || status == ProjectStatus.CONFIRMED
+                || status == ProjectStatus.IN_PROGRESS) {
             chatService.createProjectGroup(
                     project.getId(),
                     project.getOwnerAccountId(),
@@ -427,10 +489,10 @@ public class ProjectServiceImpl implements ProjectService {
 
         if (project.getMaxMembers() != null) {
             if (project.getMaxMembers() <= 0) {
-                throw new IllegalArgumentException("订单人数上限必须是正整数");
+                throw new IllegalArgumentException("项目人数上限必须是正整数");
             }
             if (representedCount > project.getMaxMembers()) {
-                throw new IllegalArgumentException("代表参团人数不能超过订单人数上限");
+                throw new IllegalArgumentException("代表参团人数不能超过项目人数上限");
             }
         }
         project.setCurrentMembers(representedCount);
@@ -442,7 +504,7 @@ public class ProjectServiceImpl implements ProjectService {
             project.setTitle(tag == null ? "研学路线拼单" : tag + "研学拼单");
         }
         if (project.getTitle().length() > 100) {
-            throw new IllegalArgumentException("订单标题长度不能超过100个字符");
+            throw new IllegalArgumentException("项目标题长度不能超过100个字符");
         }
     }
 
@@ -491,6 +553,151 @@ public class ProjectServiceImpl implements ProjectService {
             return;
         }
         throw new ForbiddenException("仅项目拥有者或已接单领队可更新项目状态");
+    }
+
+    private void enrichProject(Project project, Account viewer) {
+        Account publisher = selectAccount(project.getOwnerAccountId());
+        Account leader = selectAccount(project.getLeaderAccountId());
+        List<RouteAttraction> routeAttractions = project.getRouteId() == null
+                ? Collections.emptyList()
+                : routeService.getRouteById(project.getRouteId());
+        if (routeAttractions == null) {
+            routeAttractions = Collections.emptyList();
+        }
+
+        ProjectMember membership = projectMemberMapper.selectByProjectIdAndAccountId(
+                project.getId(),
+                viewer.getId()
+        );
+        boolean activeMember = membership != null
+                && ("JOINED".equalsIgnoreCase(membership.getJoinStatus())
+                || "COMPLETED".equalsIgnoreCase(membership.getJoinStatus()));
+        ChatSession group = chatSessionMapper.selectByProjectId(project.getId());
+
+        project.setPublisherName(publisher == null ? null : publisher.getUsername());
+        project.setPublisherAvatarUrl(publisher == null ? null : publisher.getAvatarUrl());
+        project.setLeaderName(leader == null ? null : leader.getUsername());
+        project.setLeaderAvatarUrl(leader == null ? null : leader.getAvatarUrl());
+        project.setAttractionNames(routeAttractions.stream()
+                .map(RouteAttraction::getName)
+                .filter(Objects::nonNull)
+                .filter(name -> !name.isBlank())
+                .toList());
+        project.setRouteAttractions(routeAttractions);
+        project.setEstimatedDurationMinutes(routeAttractions.stream()
+                .map(RouteAttraction::getRecommendedDuration)
+                .filter(Objects::nonNull)
+                .filter(duration -> duration > 0)
+                .mapToInt(Integer::intValue)
+                .sum());
+        project.setAvailabilityStatus(resolveAvailabilityStatus(project, viewer.getId()));
+        project.setViewerRole(resolveViewerRole(project, viewer.getId(), activeMember));
+        project.setCanAccept(isLeader(viewer)
+                && "AVAILABLE".equals(project.getAvailabilityStatus()));
+        project.setCanJoin(canJoin(project, viewer, membership));
+        project.setCanManageGroup(
+                ROLE_ADMIN.equalsIgnoreCase(viewer.getRole())
+                        || Objects.equals(viewer.getId(), project.getOwnerAccountId())
+        );
+        project.setGroupId(group != null && "ACTIVE".equalsIgnoreCase(group.getStatus())
+                ? group.getId()
+                : null);
+    }
+
+    private boolean canJoin(Project project, Account viewer, ProjectMember membership) {
+        boolean canParticipate = viewer.getRole() != null
+                && ("USER".equalsIgnoreCase(viewer.getRole())
+                || "BOTH".equalsIgnoreCase(viewer.getRole()));
+        if (!canParticipate
+                || membership != null
+                || Objects.equals(viewer.getId(), project.getOwnerAccountId())) {
+            return false;
+        }
+        ProjectStatus status = ProjectStatus.from(project.getStatus());
+        if (status != ProjectStatus.OPEN && status != ProjectStatus.MATCHING) {
+            return false;
+        }
+        if (isProjectExpired(project)) {
+            return false;
+        }
+        return project.getMaxMembers() == null
+                || project.getCurrentMembers() == null
+                || project.getCurrentMembers() < project.getMaxMembers();
+    }
+
+    private String resolveViewerRole(Project project, Long accountId, boolean activeMember) {
+        if (Objects.equals(accountId, project.getOwnerAccountId())) {
+            return "PUBLISHER";
+        }
+        if (Objects.equals(accountId, project.getLeaderAccountId())) {
+            return "LEADER";
+        }
+        return activeMember ? "PARTICIPANT" : "NONE";
+    }
+
+    private String resolveAvailabilityStatus(Project project, Long accountId) {
+        if (isProjectExpired(project)) {
+            return "EXPIRED";
+        }
+        if (project.getLeaderAccountId() != null) {
+            return project.getLeaderAccountId().equals(accountId)
+                    ? "ACCEPTED_BY_ME"
+                    : "TAKEN_BY_OTHER";
+        }
+        ProjectStatus status = ProjectStatus.from(project.getStatus());
+        return status == ProjectStatus.OPEN || status == ProjectStatus.MATCHING
+                ? "AVAILABLE"
+                : "EXPIRED";
+    }
+
+    private boolean isProjectExpired(Project project) {
+        ProjectStatus status = ProjectStatus.from(project.getStatus());
+        return status == ProjectStatus.DONE
+                || status == ProjectStatus.CANCELLED
+                || hasDeparted(project);
+    }
+
+    private Account requireAccount(Long accountId) {
+        if (accountId == null) {
+            throw new UnauthorizedException("未认证用户");
+        }
+        Account account = accountMapper.selectById(accountId);
+        if (account == null) {
+            throw new ResourceNotFoundException("账号不存在, accountId=" + accountId);
+        }
+        return account;
+    }
+
+    private Account selectAccount(Long accountId) {
+        return accountId == null ? null : accountMapper.selectById(accountId);
+    }
+
+    private boolean isLeader(Account account) {
+        if (account.getRole() == null) {
+            return false;
+        }
+        String role = account.getRole().toUpperCase(Locale.ROOT);
+        return ROLE_LEADER.equals(role) || "BOTH".equals(role);
+    }
+
+    private String normalizeRelation(String relation) {
+        String normalized = trimToNull(relation);
+        normalized = normalized == null ? "ALL" : normalized.toUpperCase(Locale.ROOT);
+        if (!Set.of("ALL", "PUBLISHED", "LEADING", "JOINED").contains(normalized)) {
+            throw new IllegalArgumentException("无效的项目关系: " + relation);
+        }
+        return normalized;
+    }
+
+    private int normalizePage(Integer pageNum) {
+        return pageNum == null || pageNum < 1 ? 1 : pageNum;
+    }
+
+    private int normalizePageSize(Integer pageSize) {
+        if (pageSize == null || pageSize < 1) {
+            return 10;
+        }
+        return Math.min(pageSize, 100);
     }
 
     private ProjectPreference resolveProjectPreference(Long accountId) {

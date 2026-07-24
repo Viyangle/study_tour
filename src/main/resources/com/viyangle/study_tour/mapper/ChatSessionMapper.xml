@@ -24,10 +24,30 @@
         limit 1
     </select>
 
+    <update id="updateLeaderByProjectId">
+        update chat_sessions
+        set leader_account_id = #{leaderAccountId}
+        where project_id = #{projectId}
+    </update>
+
+    <update id="reactivateByProjectId">
+        update chat_sessions
+        set status = 'ACTIVE', disabled_at = null
+        where project_id = #{projectId}
+          and status = 'DISABLED'
+    </update>
+
     <update id="deactivateByProjectId">
         update chat_sessions
         set status = 'DISABLED', disabled_at = coalesce(disabled_at, current_timestamp)
         where project_id = #{projectId}
+          and status = 'ACTIVE'
+    </update>
+
+    <update id="deactivateById">
+        update chat_sessions
+        set status = 'DISABLED', disabled_at = coalesce(disabled_at, current_timestamp)
+        where id = #{id}
           and status = 'ACTIVE'
     </update>
 
@@ -36,14 +56,25 @@
     </delete>
 
     <select id="selectByParticipantAccountId" resultType="com.viyangle.study_tour.pojo.ChatSession">
-        select distinct cs.id, cs.project_id, cs.user_account_id, cs.leader_account_id,
-                        cs.status, cs.disabled_at, cs.created_at,
-                        p.title as project_title,
-                        latest_message.content as latest_message,
-                        latest_message.sent_at as latest_message_at,
-                        latest_message.sender_account_id as latest_message_sender_account_id
+        select cs.id, cs.project_id, cs.user_account_id, cs.leader_account_id,
+               cs.status, cs.disabled_at, cs.created_at,
+               p.title as project_title,
+               latest_message.content as latest_message,
+               latest_message.sent_at as latest_message_at,
+               latest_message.sender_account_id as latest_message_sender_account_id,
+               current_member.member_role as current_user_role,
+               (
+                   select count(*)
+                   from chat_group_members member_count
+                   where member_count.group_id = cs.id
+                     and member_count.member_status = 'JOINED'
+               ) as member_count
         from chat_sessions cs
         inner join projects p on p.id = cs.project_id
+        inner join chat_group_members current_member
+                on current_member.group_id = cs.id
+               and current_member.account_id = #{accountId}
+               and current_member.member_status = 'JOINED'
         left join chat_messages latest_message
                on latest_message.id = (
                    select cm.id
@@ -52,58 +83,91 @@
                    order by cm.sent_at desc, cm.id desc
                    limit 1
                )
-        left join project_members pm
-               on pm.project_id = cs.project_id
-              and pm.account_id = #{accountId}
-              and pm.join_status = 'JOINED'
-        where p.owner_account_id = #{accountId}
-           or p.leader_account_id = #{accountId}
-           or pm.id is not null
+        where cs.status = 'ACTIVE'
         order by coalesce(latest_message.sent_at, cs.created_at) desc
     </select>
 
     <select id="countParticipant" resultType="int">
         select count(*)
+        from chat_group_members
+        where group_id = #{sessionId}
+          and account_id = #{accountId}
+          and member_status = 'JOINED'
+    </select>
+
+    <select id="selectEligibleMemberRole" resultType="java.lang.String">
+        select case
+                   when p.owner_account_id = #{accountId} then 'PUBLISHER'
+                   when p.leader_account_id = #{accountId} then 'LEADER'
+                   when pm.id is not null then 'PARTICIPANT'
+                   else null
+               end
         from chat_sessions cs
         inner join projects p on p.id = cs.project_id
         left join project_members pm
-               on pm.project_id = cs.project_id
+               on pm.project_id = p.id
               and pm.account_id = #{accountId}
-              and pm.join_status = 'JOINED'
+              and pm.join_status in ('JOINED', 'COMPLETED')
         where cs.id = #{sessionId}
-          and (p.owner_account_id = #{accountId}
-            or p.leader_account_id = #{accountId}
-            or pm.id is not null)
+          and (
+              p.owner_account_id = #{accountId}
+              or p.leader_account_id = #{accountId}
+              or pm.id is not null
+          )
+        limit 1
     </select>
+
+    <insert id="upsertGroupMember">
+        insert into chat_group_members
+        (group_id, account_id, member_role, member_status)
+        values
+        (#{sessionId}, #{accountId}, #{memberRole}, 'JOINED')
+        on duplicate key update
+            member_role = case
+                when chat_group_members.member_role = 'PUBLISHER'
+                     or values(member_role) = 'PUBLISHER' then 'PUBLISHER'
+                when chat_group_members.member_role = 'LEADER'
+                     or values(member_role) = 'LEADER' then 'LEADER'
+                else 'PARTICIPANT'
+            end,
+            member_status = 'JOINED',
+            joined_at = current_timestamp
+    </insert>
+
+    <insert id="backfillProjectMembers">
+        insert into chat_group_members
+        (group_id, account_id, member_role, member_status)
+        select #{sessionId}, pm.account_id, 'PARTICIPANT', 'JOINED'
+        from project_members pm
+        where pm.project_id = #{projectId}
+          and pm.join_status in ('JOINED', 'COMPLETED')
+        on duplicate key update
+            member_status = 'JOINED'
+    </insert>
 
     <select id="selectGroupMembers" resultType="com.viyangle.study_tour.pojo.ChatGroupMember">
         select a.id as account_id,
                a.username,
                a.avatar_url,
-               case
-                   when a.id = p.leader_account_id and pm.id is not null then 'LEADER_PARTICIPANT'
-                   when a.id = p.leader_account_id then 'LEADER'
-                   else 'PARTICIPANT'
-               end as member_role,
+               gm.member_role,
                coalesce(pm.represented_count, 0) as represented_count
         from chat_sessions cs
         inner join projects p on p.id = cs.project_id
-        inner join accounts a
-                on a.id = p.leader_account_id
-                or exists (
-                    select 1
-                    from project_members member_check
-                    where member_check.project_id = p.id
-                      and member_check.account_id = a.id
-                      and member_check.join_status = 'JOINED'
-                )
+        inner join chat_group_members gm
+                on gm.group_id = cs.id
+               and gm.member_status = 'JOINED'
+        inner join accounts a on a.id = gm.account_id
         left join project_members pm
                on pm.project_id = p.id
               and pm.account_id = a.id
-              and pm.join_status = 'JOINED'
+              and pm.join_status in ('JOINED', 'COMPLETED')
         where cs.id = #{sessionId}
-        order by case when a.id = p.leader_account_id then 0 else 1 end,
-                 pm.joined_at asc,
+        order by case gm.member_role
+                     when 'PUBLISHER' then 0
+                     when 'LEADER' then 1
+                     else 2
+                 end,
+                 gm.joined_at asc,
                  a.id asc
     </select>
 

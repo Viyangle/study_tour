@@ -194,63 +194,23 @@
 
 领队端仓库当前没有网络层，以下接口按页面交互提供，可直接作为 Retrofit 接口定义。所有接口都需要 `Authorization: Bearer <token>`；`LEADER` 和 `BOTH` 角色可访问，账号 ID 均从 JWT 获取。
 
-### 可接订单列表
+### 可接项目与项目详情
 
-- 方法：`GET`
-- 路径：`/leader/orders`
-- 参数：`pageNum`（默认 `1`）、`pageSize`（默认 `10`，最大 `100`）
-- 描述：仅返回尚无领队、状态为 `OPEN/MATCHING` 且未过出发时间的订单；按领队地区和标签偏好排序。
+领队端与普通用户端统一使用项目接口，不再维护独立订单模型：
 
-```http
-GET /leader/orders?pageNum=1&pageSize=10
-```
+- `GET /projects/available`：领队可接项目分页列表
+- `GET /projects/{projectId}`：项目聚合详情
+- `GET /projects/mine`：与当前账号有关的项目
 
-列表项同时包含订单、发起人和路线卡片所需数据：
-
-```json
-{
-  "id": 20,
-  "routeId": 38,
-  "ownerAccountId": 86,
-  "customerName": "刘佳琪",
-  "customerAvatarUrl": null,
-  "title": "南京博物院深度讲解研学团",
-  "departureDate": "2026-08-09",
-  "departureTime": "08:30:00",
-  "startPointType": "MANUAL",
-  "startPoint": "南京南站",
-  "leaderRequirements": "有博物馆讲解经验",
-  "participantRequirements": "请准时集合",
-  "attractionNames": ["南京博物院", "六朝博物馆"],
-  "routeAttractions": [],
-  "estimatedDurationMinutes": 300,
-  "tag": "博物馆研学",
-  "peopleCount": 6,
-  "maxMembers": 20,
-  "projectStatus": "OPEN",
-  "orderStatus": "AVAILABLE",
-  "canAccept": true
-}
-```
-
-`orderStatus` 可为 `AVAILABLE`、`ACCEPTED_BY_ME`、`TAKEN_BY_OTHER`、`EXPIRED`。可接列表固定返回 `AVAILABLE`；其余状态用于详情页在并发接单后刷新按钮状态。
-
-### 领队订单详情
-
-- 方法：`GET`
-- 路径：`/leader/orders/{projectId}`
-- 描述：返回与列表相同的聚合结构，其中 `routeAttractions` 是完整、按游览顺序排列的路线节点。
-
-```http
-GET /leader/orders/20
-```
+响应直接使用 `Project`，并附带 `availabilityStatus`、`viewerRole`、操作权限和
+`groupId`。
 
 ### 接单
 
 - 方法：`POST`
 - 路径：`/projects/{projectId}/accept`
 - 请求体：无
-- 描述：复用项目接单接口。后端使用数据库行锁保证同一订单只能被一个领队接到；已过出发时间、已被他人接单或状态不可转换时返回失败。
+- 描述：后端使用数据库行锁保证同一项目只能被一个领队接到；已过出发时间、已有领队或状态不可转换时返回失败。
 
 ```http
 POST /projects/20/accept
@@ -275,8 +235,8 @@ Authorization: Bearer <token>
     "intro": "南京研学领队",
     "averageRating": 4.75,
     "ratingCount": 12,
-    "acceptedOrderCount": 18,
-    "completedOrderCount": 15,
+    "acceptedProjectCount": 18,
+    "completedProjectCount": 15,
     "tagNames": ["历史人文", "博物馆研学"],
     "recentReviews": []
   }
@@ -317,7 +277,57 @@ Authorization: Bearer <token>
 
 前端仓库中的 `txtPrice`、路线图片和评价标签目前只有布局占位，没有对应请求字段或业务数据模型，因此本次没有虚构价格、图片或评价标签接口。
 
-`currentMembers` 是所有 `JOINED/COMPLETED` 成员的 `representedCount` 之和，不是账号数量；`maxMembers=null` 表示订单不设总人数上限。
+`currentMembers` 是所有 `JOINED/COMPLETED` 成员的 `representedCount` 之和，不是账号数量；`maxMembers=null` 表示项目不设总人数上限。
+
+## 项目聚合接口
+
+以下接口均从 JWT 获取当前账号，不再要求前端传 `accountId`。
+
+### 可接项目
+
+```http
+GET /projects/available?pageNum=1&pageSize=10
+Authorization: Bearer <leader-token>
+```
+
+仅 `LEADER/BOTH` 可访问，返回未来、无领队且状态为 `OPEN/MATCHING` 的项目。
+
+### 我的项目
+
+```http
+GET /projects/mine?relation=ALL&status=OPEN&pageNum=1&pageSize=10
+Authorization: Bearer <token>
+```
+
+`relation` 支持：
+
+- `ALL`：与当前账号有关的全部项目
+- `PUBLISHED`：我发布的项目
+- `LEADING`：我作为领队的项目
+- `JOINED`：我作为参与者加入的项目
+
+统一分页响应位于 `data`：
+
+```json
+{
+  "items": [],
+  "total": 10,
+  "pageNum": 1,
+  "pageSize": 10,
+  "pages": 1
+}
+```
+
+每个 `Project` 额外包含 `publisherName`、`leaderName`、`availabilityStatus`、
+`viewerRole`、`canAccept`、`canJoin`、`canManageGroup` 和 `groupId`，前端可直接据此
+展示项目信息、控制按钮和区分 `PUBLISHER/LEADER/PARTICIPANT` 身份。
+
+### 项目详情
+
+```http
+GET /projects/{projectId}
+Authorization: Bearer <token>
+```
 
 ## 4. 接口列表
 
@@ -1048,7 +1058,7 @@ GET /projects/1/members
 - 方法：`POST`
 - 路径：`/projects/{id}/join`
 - 权限：`USER`；账号从 JWT 获取，无需在请求体传 `accountId`
-- 描述：普通用户携带自己代表的实际参团人数加入项目；后端会锁定订单并校验人数上限
+- 描述：普通用户携带自己代表的实际参团人数加入项目；后端会锁定项目并校验人数上限
 
 请求示例：
 
@@ -1333,7 +1343,7 @@ GET /routes/17
 }
 ```
 
-#### 4.3.3 发布路线为订单
+#### 4.3.3 发布路线为项目
 
 - 方法：`POST`
 - 路径：`/routes/{routeId}/publish`
@@ -1365,7 +1375,7 @@ GET /routes/17
 - `leaderRequirements`、`participantRequirements`：可选
 - `maxMembers`：可选；不传或传 `null` 表示不限额
 
-响应中的 `data` 为订单 ID。
+响应中的 `data` 为项目 ID。
 
 #### 4.3.4 手动生成路线
 
@@ -1740,18 +1750,53 @@ GET /reviews/average-score/3
 
 ### 4.5 聊天相关
 
-聊天采用项目群聊，不提供自由建群或好友关系接口：
+聊天采用“一项目一群”：
 
-- 项目确认领队（状态进入 `CONFIRMED`）时，后端自动创建该项目唯一群聊
-- 项目发起人、`JOINED` 状态的项目成员和已确认领队自动拥有群聊权限，后续加入的项目成员无需手动加群
-- 项目进入 `DONE` 或 `CANCELLED` 后，后端彻底删除群聊和对应消息
-- 升级已有数据库前依次执行 `scripts/alter_projects_add_participation_details.sql`、`scripts/alter_chat_sessions_to_project_groups.sql`
+- 项目发布时自动创建唯一群聊，发布者身份为 `PUBLISHER`
+- 项目成员加入后自动加入群聊，身份为 `PARTICIPANT`
+- 领队接单后自动加入群聊，身份为 `LEADER`
+- 同时提供显式创建、加入接口，均为幂等操作
+- 项目进入 `DONE/CANCELLED` 或发布者删除群组后，群组软删除并停止发消息，历史消息保留
+- 升级已有数据库依次执行
+  `scripts/alter_projects_add_participation_details.sql`、
+  `scripts/alter_chat_sessions_to_project_groups.sql`、
+  `scripts/alter_chat_group_lifecycle.sql`
+
+#### 4.5.0 群组生命周期
+
+创建或恢复项目群，仅项目发布者可操作：
+
+```http
+POST /chat/groups
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "projectId": 39
+}
+```
+
+加入群组，仅项目发布者、领队或已参团成员可操作：
+
+```http
+POST /chat/groups/{sessionId}/join
+Authorization: Bearer <token>
+```
+
+删除群组，仅项目发布者或管理员可操作：
+
+```http
+DELETE /chat/groups/{sessionId}
+Authorization: Bearer <token>
+```
+
+`GET /chat/groups` 是 `GET /chat/sessions` 的群组语义别名。
 
 #### 4.5.1 查询群聊列表
 
 - 方法：`GET`
 - 路径：`/chat/sessions`
-- 描述：查询当前登录用户作为项目成员或领队参与的项目群聊（账号从 JWT 自动识别）
+- 描述：查询当前登录用户已加入的活动项目群聊（账号从 JWT 自动识别）
 
 请求示例：
 
@@ -1777,7 +1822,9 @@ GET /chat/sessions
             "leaderAccountId": 3,
             "status": "ACTIVE",
             "disabledAt": null,
-            "createdAt": "2026-03-30T19:45:34"
+            "createdAt": "2026-03-30T19:45:34",
+            "currentUserRole": "PUBLISHER",
+            "memberCount": 3
         }
     ]
 }
@@ -1800,7 +1847,7 @@ GET /chat/sessions
       "accountId": 2,
       "username": "张三",
       "avatarUrl": null,
-      "memberRole": "PARTICIPANT",
+      "memberRole": "PUBLISHER",
       "representedCount": 3,
       "representationText": "该用户代表3人"
     }
@@ -1813,7 +1860,7 @@ GET /chat/sessions
 - 方法：`POST`
 - 路径：`/chat/messages`
 - 说明：`senderAccountId` 由 JWT 自动识别，前端无需传
-- 描述：项目群成员发送消息（目前只支持文本）；订单完成后会话不存在，不能继续发送
+- 描述：项目群成员发送消息（目前只支持文本）；群组停用后不能继续发送
 
 请求示例：
 
@@ -1839,7 +1886,7 @@ GET /chat/sessions
 
 - 方法：`GET`
 - 路径：`/chat/sessions/{sessionId}/messages`
-- 描述：项目群成员拉取指定群聊的历史消息；订单完成后群聊与消息均被删除
+- 描述：项目群成员拉取指定群聊的历史消息；群组停用后历史消息仍保留
 
 请求示例：
 

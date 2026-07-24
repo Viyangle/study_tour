@@ -8,7 +8,6 @@ import com.viyangle.study_tour.utils.SecurityContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,25 +19,6 @@ public class LeaderController {
 
     @Autowired
     private LeaderService leaderService;
-
-    @GetMapping("/orders")
-    @OperationLog(value = "查询领队可接订单", type = "PROJECT_QUERY")
-    @RequireRole({"LEADER"})
-    public Result getAvailableOrders(@RequestParam(defaultValue = "1") Integer pageNum,
-                                     @RequestParam(defaultValue = "10") Integer pageSize) {
-        Long accountId = SecurityContextUtil.currentAccountId();
-        log.info("查询领队可接订单: accountId={}, pageNum={}, pageSize={}", accountId, pageNum, pageSize);
-        return Result.success(leaderService.getAvailableOrders(accountId, pageNum, pageSize));
-    }
-
-    @GetMapping("/orders/{projectId}")
-    @OperationLog(value = "查询领队订单详情", type = "PROJECT_QUERY")
-    @RequireRole({"LEADER"})
-    public Result getOrderDetail(@PathVariable Long projectId) {
-        Long accountId = SecurityContextUtil.currentAccountId();
-        log.info("查询领队订单详情: accountId={}, projectId={}", accountId, projectId);
-        return Result.success(leaderService.getOrderDetail(accountId, projectId));
-    }
 
     @GetMapping("/profile")
     @OperationLog(value = "查询领队资料看板", type = "LEADER_QUERY")

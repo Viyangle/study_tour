@@ -11,7 +11,7 @@ public class ChatGroupMember {
     private Long accountId;
     private String username;
     private String avatarUrl;
-    /** PARTICIPANT、LEADER 或 LEADER_PARTICIPANT。 */
+    /** PUBLISHER、LEADER 或 PARTICIPANT。 */
     private String memberRole;
     private Integer representedCount;
 
