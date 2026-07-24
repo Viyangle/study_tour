@@ -41,4 +41,14 @@ public interface KnowledgeGraphRecommendService {
      * @return 带解释的推荐项目列表
      */
     List<RecommendedProject> recommendWithExplanation(Long accountId, int limit);
+
+    /**
+     * 返回按关键字筛选后、带解释的推荐结果。
+     *
+     * @param accountId 当前用户ID（可为null）
+     * @param keyword   项目关键字（可为null）
+     * @param limit     返回数量上限
+     * @return 带解释的推荐项目列表
+     */
+    List<RecommendedProject> recommendWithExplanation(Long accountId, String keyword, int limit);
 }

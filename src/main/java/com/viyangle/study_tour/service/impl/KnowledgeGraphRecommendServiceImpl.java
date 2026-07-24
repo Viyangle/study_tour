@@ -518,6 +518,11 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
 
     @Override
     public List<RecommendedProject> recommendWithExplanation(Long accountId, int limit) {
+        return recommendWithExplanation(accountId, null, limit);
+    }
+
+    @Override
+    public List<RecommendedProject> recommendWithExplanation(Long accountId, String keyword, int limit) {
         if (!graph.isLoaded()) {
             log.warn("知识图谱未加载，返回空推荐");
             return List.of();
@@ -527,8 +532,17 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
         List<String> userTags = accountId != null ? graph.getUserTagPrefs(accountId) : List.of();
         String userRegion = accountId != null ? graph.getUserRegion(accountId) : null;
 
-        // 复用基础推荐逻辑获取项目列表
-        List<Project> projects = recommendProjects(accountId, maxLimit);
+        String normalizedKeyword = keyword == null ? null : keyword.trim().toLowerCase(Locale.ROOT);
+        List<Project> projects;
+        if (normalizedKeyword == null || normalizedKeyword.isEmpty()) {
+            projects = recommendProjects(accountId, maxLimit);
+        } else {
+            // 先取得完整的推荐候选，再过滤，避免关键字结果被推荐数量上限提前截断。
+            projects = recommendProjects(accountId, Integer.MAX_VALUE).stream()
+                    .filter(project -> matchesKeyword(project, normalizedKeyword))
+                    .limit(maxLimit)
+                    .collect(Collectors.toList());
+        }
 
         // 为每个项目生成解释
         List<RecommendedProject> result = new ArrayList<>();
@@ -541,6 +555,19 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
             result.add(new RecommendedProject(project, score, reasons));
         }
         return result;
+    }
+
+    private boolean matchesKeyword(Project project, String normalizedKeyword) {
+        return containsKeyword(project.getTitle(), normalizedKeyword)
+                || containsKeyword(project.getTag(), normalizedKeyword)
+                || containsKeyword(project.getStatus(), normalizedKeyword)
+                || containsKeyword(project.getStartPoint(), normalizedKeyword)
+                || containsKeyword(project.getLeaderRequirements(), normalizedKeyword)
+                || containsKeyword(project.getParticipantRequirements(), normalizedKeyword);
+    }
+
+    private boolean containsKeyword(String value, String normalizedKeyword) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(normalizedKeyword);
     }
 
     /**

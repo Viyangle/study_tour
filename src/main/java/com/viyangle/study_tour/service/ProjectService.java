@@ -14,6 +14,11 @@ public interface ProjectService {
 
     List<Project> getPagedProjectsByPreference(Long accountId, Integer pageNum, Integer pageSize);
 
+    List<Project> getPagedProjectsByPreference(Long accountId,
+                                               Integer pageNum,
+                                               Integer pageSize,
+                                               String keyword);
+
     PageResponse<Project> getAvailableProjectPage(Long accountId, Integer pageNum, Integer pageSize);
 
     PageResponse<Project> getMyProjects(Long accountId,

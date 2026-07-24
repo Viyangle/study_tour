@@ -121,6 +121,32 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     public List<Project> getPagedProjectsByPreference(Long accountId, Integer pageNum, Integer pageSize) {
+        return getPagedProjectsByPreference(accountId, pageNum, pageSize, null);
+    }
+
+    @Override
+    public List<Project> getPagedProjectsByPreference(Long accountId,
+                                                      Integer pageNum,
+                                                      Integer pageSize,
+                                                      String keyword) {
+        if (trimToNull(keyword) != null) {
+            return filterProjects(
+                    accountId,
+                    pageNum,
+                    pageSize,
+                    keyword,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+        }
+
         int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
         int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
 

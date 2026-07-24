@@ -828,6 +828,12 @@ curl -X POST "http://10.6.86.86/upload" \
 GET /projects?accountId=6&pageNum=1&pageSize=10
 ```
 
+请求示例（按关键字搜索）：
+
+```http
+GET /projects?accountId=6&keyword=南京&pageNum=1&pageSize=10
+```
+
 请求示例（带推荐理由）：
 
 ```http
@@ -839,6 +845,7 @@ GET /projects?accountId=6&pageNum=1&pageSize=10&withExplanation=true
 - `accountId`：用户 ID（必填）
 - `pageNum`：页码（可选，默认 `1`， 起始为`1`）
 - `pageSize`：每页数量（可选，默认 `10`）
+- `keyword`：项目关键字（可选，不区分英文大小写，模糊匹配标题、标签、状态、出发点、领队要求和参与者要求）
 - `withExplanation`：是否返回推荐理由（可选，默认 `false`；传 `true` 时返回推荐分数和理由）
 
 响应结果：（好吧目前没有太多project）
@@ -905,7 +912,7 @@ GET /projects/filter?accountId=6&keyword=南京&regionCode=320100&tag=博物馆�
 - `accountId`：用户 ID（可选，用于默认排序）
 - `pageNum`：页码（可选，默认 `1`，起始为 `1`）
 - `pageSize`：每页数量（可选，默认 `10`）
-- `keyword`：关键字（可选，匹配 `title/tag/status`）
+- `keyword`：关键字（可选，不区分英文大小写，模糊匹配标题、标签、状态、出发点、领队要求和参与者要求）
 - `regionCode`：地区编码（可选，精确匹配或同城市前四位匹配；传入后覆盖账号地区）
 - `tag`：研学标签（可选，精确匹配；传入后覆盖账号标签偏好）
 - `status`：项目状态（可选，`OPEN/MATCHING/CONFIRMED/IN_PROGRESS/DONE/CANCELLED`）

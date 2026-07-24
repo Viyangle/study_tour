@@ -233,9 +233,12 @@
         <where>
             <if test="keyword != null and keyword != ''">
                 and (
-                    title like concat('%', #{keyword}, '%')
-                    or tag like concat('%', #{keyword}, '%')
-                    or status like concat('%', #{keyword}, '%')
+                    lower(title) like lower(concat('%', #{keyword}, '%'))
+                    or lower(tag) like lower(concat('%', #{keyword}, '%'))
+                    or lower(status) like lower(concat('%', #{keyword}, '%'))
+                    or lower(start_point) like lower(concat('%', #{keyword}, '%'))
+                    or lower(leader_requirements) like lower(concat('%', #{keyword}, '%'))
+                    or lower(participant_requirements) like lower(concat('%', #{keyword}, '%'))
                 )
             </if>
             <if test="filterRegionCode != null and filterRegionCode != ''">

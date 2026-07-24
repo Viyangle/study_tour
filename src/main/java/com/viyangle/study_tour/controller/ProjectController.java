@@ -37,13 +37,15 @@ public class ProjectController {
     public Result getAllProjects(@RequestParam(defaultValue = "1") Integer pageNum,
                                  @RequestParam(defaultValue = "10") Integer pageSize,
                                  @RequestParam Long accountId,
+                                 @RequestParam(required = false) String keyword,
                                  @RequestParam(defaultValue = "false") Boolean withExplanation) {
-        log.info("分页获取项目, accountId={}, pageNum={}, pageSize={}, withExplanation={}", accountId, pageNum, pageSize, withExplanation);
+        log.info("分页获取项目, accountId={}, keyword={}, pageNum={}, pageSize={}, withExplanation={}",
+                accountId, keyword, pageNum, pageSize, withExplanation);
         if (Boolean.TRUE.equals(withExplanation)) {
             int limit = pageNum * pageSize;
-            return Result.success(recommendService.recommendWithExplanation(accountId, limit));
+            return Result.success(recommendService.recommendWithExplanation(accountId, keyword, limit));
         }
-        return Result.success(projectService.getPagedProjectsByPreference(accountId, pageNum, pageSize));
+        return Result.success(projectService.getPagedProjectsByPreference(accountId, pageNum, pageSize, keyword));
     }
 
     @GetMapping("/filter")
