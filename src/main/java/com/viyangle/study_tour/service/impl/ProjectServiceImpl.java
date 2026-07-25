@@ -563,7 +563,7 @@ public class ProjectServiceImpl implements ProjectService {
         if (leader == null) {
             throw new ResourceNotFoundException("领队账号不存在, accountId=" + leaderAccountId);
         }
-        if (!ROLE_LEADER.equals(leader.getRole())) {
+        if (!isLeader(leader)) {
             throw new IllegalArgumentException("指定账号不是领队, accountId=" + leaderAccountId);
         }
     }

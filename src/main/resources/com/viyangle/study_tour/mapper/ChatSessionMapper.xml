@@ -95,6 +95,23 @@
           and member_status = 'JOINED'
     </select>
 
+    <select id="selectGroupMemberRole" resultType="java.lang.String">
+        select member_role
+        from chat_group_members
+        where group_id = #{sessionId}
+          and account_id = #{accountId}
+        limit 1
+    </select>
+
+    <update id="leaveGroupParticipant">
+        update chat_group_members
+        set member_status = 'LEFT'
+        where group_id = #{sessionId}
+          and account_id = #{accountId}
+          and member_role = 'PARTICIPANT'
+          and member_status = 'JOINED'
+    </update>
+
     <select id="selectEligibleMemberRole" resultType="java.lang.String">
         select case
                    when p.owner_account_id = #{accountId} then 'PUBLISHER'
@@ -142,7 +159,7 @@
         where pm.project_id = #{projectId}
           and pm.join_status in ('JOINED', 'COMPLETED')
         on duplicate key update
-            member_status = 'JOINED'
+            member_role = chat_group_members.member_role
     </insert>
 
     <select id="selectGroupMembers" resultType="com.viyangle.study_tour.pojo.ChatGroupMember">

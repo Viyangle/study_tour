@@ -128,7 +128,7 @@ public class ProjectController {
 
     @PostMapping
     @OperationLog(value = "创建项目", type = "PROJECT_CREATE")
-    @RequireRole({"USER", "LEADER"})
+    @RequireRole({"USER"})
     public Result createProject(@RequestBody Project project) {
         log.info("创建项目");
         return Result.success(projectService.createProject(project));
@@ -150,7 +150,7 @@ public class ProjectController {
 
     @PostMapping("/{id}/leader")
     @OperationLog(value = "指定项目领队", type = "PROJECT_UPDATE")
-    @RequireRole({"USER", "LEADER"})
+    @RequireRole({"USER"})
     public Result leaderJoinProject(@PathVariable Long id, @RequestBody Project project) {
         log.info("项目组长加入项目: {}", id);
         project.setId(id);

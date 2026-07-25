@@ -52,6 +52,14 @@ public class ChatController {
         return Result.success(chatService.joinGroup(sessionId, currentAccountId));
     }
 
+    @DeleteMapping("/groups/{sessionId}/members/me")
+    public Result leaveGroup(@PathVariable Long sessionId) {
+        Long currentAccountId = SecurityContextUtil.currentAccountId();
+        log.info("退出项目群组: sessionId={}, accountId={}", sessionId, currentAccountId);
+        chatService.leaveGroup(sessionId, currentAccountId);
+        return Result.success();
+    }
+
     @DeleteMapping("/groups/{sessionId}")
     public Result deleteGroup(@PathVariable Long sessionId) {
         Long currentAccountId = SecurityContextUtil.currentAccountId();

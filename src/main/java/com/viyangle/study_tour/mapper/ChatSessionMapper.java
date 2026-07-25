@@ -33,6 +33,12 @@ public interface ChatSessionMapper {
 
     int countParticipant(@Param("sessionId") Long sessionId, @Param("accountId") Long accountId);
 
+    String selectGroupMemberRole(@Param("sessionId") Long sessionId,
+                                 @Param("accountId") Long accountId);
+
+    int leaveGroupParticipant(@Param("sessionId") Long sessionId,
+                              @Param("accountId") Long accountId);
+
     String selectEligibleMemberRole(@Param("sessionId") Long sessionId,
                                     @Param("accountId") Long accountId);
 

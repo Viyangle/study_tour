@@ -14,6 +14,9 @@ public interface ChatService {
     /** 符合项目关系的账号显式加入群组，重复加入按成功处理。 */
     ChatSession joinGroup(Long sessionId, Long currentAccountId);
 
+    /** 普通参团成员退出群聊，不影响其项目成员关系。 */
+    void leaveGroup(Long sessionId, Long currentAccountId);
+
     /** 项目发布者或管理员删除群组；底层使用软删除保留历史消息。 */
     void deleteGroup(Long sessionId, Long currentAccountId, String currentRole);
 

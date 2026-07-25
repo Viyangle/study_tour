@@ -374,7 +374,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "phone": "10010001003",
+  "phone": "19910001003",
   "password": "123456"
 }
 ```
@@ -1028,7 +1028,7 @@ GET /projects/1/members
 
 - 方法：`POST`
 - 路径：`/projects`
-- 权限：`USER/LEADER`；`ownerAccountId` 由当前登录用户决定（前端传入会被覆盖）
+- 权限：`USER`（`BOTH` 继承该权限）；`ownerAccountId` 由当前登录用户决定（前端传入会被覆盖）
 - 描述：兼容的项目创建接口；新前端优先使用 `/routes/{routeId}/publish`
 
 请求示例：
@@ -1089,7 +1089,7 @@ GET /projects/1/members
 
 - 方法：`POST`
 - 路径：`/projects/{id}/leader`
-- 权限：`USER/LEADER`；且仅项目 owner 可操作
+- 权限：`USER`（`BOTH` 继承该权限）；且仅项目 owner 可操作
 - 描述：为项目指定领队账号
 
 请求示例：
@@ -1114,7 +1114,7 @@ GET /projects/1/members
 
 - 方法：`POST`
 - 路径：`/projects/{id}/accept`
-- 权限：`LEADER`；且当前登录用户须为该项目的指定领队
+- 权限：`LEADER`（`BOTH` 继承该权限）；当前登录用户将作为项目接单领队
 - 描述：领队确认接单，接单后项目状态流转
 
 请求示例：
@@ -1354,7 +1354,7 @@ GET /routes/17
 
 - 方法：`POST`
 - 路径：`/routes/{routeId}/publish`
-- 权限：`USER/LEADER`
+- 权限：`USER`（`BOTH` 继承该权限）
 - 描述：供路线卡片上的“发布”按钮进入独立详情页后提交；路线 ID、地区和标签由后端确定，发布状态固定为 `OPEN`
 
 请求示例：
@@ -1789,6 +1789,17 @@ Content-Type: application/json
 POST /chat/groups/{sessionId}/join
 Authorization: Bearer <token>
 ```
+
+退出群聊，仅当前处于群内的普通成员（`PARTICIPANT`）可操作；退出只影响群聊成员关系，
+不会退出项目，项目发布者和领队不能调用此接口：
+
+```http
+DELETE /chat/groups/{sessionId}/members/me
+Authorization: Bearer <token>
+```
+
+退出成功后成员状态更新为 `LEFT`，该群不再出现在群聊列表中，且无法继续收发群消息；
+重复退出按成功处理。如需重新加入群聊，可调用上述加入群组接口。
 
 删除群组，仅项目发布者或管理员可操作：
 

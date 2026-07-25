@@ -25,6 +25,7 @@ public class ChatServiceImpl implements ChatService {
 
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String ROLE_ADMIN = "ADMIN";
+    private static final String ROLE_PARTICIPANT = "PARTICIPANT";
 
     @Autowired
     private ChatSessionMapper chatSessionMapper;
@@ -85,6 +86,32 @@ public class ChatServiceImpl implements ChatService {
         ChatSession joined = chatSessionMapper.selectById(sessionId);
         joined.setCurrentUserRole(memberRole);
         return joined;
+    }
+
+    @Override
+    @Transactional
+    public void leaveGroup(Long sessionId, Long currentAccountId) {
+        if (currentAccountId == null) {
+            throw new UnauthorizedException("未认证用户");
+        }
+        if (sessionId == null) {
+            throw new IllegalArgumentException("群组ID不能为空");
+        }
+        ChatSession session = chatSessionMapper.selectById(sessionId);
+        if (session == null) {
+            throw new ResourceNotFoundException("群组不存在, sessionId=" + sessionId);
+        }
+
+        String memberRole = chatSessionMapper.selectGroupMemberRole(sessionId, currentAccountId);
+        if (memberRole == null || memberRole.isBlank()) {
+            throw new ForbiddenException("当前账号不是该群聊成员");
+        }
+        if (!ROLE_PARTICIPANT.equalsIgnoreCase(memberRole)) {
+            throw new ForbiddenException("仅普通成员可退出群聊，发布者或领队不能退出");
+        }
+
+        // 仅改变群聊成员状态，保留项目成员关系和历史消息；重复退出按成功处理。
+        chatSessionMapper.leaveGroupParticipant(sessionId, currentAccountId);
     }
 
     @Override

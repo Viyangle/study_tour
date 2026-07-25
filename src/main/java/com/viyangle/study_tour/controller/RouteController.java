@@ -66,7 +66,7 @@ public class RouteController {
     }
 
     @PostMapping("/{id}/publish")
-    @RequireRole({"USER", "LEADER"})
+    @RequireRole({"USER"})
     public Result publishRoute(@PathVariable Long id, @RequestBody Project project) {
         project.setRouteId(id);
         project.setLeaderAccountId(null);
