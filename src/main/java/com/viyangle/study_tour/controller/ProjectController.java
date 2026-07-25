@@ -148,6 +148,16 @@ public class ProjectController {
         return Result.success();
     }
 
+    @PostMapping("/{id}/quit")
+    @OperationLog(value = "退出项目", type = "PROJECT_QUIT")
+    @RequireRole({"USER"})
+    public Result quitProject(@PathVariable Long id) {
+        Long accountId = SecurityContextUtil.currentAccountId();
+        log.info("退出项目: projectId={}, accountId={}", id, accountId);
+        projectService.quitProject(id, accountId);
+        return Result.success();
+    }
+
     @PostMapping("/{id}/leader")
     @OperationLog(value = "指定项目领队", type = "PROJECT_UPDATE")
     @RequireRole({"USER"})
@@ -164,6 +174,16 @@ public class ProjectController {
     public Result acceptProject(@PathVariable Long id) {
         log.info("领队接单: projectId={}", id);
         projectService.acceptProject(id, SecurityContextUtil.currentAccountId());
+        return Result.success();
+    }
+
+    @PostMapping("/{id}/abandon")
+    @OperationLog(value = "领队放弃带队并重新开放项目", type = "PROJECT_UPDATE")
+    @RequireRole({"LEADER"})
+    public Result abandonProject(@PathVariable Long id) {
+        Long accountId = SecurityContextUtil.currentAccountId();
+        log.info("领队放弃带队: projectId={}, leaderAccountId={}", id, accountId);
+        projectService.abandonProject(id, accountId);
         return Result.success();
     }
 

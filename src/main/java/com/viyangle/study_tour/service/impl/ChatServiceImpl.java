@@ -202,6 +202,25 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @Transactional
+    public void leaveProjectGroup(Long projectId, Long accountId) {
+        if (projectId == null || accountId == null) {
+            return;
+        }
+        chatSessionMapper.leaveProjectParticipant(projectId, accountId);
+    }
+
+    @Override
+    @Transactional
+    public void removeProjectLeader(Long projectId, Long leaderAccountId) {
+        if (projectId == null || leaderAccountId == null) {
+            return;
+        }
+        chatSessionMapper.updateLeaderByProjectId(projectId, null);
+        chatSessionMapper.removeProjectLeader(projectId, leaderAccountId);
+    }
+
+    @Override
     public List<ChatSession> listSessions(Long accountId) {
         if (accountId == null) {
             throw new UnauthorizedException("未认证用户");

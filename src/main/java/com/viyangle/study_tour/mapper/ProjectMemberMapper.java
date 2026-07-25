@@ -24,5 +24,7 @@ public interface ProjectMemberMapper {
 
     ProjectMember selectByProjectIdAndAccountId(@Param("projectId") Long projectId, @Param("accountId") Long accountId);
 
+    int quitProject(@Param("projectId") Long projectId, @Param("accountId") Long accountId);
+
     Integer sumRepresentedCountByProjectId(@Param("projectId") Long projectId);
 }

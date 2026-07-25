@@ -217,6 +217,17 @@ POST /projects/20/accept
 Authorization: Bearer <token>
 ```
 
+### 放弃带队
+
+- 方法：`POST`
+- 路径：`/projects/{projectId}/abandon`
+- 描述：仅当前接单领队可操作。项目必须处于 `CONFIRMED` 且尚未到出发时间；成功后清空领队并将项目恢复为 `OPEN`，其他领队可重新接单。
+
+```http
+POST /projects/20/abandon
+Authorization: Bearer <leader-token>
+```
+
 ### 我的资料看板
 
 - 方法：`GET`
@@ -1085,7 +1096,21 @@ GET /projects/1/members
 }
 ```
 
-#### 4.2.7 指定项目领队
+#### 4.2.7 退出项目
+
+- 方法：`POST`
+- 路径：`/projects/{id}/quit`
+- 权限：`USER`（`BOTH` 继承该权限）；账号从 JWT 获取
+- 描述：普通参与者退出尚未开始的 `OPEN/MATCHING/CONFIRMED` 项目。成员状态更新为 `QUIT`，其代表人数从 `currentMembers` 中释放，并同步退出项目群；项目发布者不能退出，当前领队需先调用放弃带队接口。
+
+请求示例：
+
+```http
+POST /projects/1/quit
+Authorization: Bearer <token>
+```
+
+#### 4.2.8 指定项目领队
 
 - 方法：`POST`
 - 路径：`/projects/{id}/leader`
@@ -1110,7 +1135,7 @@ GET /projects/1/members
 }
 ```
 
-#### 4.2.8 领队接单
+#### 4.2.9 领队接单
 
 - 方法：`POST`
 - 路径：`/projects/{id}/accept`
@@ -1133,7 +1158,21 @@ POST /projects/1/accept
 }
 ```
 
-#### 4.2.9 更新项目状态
+#### 4.2.10 领队放弃带队并重新开放项目
+
+- 方法：`POST`
+- 路径：`/projects/{id}/abandon`
+- 权限：`LEADER`（`BOTH` 继承该权限）；仅当前项目领队可操作
+- 描述：项目处于 `CONFIRMED` 且未到出发时间时，清空 `leaderAccountId`、将状态恢复为 `OPEN`，并同步移除群聊领队身份。
+
+请求示例：
+
+```http
+POST /projects/1/abandon
+Authorization: Bearer <leader-token>
+```
+
+#### 4.2.11 更新项目状态
 
 - 方法：`POST`
 - 路径：`/projects/{id}/status`

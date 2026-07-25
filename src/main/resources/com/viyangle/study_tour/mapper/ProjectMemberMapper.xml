@@ -49,6 +49,14 @@
         limit 1
     </select>
 
+    <update id="quitProject">
+        update project_members
+        set join_status = 'QUIT'
+        where project_id = #{projectId}
+          and account_id = #{accountId}
+          and join_status = 'JOINED'
+    </update>
+
     <select id="sumRepresentedCountByProjectId" resultType="int">
         select coalesce(sum(represented_count), 0)
         from project_members

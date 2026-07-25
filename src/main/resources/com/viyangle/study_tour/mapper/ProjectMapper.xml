@@ -313,6 +313,15 @@
           and leader_account_id is null
     </update>
 
+    <update id="casAbandonProject">
+        update projects
+        set leader_account_id = null,
+            status = 'OPEN'
+        where id = #{id}
+          and status = 'CONFIRMED'
+          and leader_account_id = #{leaderAccountId}
+    </update>
+
     <update id="casTransitionStatus">
         update projects
         set status = #{targetStatus}

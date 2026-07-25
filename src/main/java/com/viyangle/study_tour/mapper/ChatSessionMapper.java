@@ -39,6 +39,12 @@ public interface ChatSessionMapper {
     int leaveGroupParticipant(@Param("sessionId") Long sessionId,
                               @Param("accountId") Long accountId);
 
+    int leaveProjectParticipant(@Param("projectId") Long projectId,
+                                @Param("accountId") Long accountId);
+
+    int removeProjectLeader(@Param("projectId") Long projectId,
+                            @Param("leaderAccountId") Long leaderAccountId);
+
     String selectEligibleMemberRole(@Param("sessionId") Long sessionId,
                                     @Param("accountId") Long accountId);
 

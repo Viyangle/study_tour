@@ -57,6 +57,8 @@ public interface ProjectMapper {
 
     int casAcceptProject(@Param("id") Long id, @Param("leaderAccountId") Long leaderAccountId);
 
+    int casAbandonProject(@Param("id") Long id, @Param("leaderAccountId") Long leaderAccountId);
+
     int casTransitionStatus(@Param("id") Long id,
                             @Param("expectedStatus") String expectedStatus,
                             @Param("targetStatus") String targetStatus);

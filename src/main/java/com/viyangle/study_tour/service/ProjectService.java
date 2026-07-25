@@ -43,11 +43,15 @@ public interface ProjectService {
 
     void joinProject(Long id, Long accountId, Integer representedCount);
 
+    void quitProject(Long id, Long accountId);
+
     Project getProjectDetail(Long accountId, Long id);
 
     List<ProjectMember> getProjectMembers(Long id);
 
     void acceptProject(Long id, Long leaderAccountId);
+
+    void abandonProject(Long id, Long leaderAccountId);
 
     void leaderJoinProject(Project project, Long currentAccountId);
 

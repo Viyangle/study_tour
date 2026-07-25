@@ -33,6 +33,12 @@ public interface ChatService {
     /** 项目成员加入项目后自动同步群成员关系。 */
     void joinProjectGroup(Long projectId, Long accountId);
 
+    /** 项目成员退出项目后同步退出项目群。 */
+    void leaveProjectGroup(Long projectId, Long accountId);
+
+    /** 领队放弃带队后清除群聊中的领队关系。 */
+    void removeProjectLeader(Long projectId, Long leaderAccountId);
+
     /**
      * 查询账号作为项目成员或领队参与的群聊。
      */

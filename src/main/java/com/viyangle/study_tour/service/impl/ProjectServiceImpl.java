@@ -313,6 +313,55 @@ public class ProjectServiceImpl implements ProjectService {
         chatService.joinProjectGroup(id, accountId);
     }
 
+    @Transactional
+    @Override
+    public void quitProject(Long id, Long accountId) {
+        if (accountId == null) {
+            throw new UnauthorizedException("未认证用户");
+        }
+
+        Project project = projectMapper.selectByIdForUpdate(id);
+        if (project == null) {
+            throw new ResourceNotFoundException("项目不存在, projectId=" + id);
+        }
+        if (accountId.equals(project.getOwnerAccountId())) {
+            throw new ForbiddenException("项目发布者不能退出项目");
+        }
+        if (accountId.equals(project.getLeaderAccountId())) {
+            throw new ForbiddenException("当前领队请先放弃带队");
+        }
+
+        ProjectMember membership = projectMemberMapper.selectByProjectIdAndAccountId(id, accountId);
+        if (membership == null) {
+            throw new ForbiddenException("当前账号未加入该项目, projectId=" + id);
+        }
+        if ("QUIT".equalsIgnoreCase(membership.getJoinStatus())) {
+            projectMapper.refreshCurrentMembersById(id);
+            chatService.leaveProjectGroup(id, accountId);
+            return;
+        }
+        if (!"JOINED".equalsIgnoreCase(membership.getJoinStatus())) {
+            throw new ForbiddenException("当前成员状态不允许退出项目, status=" + membership.getJoinStatus());
+        }
+
+        ProjectStatus status = ProjectStatus.from(project.getStatus());
+        if (status != ProjectStatus.OPEN
+                && status != ProjectStatus.MATCHING
+                && status != ProjectStatus.CONFIRMED) {
+            throw new ForbiddenException("当前项目状态不允许退出, status=" + status.name());
+        }
+        if (hasDeparted(project)) {
+            throw new ForbiddenException("项目已到出发时间，不能退出, projectId=" + id);
+        }
+
+        int affected = projectMemberMapper.quitProject(id, accountId);
+        if (affected == 0) {
+            throw new ForbiddenException("退出项目失败，成员状态已发生变化, projectId=" + id);
+        }
+        projectMapper.refreshCurrentMembersById(id);
+        chatService.leaveProjectGroup(id, accountId);
+    }
+
     @Override
     public Project getProjectDetail(Long accountId, Long id) {
         Account viewer = requireAccount(accountId);
@@ -366,6 +415,35 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ForbiddenException("接单失败，项目状态已变更, projectId=" + id);
         }
         chatService.createProjectGroup(id, project.getOwnerAccountId(), leaderAccountId);
+    }
+
+    @Transactional
+    @Override
+    public void abandonProject(Long id, Long leaderAccountId) {
+        if (leaderAccountId == null) {
+            throw new UnauthorizedException("未认证用户");
+        }
+
+        Project project = projectMapper.selectByIdForUpdate(id);
+        if (project == null) {
+            throw new ResourceNotFoundException("项目不存在, projectId=" + id);
+        }
+        if (!leaderAccountId.equals(project.getLeaderAccountId())) {
+            throw new ForbiddenException("仅当前接单领队可放弃带队, projectId=" + id);
+        }
+        ProjectStatus status = ProjectStatus.from(project.getStatus());
+        if (status != ProjectStatus.CONFIRMED) {
+            throw new ForbiddenException("仅已接单且未开始的项目可放弃带队, status=" + status.name());
+        }
+        if (hasDeparted(project)) {
+            throw new ForbiddenException("项目已到出发时间，不能放弃带队, projectId=" + id);
+        }
+
+        int affected = projectMapper.casAbandonProject(id, leaderAccountId);
+        if (affected == 0) {
+            throw new ForbiddenException("放弃带队失败，项目状态已发生变化, projectId=" + id);
+        }
+        chatService.removeProjectLeader(id, leaderAccountId);
     }
 
     private boolean hasDeparted(Project project) {

@@ -112,6 +112,33 @@
           and member_status = 'JOINED'
     </update>
 
+    <update id="leaveProjectParticipant">
+        update chat_group_members gm
+        inner join chat_sessions cs on cs.id = gm.group_id
+        set gm.member_status = 'LEFT'
+        where cs.project_id = #{projectId}
+          and gm.account_id = #{accountId}
+          and gm.member_role = 'PARTICIPANT'
+          and gm.member_status = 'JOINED'
+    </update>
+
+    <update id="removeProjectLeader">
+        update chat_group_members gm
+        inner join chat_sessions cs on cs.id = gm.group_id
+        left join project_members pm
+               on pm.project_id = cs.project_id
+              and pm.account_id = gm.account_id
+              and pm.join_status = 'JOINED'
+        set gm.member_role = 'PARTICIPANT',
+            gm.member_status = case
+                when pm.id is not null then 'JOINED'
+                else 'LEFT'
+            end
+        where cs.project_id = #{projectId}
+          and gm.account_id = #{leaderAccountId}
+          and gm.member_role = 'LEADER'
+    </update>
+
     <select id="selectEligibleMemberRole" resultType="java.lang.String">
         select case
                    when p.owner_account_id = #{accountId} then 'PUBLISHER'
