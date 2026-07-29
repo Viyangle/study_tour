@@ -76,8 +76,11 @@ public class KnowledgeGraph {
     /** 标签名 → 景点poiId列表 */
     private final Map<String, List<String>> tagToAttractions = new ConcurrentHashMap<>();
 
-    /** 景点 → 相邻景点poiId列表 */
+    /** 景点 → 相邻景点poiId列表（GEOGRAPHIC 边） */
     private final Map<String, List<String>> attractionNeighbors = new ConcurrentHashMap<>();
+
+    /** 景点 → 语义相关景点poiId→相似度（THEMATIC 边） */
+    private final Map<String, Map<String, Double>> semanticNeighbors = new ConcurrentHashMap<>();
 
     /** 路线ID → 景点poiId列表 */
     private final Map<Long, List<String>> routeToAttractions = new ConcurrentHashMap<>();
@@ -185,10 +188,17 @@ public class KnowledgeGraph {
     }
 
     /**
-     * 获取某景点的相邻景点poiId。
+     * 获取某景点的相邻景点poiId（地理边）。
      */
     public List<String> getNeighbors(String poiId) {
         return attractionNeighbors.getOrDefault(poiId, List.of());
+    }
+
+    /**
+     * 获取某景点的语义相关景点 poiId → 相似度（THEMATIC 边）。
+     */
+    public Map<String, Double> getSemanticNeighbors(String poiId) {
+        return semanticNeighbors.getOrDefault(poiId, Map.of());
     }
 
     /**
@@ -488,16 +498,29 @@ public class KnowledgeGraph {
 
     private void loadAdjacency() {
         attractionNeighbors.clear();
+        semanticNeighbors.clear();
         List<AttractionAdjacency> list = adjacencyMapper.selectAll();
         if (list != null) {
             for (AttractionAdjacency adj : list) {
                 if (adj == null || adj.getFromPoiId() == null || adj.getToPoiId() == null) continue;
-                // 跳过自引用的占位记录（from_poi_id == to_poi_id 表示该景点已计算过但无有效邻居）
+                // 跳过自引用的占位记录
                 if (adj.getFromPoiId().equals(adj.getToPoiId())) continue;
-                attractionNeighbors.computeIfAbsent(adj.getFromPoiId(), k -> new ArrayList<>())
-                        .add(adj.getToPoiId());
+
+                String type = adj.getRelationType();
+                if ("THEMATIC".equals(type)) {
+                    // 语义边：存储 poiId → (neighborPoiId → score)
+                    semanticNeighbors.computeIfAbsent(adj.getFromPoiId(), k -> new HashMap<>())
+                            .put(adj.getToPoiId(), adj.getSimilarityScore() != null ? adj.getSimilarityScore() : 0.0);
+                } else {
+                    // 地理边（默认）
+                    attractionNeighbors.computeIfAbsent(adj.getFromPoiId(), k -> new ArrayList<>())
+                            .add(adj.getToPoiId());
+                }
             }
         }
+        log.info("知识图谱: 加载地理边 {} 条，语义边 {} 条",
+                attractionNeighbors.values().stream().mapToInt(List::size).sum(),
+                semanticNeighbors.values().stream().mapToInt(Map::size).sum());
     }
 
     private void loadRouteAttractions() {

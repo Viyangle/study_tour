@@ -555,7 +555,46 @@ UNLOCK TABLES;
 
 -- Dump completed on 2026-07-20 15:11:30
 
+-- ============================================================
+-- 补齐代码需要但原始 dump 缺失的字段
+-- ============================================================
+
+-- attractions 表新增 status 字段
+ALTER TABLE `attractions` ADD COLUMN `status` varchar(20) DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE/INACTIVE' AFTER `tel`;
+ALTER TABLE `attractions` ADD INDEX `idx_attractions_status` (`status`);
+
+-- projects 表新增 departure_time, start_point_type, start_point, leader_requirements, participant_requirements
+ALTER TABLE `projects` ADD COLUMN `departure_time` time DEFAULT NULL COMMENT '出发时间' AFTER `departure_date`;
+ALTER TABLE `projects` ADD COLUMN `start_point_type` varchar(20) DEFAULT NULL COMMENT '出发点类型: CURRENT_LOCATION/MANUAL' AFTER `departure_time`;
+ALTER TABLE `projects` ADD COLUMN `start_point` varchar(255) DEFAULT NULL COMMENT '出发点' AFTER `start_point_type`;
+ALTER TABLE `projects` ADD COLUMN `leader_requirements` text DEFAULT NULL COMMENT '领队要求' AFTER `start_point`;
+ALTER TABLE `projects` ADD COLUMN `participant_requirements` text DEFAULT NULL COMMENT '参与者要求' AFTER `leader_requirements`;
+
+-- project_members 表新增 represented_count
+ALTER TABLE `project_members` ADD COLUMN `represented_count` int DEFAULT 1 COMMENT '代表人数' AFTER `join_status`;
+
+-- chat_sessions 表新增 status, disabled_at
+ALTER TABLE `chat_sessions` ADD COLUMN `status` varchar(20) DEFAULT 'ACTIVE' COMMENT 'ACTIVE/DISABLED' AFTER `leader_account_id`;
+ALTER TABLE `chat_sessions` ADD COLUMN `disabled_at` datetime DEFAULT NULL COMMENT '停用时间' AFTER `status`;
+
+-- ============================================================
+-- 新增表：chat_group_members（群组生命周期）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_group_members (
+    session_id    BIGINT       NOT NULL COMMENT 'chat_sessions.id',
+    account_id    BIGINT       NOT NULL COMMENT 'accounts.id',
+    role          VARCHAR(20)  NOT NULL DEFAULT 'MEMBER' COMMENT 'USER / LEADER / SYSTEM',
+    joined_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    left_at       DATETIME     DEFAULT NULL,
+    PRIMARY KEY (session_id, account_id),
+    INDEX idx_cgm_account (account_id),
+    CONSTRAINT fk_cgm_session FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cgm_account FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='聊天群组成员';
+
+-- ============================================================
 -- 景点-标签关联表（知识图谱中"景点→标签"的边）
+-- ============================================================
 CREATE TABLE IF NOT EXISTS attraction_tag (
     poi_id     VARCHAR(32)  NOT NULL COMMENT '景点POI ID',
     tag_id     BIGINT       NOT NULL COMMENT '标签ID，对应 tags 表',
@@ -565,13 +604,18 @@ CREATE TABLE IF NOT EXISTS attraction_tag (
     INDEX idx_attraction_tag_tag_id (tag_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='景点-研学标签关联';
 
--- 景点相邻关系表（知识图谱中"景点→景点"的相邻边）
+-- ============================================================
+-- 景点相邻关系表（支持 GEOGRAPHIC + THEMATIC 双类型边）
+-- ============================================================
 CREATE TABLE IF NOT EXISTS attraction_adjacency (
-    from_poi_id    VARCHAR(32) NOT NULL COMMENT '起点景点POI ID',
-    to_poi_id      VARCHAR(32) NOT NULL COMMENT '终点景点POI ID',
-    transit_minutes INT        COMMENT '公交通勤时间(分钟)，NULL表示无公交',
-    distance_m     INT         COMMENT '交通距离(米)',
-    created_at     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (from_poi_id, to_poi_id),
-    INDEX idx_adjacency_to (to_poi_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='景点相邻关系(公交30分钟内)';
+    from_poi_id     VARCHAR(32)  NOT NULL COMMENT '起点景点POI ID',
+    to_poi_id       VARCHAR(32)  NOT NULL COMMENT '终点景点POI ID',
+    transit_minutes INT          COMMENT '公交通勤时间(分钟)，NULL表示无公交',
+    distance_m      INT          COMMENT '交通距离(米)',
+    relation_type   VARCHAR(20)  NOT NULL DEFAULT 'GEOGRAPHIC' COMMENT 'GEOGRAPHIC / THEMATIC',
+    similarity_score DOUBLE      DEFAULT NULL COMMENT '语义相似度(0-1)，仅 THEMATIC 有值',
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (from_poi_id, to_poi_id, relation_type),
+    INDEX idx_adjacency_to (to_poi_id),
+    INDEX idx_adjacency_type (relation_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='景点相邻关系(地理+语义)';
