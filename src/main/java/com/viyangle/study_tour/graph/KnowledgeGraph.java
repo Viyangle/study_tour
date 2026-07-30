@@ -340,9 +340,10 @@ public class KnowledgeGraph {
      * 从用户偏好节点出发，在景点图上执行随机游走，返回每个景点的稳态概率。
      *
      * 转移权重：
-     *   - 景点→相邻景点（权重 0.4）
-     *   - 景点→同标签景点（权重 0.3）
-     *   - 景点→同路线上其他景点（权重 0.3）
+     *   - 景点→相邻景点（权重 0.3）
+     *   - 景点→同标签景点（权重 0.2）
+     *   - 景点→同路线上其他景点（权重 0.2）
+     *   - 景点→语义相关景点（权重 0.3，按相似度加权分配）
      *
      * @param personalNodes 个人化种子节点（用户偏好标签对应的景点poiId）
      * @param maxIterations 最大迭代次数
@@ -372,16 +373,16 @@ public class KnowledgeGraph {
             List<String> neighbors = new ArrayList<>();
             List<Double> weights = new ArrayList<>();
 
-            // 相邻景点（权重 0.4）
+            // 相邻景点（权重 0.3）
             List<String> adj = getNeighbors(poiId);
             if (!adj.isEmpty()) {
                 neighbors.addAll(adj);
                 for (int i = 0; i < adj.size(); i++) {
-                    weights.add(0.4 / adj.size());
+                    weights.add(0.3 / adj.size());
                 }
             }
 
-            // 同标签景点（权重 0.3）
+            // 同标签景点（权重 0.2）
             List<String> myTags = getAttractionTags(poiId);
             Set<String> sameTagPois = new LinkedHashSet<>();
             for (String tag : myTags) {
@@ -391,11 +392,11 @@ public class KnowledgeGraph {
             if (!sameTagPois.isEmpty()) {
                 neighbors.addAll(sameTagPois);
                 for (int i = 0; i < sameTagPois.size(); i++) {
-                    weights.add(0.3 / sameTagPois.size());
+                    weights.add(0.2 / sameTagPois.size());
                 }
             }
 
-            // 同路线上其他景点（权重 0.3）
+            // 同路线上其他景点（权重 0.2）
             List<Long> myRoutes = getRoutesByAttraction(poiId);
             Set<String> routePois = new LinkedHashSet<>();
             for (Long routeId : myRoutes) {
@@ -405,7 +406,19 @@ public class KnowledgeGraph {
             if (!routePois.isEmpty()) {
                 neighbors.addAll(routePois);
                 for (int i = 0; i < routePois.size(); i++) {
-                    weights.add(0.3 / routePois.size());
+                    weights.add(0.2 / routePois.size());
+                }
+            }
+
+            // 语义相关景点（权重 0.3，按相似度比例分配）
+            Map<String, Double> semNeighbors = getSemanticNeighbors(poiId);
+            if (!semNeighbors.isEmpty()) {
+                double totalSim = semNeighbors.values().stream().mapToDouble(Double::doubleValue).sum();
+                if (totalSim > 0) {
+                    for (Map.Entry<String, Double> entry : semNeighbors.entrySet()) {
+                        neighbors.add(entry.getKey());
+                        weights.add(0.3 * entry.getValue() / totalSim);
+                    }
                 }
             }
 
