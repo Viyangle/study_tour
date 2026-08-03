@@ -114,14 +114,11 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         
         List<Attraction> candidates = loadCandidateAttractions(candidatePoiIds);
         
-        // 用 PPR 分数对候选景点做加权排序
+        // 用迭代 PPR 进行去重排序（替代 MMR）
         if (!pprScores.isEmpty()) {
-            candidates.sort((a, b) -> {
-                double scoreA = getCombinedScore(a.getPoiId(), pprScores);
-                double scoreB = getCombinedScore(b.getPoiId(), pprScores);
-                return Double.compare(scoreB, scoreA); // 降序
-            });
-            log.info("AI路线规划调试: 经PPR加权排序后候选数量={}", candidates.size());
+            log.info("使用迭代 PPR 对候选景点进行多样性排序，目标数量：10");
+            candidates = iterativePPRSelection(candidates, pprScores, 10, state.getExcludePoiIds());
+            log.info("AI 路线规划调试：经迭代 PPR 排序后候选数量={}", candidates.size());
         }
         
         log.info("AI路线规划调试: 向量+图谱候选数量={}", candidates.size());

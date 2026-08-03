@@ -19,9 +19,9 @@ import java.util.stream.Collectors;
  *
  * 【首页项目推荐】打分维度：
  *   1. 标签匹配（用户偏好标签 vs 项目路线上的景点标签）  → 权重 40
- *   2. 地区匹配（用户所在地 vs 项目所在地）              → 权重 30
+ *   2. 地区匹配（用户所在地 vs 项目所在地）              → 权重 10
  *   3. 协同过滤（相似用户参与了该项目）                  → 权重 20
- *   4. 项目评分（评价均分）                             → 权重 10
+ *   4. 项目评分（评价均分）                             → 权重 45
  *   + 时间衰减因子
  *   + MMR 多样性控制
  *
@@ -35,11 +35,10 @@ import java.util.stream.Collectors;
 public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecommendService {
 
     /** 项目推荐各维度权重 */
-    private static final double W_TAG_MATCH = 40.0;
-    private static final double W_REGION_MATCH = 30.0;
+    private static final double W_REGION_MATCH = 5.0;  // 降低地区权重，改为软约束
     private static final double W_COLLABORATIVE = 20.0;
     private static final double W_REVIEW_SCORE = 10.0;
-    private static final double W_PAGERANK = 25.0;
+    private static final double W_PAGERANK = 45.0;
 
     /** 相邻扩展跳数 */
     private static final int EXPAND_HOPS = 2;
@@ -98,24 +97,21 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
 
             double score = 0;
 
-            // 1. 标签匹配
-            score += W_TAG_MATCH * calcTagMatchScore(projectId, userTags);
-
-            // 2. 地区匹配
+            // 1. 地区匹配 (软约束)
             score += W_REGION_MATCH * calcRegionMatchScore(projectId, userRegion);
 
-            // 3. 协同过滤
+            // 2. 协同过滤
             if (similarUserProjects.contains(projectId)) {
                 score += W_COLLABORATIVE;
             }
 
-            // 4. 项目评分
+            // 3. 项目评分 (软约束)
             double avgScore = graph.getProjectAvgScore(projectId);
             if (avgScore > 0) {
-                score += W_REVIEW_SCORE * (avgScore / 5.0); // 归一化到 0-1
+                score += W_REVIEW_SCORE * (avgScore / 5.0);
             }
 
-            // 5. PageRank 图传播得分
+            // 4. PageRank 图传播得分
             score += W_PAGERANK * calcPPRScore(projectId, pprScores);
 
             // 6. 时间衰减因子
