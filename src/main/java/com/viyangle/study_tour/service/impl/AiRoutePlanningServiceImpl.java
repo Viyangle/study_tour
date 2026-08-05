@@ -1,6 +1,7 @@
 package com.viyangle.study_tour.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.viyangle.study_tour.aiservice.OllamaRouteComposerService;
 import com.viyangle.study_tour.aiservice.RouteComposerService;
 import com.viyangle.study_tour.graph.KnowledgeGraph;
 import com.viyangle.study_tour.mapper.AccountTagPrefMapper;
@@ -10,16 +11,20 @@ import com.viyangle.study_tour.pojo.AIRouteItem;
 import com.viyangle.study_tour.pojo.AIRoutePlan;
 import com.viyangle.study_tour.pojo.AccountTagPref;
 import com.viyangle.study_tour.pojo.Attraction;
+import com.viyangle.study_tour.pojo.ReferencePair;
 import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.pojo.RouteConstraintState;
 import com.viyangle.study_tour.pojo.Tag;
 import com.viyangle.study_tour.pojo.VectorRetrievalResult;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
+import com.viyangle.study_tour.service.AttractionSyncService;
 import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
+import com.viyangle.study_tour.service.ReferencePairService;
 import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +38,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -45,6 +51,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     private static final String CONSTRAINT_KEY_PREFIX = "ai:route:constraint:";
     private static final Duration CONSTRAINT_TTL = Duration.ofDays(7);
     private static final int MAX_USER_MESSAGE_HISTORY = 12;
+    private static final int MAX_OPTIMIZE_CANDIDATES = 20;
     private static final Pattern EXCLUDE_NAME_PATTERN = Pattern.compile("不要\\s*([^，。；,.;\\s]+)");
     private static final Set<String> RESET_KEYWORDS = Set.of("重新开始", "清空", "重置", "new route");
     private static final Set<String> CHANGE_KEYWORDS = Set.of("换", "替换", "不要");
@@ -58,8 +65,14 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     @Autowired
     private RouteComposerService routeComposerService;
 
+    @Autowired(required = false)
+    private OllamaRouteComposerService ollamaRouteComposerService;
+
     @Autowired
     private AttractionMapper attractionMapper;
+
+    @Autowired
+    private AttractionSyncService attractionSyncService;
 
     @Autowired
     private AmapTransitClient amapTransitClient;
@@ -84,6 +97,16 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private ReferencePairService referencePairService;
+
+    /**
+     * 是否使用 Ollama 模式。Ollama 模式下不使用 tools（function calling），
+     * 改用预查询的 ReferencePair 数据嵌入 prompt。
+     */
+    @Value("${app.ai.ollama-enabled:false}")
+    private boolean ollamaEnabled;
 
     @Override
     public AIRoutePlan planRouteV2(String memoryId, String message, Long accountId) throws Exception {
@@ -142,7 +165,15 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         List<String> userPrefTags = extractUserPreferenceTags(accountId);
         
         String finalPrompt = buildFinalPrompt(message, state, candidates, matrix, retrievalResult.getRetrievedTexts(), userPrefTags);
-        String finalText = routeComposerService.chat(finalPrompt);
+        String finalText;
+        if (ollamaEnabled && ollamaRouteComposerService != null) {
+            // Ollama 模式：不使用 tools，将参考景点对预先注入 prompt
+            String ollamaPrompt = enrichPromptWithReferencePairs(finalPrompt);
+            log.info("Ollama模式: 使用不带tools的OllamaRouteComposerService");
+            finalText = ollamaRouteComposerService.chat(ollamaPrompt);
+        } else {
+            finalText = routeComposerService.chat(finalPrompt);
+        }
 
         AIRoutePlan plan = parseAiPlan(finalText);
         validateFinalItems(plan.getItems(), candidates, state, message);
@@ -156,40 +187,38 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     @Override
     public AIRoutePlan optimizeSubmittedRoute(List<RouteAttraction> routeAttractions, String message) throws Exception {
         List<RouteAttraction> submitted = validateSubmittedRoute(routeAttractions);
-        List<String> submittedPoiIds = submitted.stream()
-                .map(item -> item.getPoiId().trim())
-                .toList();
 
-        List<Attraction> loaded = attractionMapper.selectActiveByPoiIds(submittedPoiIds);
-        Map<String, Attraction> attractionByPoiId = loaded == null ? Map.of() : loaded.stream()
-                .filter(attraction -> attraction != null && attraction.getPoiId() != null)
-                .collect(Collectors.toMap(
-                        attraction -> attraction.getPoiId().trim().toUpperCase(Locale.ROOT),
-                        attraction -> attraction,
-                        (first, ignored) -> first
-                ));
+        // 前端可能提交高德搜索到、但后端景点表尚未收录的 POI。
+        // 这里把这类 POI 自动登记（或复活）到 attractions 表，保证后续保存路线不受外键限制。
+        List<Attraction> submittedAttractions = loadOrRegisterAttractions(submitted);
 
-        List<Attraction> candidates = new ArrayList<>(submittedPoiIds.size());
-        for (String poiId : submittedPoiIds) {
-            Attraction attraction = attractionByPoiId.get(poiId.toUpperCase(Locale.ROOT));
-            if (attraction == null) {
-                throw new IllegalArgumentException("Submitted poiId does not exist or is inactive: " + poiId);
-            }
-            candidates.add(attraction);
-        }
+        // 补充可新增的候选景点：向量召回 + 同地区景点，总候选不超过 20 个，控制交通矩阵规模。
+        List<Attraction> addableCandidates = loadOptimizeAddableCandidates(submitted, submittedAttractions, message);
+        List<Attraction> candidates = mergeOptimizeCandidates(submittedAttractions, addableCandidates);
 
         List<AmapTransitClient.TransitEdge> matrix = amapTransitClient.buildUndirectedMatrix(candidates);
         String prompt = buildSubmittedRouteOptimizationPrompt(submitted, message, candidates, matrix);
-        AIRoutePlan plan = parseAiPlan(routeComposerService.chat(prompt));
-        validateSubmittedOptimization(plan.getItems(), submittedPoiIds);
+        String aiText;
+        if (ollamaEnabled && ollamaRouteComposerService != null) {
+            aiText = ollamaRouteComposerService.chat(prompt);
+        } else {
+            aiText = routeComposerService.chat(prompt);
+        }
+        AIRoutePlan plan = parseAiPlan(aiText);
+        Set<String> allowedPoiIds = candidates.stream()
+                .map(Attraction::getPoiId)
+                .filter(poiId -> poiId != null && !poiId.isBlank())
+                .map(poiId -> poiId.trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        validateSubmittedOptimization(plan.getItems(), allowedPoiIds);
         return plan;
     }
 
     private List<RouteAttraction> validateSubmittedRoute(List<RouteAttraction> routeAttractions) {
-        if (routeAttractions == null || routeAttractions.size() < 2) {
-            throw new IllegalArgumentException("At least two route attractions are required for optimization");
+        if (routeAttractions == null || routeAttractions.isEmpty()) {
+            throw new IllegalArgumentException("At least one route attraction is required for optimization");
         }
-        if (routeAttractions.size() > 20) {
+        if (routeAttractions.size() > MAX_OPTIMIZE_CANDIDATES) {
             throw new IllegalArgumentException("At most 20 route attractions can be optimized at once");
         }
 
@@ -212,7 +241,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                                                          List<Attraction> candidates,
                                                          List<AmapTransitClient.TransitEdge> matrix) throws Exception {
         StringBuilder sb = new StringBuilder();
-        sb.append("任务：优化用户已经提交的完整路线。\n");
+        sb.append("任务：优化用户已经提交的完整路线，允许调整景点集合（删除不合适景点、从可选列表新增景点）。\n");
         sb.append("用户补充要求：")
                 .append(message == null || message.isBlank() ? "优先减少通勤，并结合开放时间合理安排游览时间。" : message.trim())
                 .append("\n\n");
@@ -229,9 +258,17 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                 .append(objectMapper.writeValueAsString(originalItems))
                 .append("\n\n");
 
-        sb.append("必须全部保留的景点：\n");
+        Set<String> submittedKeys = submitted.stream()
+                .map(RouteAttraction::getPoiId)
+                .filter(poiId -> poiId != null && !poiId.isBlank())
+                .map(poiId -> poiId.trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        sb.append("可选景点列表(标注[当前路线]的是用户已选景点，其余为可新增景点)：\n");
         for (int i = 0; i < candidates.size(); i++) {
             Attraction attraction = candidates.get(i);
+            boolean current = attraction != null && attraction.getPoiId() != null
+                    && submittedKeys.contains(attraction.getPoiId().trim().toUpperCase(Locale.ROOT));
             sb.append(i + 1)
                     .append(". poiId=").append(attraction.getPoiId())
                     .append(", name=").append(nonNull(attraction.getName()))
@@ -239,6 +276,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                     .append(", type=").append(nonNull(attraction.getType()))
                     .append(", opentimeToday=").append(nonNull(attraction.getOpentimeToday()))
                     .append(", opentimeWeek=").append(nonNull(attraction.getOpentimeWeek()))
+                    .append(current ? " [当前路线]" : "")
                     .append("\n");
         }
 
@@ -253,28 +291,34 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         }
 
         sb.append("\n本次优化的硬性约束：\n")
-                .append("1. 输出必须且只能包含上面列出的全部景点，每个poiId恰好出现一次，禁止新增、删除或替换景点。\n")
-                .append("2. 可以调整visitOrder、visitTime、recommendedDuration和notes。\n")
-                .append("3. visitOrder必须从1开始连续递增。\n")
-                .append("4. 在满足用户补充要求和开放时间的前提下，尽量减少折返和通勤成本。\n");
+                .append("1. 输出必须只使用上面可选景点列表中的poiId，禁止使用列表之外的poiId。\n")
+                .append("2. 允许增删：可以删除当前路线中不合适的景点，也可以从可选列表中新增景点；最终路线保留1~20个景点，每个poiId恰好出现一次。\n")
+                .append("3. 如果用户没有明确要求增删，应尽量保留当前路线的全部景点，只调整visitOrder、visitTime、recommendedDuration和notes；只有景点明显不合理时才删除。\n")
+                .append("4. visitOrder必须从1开始连续递增。\n")
+                .append("5. 在满足用户补充要求和开放时间的前提下，尽量减少折返和通勤成本。\n");
         return sb.toString();
     }
 
-    private void validateSubmittedOptimization(List<AIRouteItem> optimizedItems, List<String> submittedPoiIds) {
-        if (optimizedItems == null || optimizedItems.size() != submittedPoiIds.size()) {
-            throw new IllegalArgumentException("Optimized route must keep every submitted attraction");
+    private void validateSubmittedOptimization(List<AIRouteItem> optimizedItems, Set<String> allowedPoiIds) {
+        if (optimizedItems == null || optimizedItems.isEmpty()) {
+            throw new IllegalArgumentException("Optimized route must not be empty");
+        }
+        if (optimizedItems.size() > MAX_OPTIMIZE_CANDIDATES) {
+            throw new IllegalArgumentException("Optimized route cannot contain more than 20 attractions");
         }
 
-        Set<String> expected = submittedPoiIds.stream()
-                .map(poiId -> poiId.trim().toUpperCase(Locale.ROOT))
-                .collect(Collectors.toCollection(LinkedHashSet::new));
         Set<String> actual = optimizedItems.stream()
                 .map(AIRouteItem::getPoiId)
                 .filter(poiId -> poiId != null && !poiId.isBlank())
                 .map(poiId -> poiId.trim().toUpperCase(Locale.ROOT))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        if (!expected.equals(actual) || actual.size() != optimizedItems.size()) {
-            throw new IllegalArgumentException("Optimized route changed the submitted attraction set");
+        if (actual.size() != optimizedItems.size()) {
+            throw new IllegalArgumentException("Optimized route contains duplicated or invalid poiId");
+        }
+        for (String poiId : actual) {
+            if (!allowedPoiIds.contains(poiId)) {
+                throw new IllegalArgumentException("Optimized route contains poiId outside candidate set: " + poiId);
+            }
         }
 
         Set<Integer> expectedOrders = new LinkedHashSet<>();
@@ -289,11 +333,358 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         }
     }
 
+    /**
+     * 把提交的路线节点转成景点数据。已收录的景点直接复用；
+     * 未收录的高德 POI 用请求携带的景点字段（必要时用高德 place/detail 兜底）登记到 attractions 表。
+     */
+    private List<Attraction> loadOrRegisterAttractions(List<RouteAttraction> submitted) {
+        List<String> poiIds = submitted.stream()
+                .map(RouteAttraction::getPoiId)
+                .filter(poiId -> poiId != null && !poiId.isBlank())
+                .map(String::trim)
+                .toList();
+
+        Map<String, Attraction> attractionByPoiId = new HashMap<>();
+        if (!poiIds.isEmpty()) {
+            List<Attraction> loaded = attractionMapper.selectByPoiIds(poiIds);
+            if (loaded != null) {
+                for (Attraction attraction : loaded) {
+                    if (attraction != null && attraction.getPoiId() != null && !attraction.getPoiId().isBlank()) {
+                        attractionByPoiId.put(attraction.getPoiId().trim().toUpperCase(Locale.ROOT), attraction);
+                    }
+                }
+            }
+        }
+
+        List<Attraction> result = new ArrayList<>(submitted.size());
+        for (RouteAttraction routeAttraction : submitted) {
+            String poiId = routeAttraction.getPoiId().trim();
+            String key = poiId.toUpperCase(Locale.ROOT);
+            Attraction existing = attractionByPoiId.get(key);
+            if (existing == null) {
+                // 优先走“高德取数 -> MySQL upsert -> Redis 向量索引”一条龙；
+                // 高德不可用时才回退用请求里携带的景点字段登记，保证接口可用。
+                Attraction registered = null;
+                try {
+                    registered = attractionSyncService.syncFromAmap(poiId);
+                } catch (Exception e) {
+                    log.warn("AMap sync failed for poiId={}, fallback to request metadata: {}",
+                            poiId, e.getMessage());
+                }
+                if (registered == null) {
+                    registered = buildAttractionFromRouteAttraction(routeAttraction);
+                    if (registered == null) {
+                        registered = new Attraction();
+                    }
+                    registered.setPoiId(poiId);
+                    registered.setStatus("ACTIVE");
+                    attractionMapper.upsert(registered);
+                }
+                result.add(registered);
+            } else {
+                Attraction merged = mergeFromRouteAttraction(existing, routeAttraction);
+                boolean active = isActiveAttraction(merged);
+                if (!active || hasRouteAttractionMetadata(routeAttraction)) {
+                    merged.setStatus("ACTIVE");
+                    attractionMapper.upsert(merged);
+                }
+                result.add(merged);
+            }
+        }
+        return result;
+    }
+
+    private Attraction buildAttractionFromRouteAttraction(RouteAttraction ra) {
+        if (ra == null || ra.getPoiId() == null || ra.getPoiId().isBlank()) {
+            return null;
+        }
+        Attraction attraction = new Attraction();
+        attraction.setPoiId(ra.getPoiId().trim());
+        attraction.setParentPoiId(trimToNull(ra.getParentPoiId()));
+        attraction.setName(trimToNull(ra.getName()));
+        attraction.setAddress(trimToNull(ra.getAddress()));
+        attraction.setLocation(trimToNull(ra.getLocation()));
+        attraction.setPcode(trimToNull(ra.getPcode()));
+        attraction.setPname(trimToNull(ra.getPname()));
+        attraction.setCitycode(trimToNull(ra.getCitycode()));
+        attraction.setCityname(trimToNull(ra.getCityname()));
+        attraction.setAdcode(trimToNull(ra.getAdcode()));
+        attraction.setAdname(trimToNull(ra.getAdname()));
+        attraction.setType(trimToNull(ra.getType()));
+        attraction.setTypecode(trimToNull(ra.getTypecode()));
+        attraction.setDistance(trimToNull(ra.getDistance()));
+        attraction.setOpentimeToday(trimToNull(ra.getOpentimeToday()));
+        attraction.setOpentimeWeek(trimToNull(ra.getOpentimeWeek()));
+        attraction.setTel(trimToNull(ra.getTel()));
+        return attraction;
+    }
+
+    private Attraction mergeFromRouteAttraction(Attraction existing, RouteAttraction ra) {
+        if (existing == null) {
+            return buildAttractionFromRouteAttraction(ra);
+        }
+        Attraction requestAttraction = buildAttractionFromRouteAttraction(ra);
+        if (requestAttraction != null) {
+            mergeAttraction(existing, requestAttraction);
+        }
+        return existing;
+    }
+
+    private void mergeAttraction(Attraction target, Attraction source) {
+        if (target == null || source == null) {
+            return;
+        }
+        target.setParentPoiId(fillIfBlank(target.getParentPoiId(), source.getParentPoiId()));
+        target.setName(fillIfBlank(target.getName(), source.getName()));
+        target.setAddress(fillIfBlank(target.getAddress(), source.getAddress()));
+        target.setLocation(fillIfBlank(target.getLocation(), source.getLocation()));
+        target.setPcode(fillIfBlank(target.getPcode(), source.getPcode()));
+        target.setPname(fillIfBlank(target.getPname(), source.getPname()));
+        target.setCitycode(fillIfBlank(target.getCitycode(), source.getCitycode()));
+        target.setCityname(fillIfBlank(target.getCityname(), source.getCityname()));
+        target.setAdcode(fillIfBlank(target.getAdcode(), source.getAdcode()));
+        target.setAdname(fillIfBlank(target.getAdname(), source.getAdname()));
+        target.setType(fillIfBlank(target.getType(), source.getType()));
+        target.setTypecode(fillIfBlank(target.getTypecode(), source.getTypecode()));
+        target.setDistance(fillIfBlank(target.getDistance(), source.getDistance()));
+        target.setOpentimeToday(fillIfBlank(target.getOpentimeToday(), source.getOpentimeToday()));
+        target.setOpentimeWeek(fillIfBlank(target.getOpentimeWeek(), source.getOpentimeWeek()));
+        target.setTel(fillIfBlank(target.getTel(), source.getTel()));
+        if (blank(target.getStatus()) && !blank(source.getStatus())) {
+            target.setStatus(source.getStatus());
+        }
+    }
+
+    private boolean hasRouteAttractionMetadata(RouteAttraction ra) {
+        return ra != null && (!blank(ra.getName()) || !blank(ra.getLocation()) || !blank(ra.getAdcode())
+                || !blank(ra.getCitycode()) || !blank(ra.getType()));
+    }
+
+    private String fillIfBlank(String current, String candidate) {
+        return blank(current) && !blank(candidate) ? candidate.trim() : current;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    /**
+     * 为 optimize 补充可新增的候选景点：先向量召回（结合消息与当前路线），再补同地区景点。
+     */
+    private List<Attraction> loadOptimizeAddableCandidates(List<RouteAttraction> submitted,
+                                                           List<Attraction> submittedAttractions,
+                                                           String message) {
+        int maxAddable = Math.max(0, MAX_OPTIMIZE_CANDIDATES - submitted.size());
+        if (maxAddable <= 0) {
+            return List.of();
+        }
+        Set<String> excluded = submitted.stream()
+                .map(RouteAttraction::getPoiId)
+                .filter(poiId -> poiId != null && !poiId.isBlank())
+                .map(poiId -> poiId.trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<Attraction> addable = new ArrayList<>();
+        Set<String> added = new LinkedHashSet<>();
+
+        String retrievalQuery = buildOptimizeRetrievalQuery(submitted, message);
+        try {
+            VectorRetrievalResult retrievalResult = vectorCandidateRetrieverService.retrieveCandidatesWithTexts(retrievalQuery, 20, 0);
+            List<String> retrievedPoiIds = retrievalResult == null || retrievalResult.getPoiIds() == null
+                    ? List.of() : retrievalResult.getPoiIds();
+            if (!retrievedPoiIds.isEmpty()) {
+                List<Attraction> retrieved = loadCandidateAttractions(retrievedPoiIds);
+                for (Attraction attraction : retrieved) {
+                    addOptimizeCandidate(addable, added, attraction, excluded, maxAddable);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Optimize addable vector retrieval failed: {}", e.getMessage());
+        }
+
+        String regionCode = firstSubmittedAdcode(submittedAttractions);
+        if (!blank(regionCode)) {
+            try {
+                List<Attraction> sameRegion = attractionMapper.selectByRegionCode(regionCode);
+                if (sameRegion != null) {
+                    for (Attraction attraction : sameRegion) {
+                        addOptimizeCandidate(addable, added, attraction, excluded, maxAddable);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Optimize addable region retrieval failed, regionCode={}: {}", regionCode, e.getMessage());
+            }
+        }
+        return addable;
+    }
+
+    private void addOptimizeCandidate(List<Attraction> addable,
+                                      Set<String> added,
+                                      Attraction attraction,
+                                      Set<String> excluded,
+                                      int maxAddable) {
+        if (addable.size() >= maxAddable || attraction == null || attraction.getPoiId() == null
+                || attraction.getPoiId().isBlank()) {
+            return;
+        }
+        if (blank(attraction.getLocation()) || !isActiveAttraction(attraction)) {
+            return;
+        }
+        String key = attraction.getPoiId().trim().toUpperCase(Locale.ROOT);
+        if (excluded.contains(key) || !added.add(key)) {
+            return;
+        }
+        addable.add(attraction);
+    }
+
+    private boolean isActiveAttraction(Attraction attraction) {
+        return attraction.getStatus() == null || attraction.getStatus().isBlank()
+                || "ACTIVE".equalsIgnoreCase(attraction.getStatus().trim());
+    }
+
+    private List<Attraction> mergeOptimizeCandidates(List<Attraction> submittedAttractions,
+                                                     List<Attraction> addableCandidates) {
+        List<Attraction> candidates = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (Attraction attraction : submittedAttractions) {
+            if (attraction == null || attraction.getPoiId() == null || attraction.getPoiId().isBlank()) {
+                continue;
+            }
+            String key = attraction.getPoiId().trim().toUpperCase(Locale.ROOT);
+            if (seen.add(key)) {
+                candidates.add(attraction);
+            }
+        }
+        for (Attraction attraction : addableCandidates) {
+            if (candidates.size() >= MAX_OPTIMIZE_CANDIDATES || attraction == null
+                    || attraction.getPoiId() == null || attraction.getPoiId().isBlank()) {
+                continue;
+            }
+            String key = attraction.getPoiId().trim().toUpperCase(Locale.ROOT);
+            if (seen.add(key)) {
+                candidates.add(attraction);
+            }
+        }
+        return candidates;
+    }
+
+    private String firstSubmittedAdcode(List<Attraction> submittedAttractions) {
+        if (submittedAttractions == null) {
+            return null;
+        }
+        for (Attraction attraction : submittedAttractions) {
+            if (attraction != null && !blank(attraction.getAdcode())) {
+                return attraction.getAdcode().trim();
+            }
+        }
+        return null;
+    }
+
+    private String buildOptimizeRetrievalQuery(List<RouteAttraction> submitted, String message) {
+        StringBuilder sb = new StringBuilder();
+        if (message != null && !message.isBlank()) {
+            sb.append("用户优化要求: ").append(message.trim()).append("\n");
+        }
+        sb.append("当前路线景点: ");
+        List<String> names = submitted.stream()
+                .filter(Objects::nonNull)
+                .map(ra -> !blank(ra.getName()) ? ra.getName() : ra.getPoiId())
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .toList();
+        sb.append(names);
+        return sb.toString();
+    }
+
     private AIRoutePlan parseAiPlan(String aiText) throws Exception {
-        String json = aiText.replaceAll("(?s)^```json\\s*|\\s*```$", "").trim();
-        AIRoutePlan plan = objectMapper.readValue(json, AIRoutePlan.class);
-        validateAiPlan(plan);
-        return plan;
+        String json = extractJsonFromResponse(aiText);
+        try {
+            AIRoutePlan plan = objectMapper.readValue(json, AIRoutePlan.class);
+            validateAiPlan(plan);
+            return plan;
+        } catch (Exception e) {
+            // 如果解析失败，记录原始响应以便排查
+            log.error("AI返回内容无法解析为JSON，原始响应前500字符: {}",
+                    aiText.length() > 500 ? aiText.substring(0, 500) : aiText);
+            throw e;
+        }
+    }
+
+    /**
+     * 从模型响应中提取 JSON 对象。
+     * 兼容以下情况：
+     * 1. 纯 JSON 文本
+     * 2. Markdown 代码块包裹的 JSON（```json ... ``` 或 ``` ... ```）
+     * 3. 模型在 JSON 前后附加了自然语言说明（Ollama/Qwen 常见行为）
+     * 4. 模型返回了多个 JSON 对象（取第一个完整的）
+     */
+    private String extractJsonFromResponse(String aiText) {
+        if (aiText == null || aiText.isBlank()) {
+            throw new IllegalArgumentException("AI response is empty");
+        }
+
+        String text = aiText.trim();
+
+        // 1. 先尝试去掉 Markdown 代码块标记
+        String cleaned = text
+                .replaceAll("(?s)^```(?:json)?\\s*", "")  // 开头的 ```json 或 ```
+                .replaceAll("(?s)\\s*```$", "")           // 结尾的 ```
+                .trim();
+
+        // 2. 找到第一个 { 和最后一个 } 之间的内容（处理模型在 JSON 前后加说明的情况）
+        int firstBrace = cleaned.indexOf('{');
+        int lastBrace = cleaned.lastIndexOf('}');
+
+        if (firstBrace == -1 || lastBrace == -1 || firstBrace >= lastBrace) {
+            // 没有找到有效的大括号，记录原始内容并抛出异常
+            log.error("无法从AI响应中找到JSON对象，响应内容前500字符: {}",
+                    text.length() > 500 ? text.substring(0, 500) : text);
+            throw new IllegalArgumentException(
+                    "AI response does not contain valid JSON object. Response starts with: " +
+                    (text.length() > 200 ? text.substring(0, 200) : text));
+        }
+
+        String candidate = cleaned.substring(firstBrace, lastBrace + 1);
+
+        // 3. 尝试解析 candidate，如果失败可能是嵌套问题
+        //    用更智能的方式匹配：从第一个 { 开始，计数匹配到对应的 }
+        try {
+            objectMapper.readTree(candidate);  // 验证是否是合法 JSON
+            return candidate;
+        } catch (Exception e) {
+            // candidate 可能因为字符串中包含 } 而导致截断不正确
+            // 使用括号计数方式重新提取
+            log.debug("简单截取JSON失败，尝试用括号计数方式提取");
+        }
+
+        // 4. 括号计数方式：从第一个 { 开始，逐字符扫描
+        int startIdx = cleaned.indexOf('{');
+        int depth = 0;
+        int endIdx = -1;
+        for (int i = startIdx; i < cleaned.length(); i++) {
+            char ch = cleaned.charAt(i);
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth--;
+                if (depth == 0) {
+                    endIdx = i;
+                    break;
+                }
+            }
+        }
+
+        if (endIdx > startIdx) {
+            String bracketMatched = cleaned.substring(startIdx, endIdx + 1);
+            log.info("使用括号计数方式成功提取JSON，长度={}", bracketMatched.length());
+            return bracketMatched;
+        }
+
+        throw new IllegalArgumentException(
+                "Unable to extract valid JSON from AI response. Response starts with: " +
+                (text.length() > 200 ? text.substring(0, 200) : text));
     }
 
     private void validateAiPlan(AIRoutePlan plan) {
@@ -547,6 +938,41 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         return sb.toString();
     }
 
+    /**
+     * 为 Ollama 模式预查询参考景点对，并嵌入到 prompt 中。
+     * 因为 Ollama 不支持 function calling，需要提前查询好数据。
+     */
+    private String enrichPromptWithReferencePairs(String originalPrompt) {
+        try {
+            List<ReferencePair> pairs = referencePairService.recommendReferencePairs(null, 1, 10);
+            if (pairs == null || pairs.isEmpty()) {
+                return originalPrompt;
+            }
+
+            StringBuilder sb = new StringBuilder(originalPrompt);
+            sb.append("\n\n【参考景点对（已预查询，无需调用工具）】\n");
+            sb.append("以下是一些优质的研学景点组合，可作为路线规划的参考：\n");
+            for (int i = 0; i < pairs.size(); i++) {
+                ReferencePair pair = pairs.get(i);
+                sb.append(i + 1).append(". ");
+                if (pair.getFromPoiName() != null) {
+                    sb.append(pair.getFromPoiName());
+                }
+                if (pair.getToPoiName() != null) {
+                    sb.append(" → ").append(pair.getToPoiName());
+                }
+                if (pair.getNotes() != null && !pair.getNotes().isBlank()) {
+                    sb.append("（").append(pair.getNotes()).append("）");
+                }
+                sb.append("\n");
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("预查询参考景点对失败，使用原始prompt: {}", e.getMessage());
+            return originalPrompt;
+        }
+    }
+
     private RouteConstraintState loadOrCreateState(String memoryId, String message) {
         if (memoryId == null || memoryId.isBlank()) {
             RouteConstraintState state = new RouteConstraintState();
@@ -763,6 +1189,10 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
     private String nonNull(String s) {
         return s == null ? "" : s;
+    }
+
+    private boolean blank(String s) {
+        return s == null || s.isBlank();
     }
 
     /**

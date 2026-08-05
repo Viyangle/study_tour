@@ -20,6 +20,44 @@
 }
 ```
 
+#### 4.6.4 同步单个高德 POI（一条龙）
+
+- 方法：`POST`
+- 路径：`/attractions/sync/{poiId}`
+- 描述：按高德 poiId 同步单个景点：高德 place/detail 取数 → 写入 `attractions` 表（upsert）→ 增量更新 Redis 向量索引。适合前端从高德选点后立即调用，让该景点马上进入后端景点库和向量检索候选。
+- 前提：Redis 向量索引增量更新需要 Redis Stack（RediSearch），并开启 `app.rag.embedding.store-enabled=true`；向量索引更新失败不会回滚 MySQL 登记结果
+
+请求示例：
+
+```http
+POST /attractions/sync/B00190BBCZ
+```
+
+响应中的 `data` 是同步后的景点对象：
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": {
+    "poiId": "B00190BBCZ",
+    "name": "玄武湖景区",
+    "location": "118.812688,32.069455",
+    "adcode": "320102",
+    "citycode": "025",
+    "status": "ACTIVE"
+  }
+}
+```
+
+#### 4.6.5 定期同步与向量索引重建
+
+- 数据库定期更新仍使用现有脚本手动执行：`scripts/sync_attractions_top50_from_json.ps1`（或 `AmapAttractionBatchExporter --syncDb=true`）从高德拉取数据写入 MySQL。
+- 全量重建 Redis 向量索引有两种方式：
+  1. 启动时自动重建：开启 `app.rag.embedding.ingest-enabled=true`（可选同时开启 `clear-before-ingest=true`），应用启动时按数据库当前有效景点重建向量索引；
+  2. 调用管理接口 `POST /attractions/reindex`（需 ADMIN 角色），内部先清空索引再按数据库全量写入。
+- 前提：Redis 使用 Redis Stack（RediSearch），并开启 `app.rag.embedding.store-enabled=true`。
+
 字段说明：
 
 - `code`：`1` 表示成功，`0` 表示失败
@@ -1472,8 +1510,8 @@ GET /routes/17
 - 方法：`POST`
 - 路径：`/routes/optimize`
 - 可选查询参数：`message`，用于补充优化目标
-- 描述：在前端提交的完整 POI 集合内优化顺序、游览时间、建议时长和通勤说明，并保存为一条新路线
-- 限制：一次提交 2～20 个不重复且有效的 POI；优化结果不会新增、删除或替换景点
+- 描述：优化前端提交的路线，保存为一条新路线。可以调整顺序、游览时间、建议时长和通勤说明，也允许删除不合适的景点、并从“后端候选池（向量召回 + 同地区景点）”中新增景点。前端从高德搜索得到的 POI 即使尚未收录在 `attractions` 表中，也只需提交 `poiId`：后端会调用高德 place/detail 获取完整信息，一条龙完成 MySQL 登记和 Redis 向量索引增量更新；只有高德不可用时才回退使用请求携带的景点字段登记。
+- 限制：一次提交 1～20 个不重复且有效的 POI；最终路线 1～20 个，只能由“提交的景点 + 后端候选景点”组成
 
 请求示例：
 
@@ -1489,17 +1527,27 @@ Content-Type: application/json
     "visitOrder": 1,
     "visitTime": "2026-04-01T09:00:00",
     "recommendedDuration": 120,
-    "notes": ""
+    "notes": "",
+    "name": "总统府",
+    "location": "118.7969,32.0486",
+    "adcode": "320102",
+    "citycode": "025"
   },
   {
     "poiId": "B00190AMPT",
     "visitOrder": 2,
     "visitTime": "2026-04-01T14:00:00",
     "recommendedDuration": 90,
-    "notes": ""
+    "notes": "",
+    "name": "朝天宫",
+    "location": "118.7807,32.0314",
+    "adcode": "320104",
+    "citycode": "025"
   }
 ]
 ```
+
+> 说明：后端默认以高德 place/detail 返回的数据为准（只需 `poiId`）。`name`、`location`、`adcode`、`citycode` 等字段来自前端的高德搜索结果，仅在“高德接口不可用”时作为回退登记数据。Redis 向量索引增量更新依赖 Redis Stack，并需开启 `app.rag.embedding.store-enabled=true`。
 
 响应中的 `data` 是新保存路线的 ID：
 

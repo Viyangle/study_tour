@@ -49,8 +49,20 @@ langchain4j:
       model-name: deepseek-v4-flash
       log-requests: true
       log-responses: true
-      timeout: 120s
-      max-retries: 2
+      timeout: 300s
+      max-retries: 1
+
+#    # === Ollama 配置示例 ===
+#    # 使用 Ollama 时，取消下面注释并注释上方 DeepSeek 配置，
+#    # 同时设置 app.ai.ollama-enabled: true
+#    chat-model:
+#      base-url: http://localhost:11434/v1
+#      api-key: ollama
+#      model-name: qwen3.6:35b
+#      log-requests: true
+#      log-responses: true
+#      timeout: 300s
+#      max-retries: 1
 
 #    streaming-chat-model:
 #      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -110,6 +122,10 @@ jwt:
 
 # App custom config
 app:
+  ai:
+    # 当使用 Ollama 时设为 true，将使用不带 function calling 的 OllamaRouteComposerService
+    # 注意：开启后需要同时将 langchain4j.open-ai.chat-model 指向 Ollama 地址
+    ollama-enabled: false
   security:
     enabled: true
   rag:
@@ -118,6 +134,11 @@ app:
       ingest-enabled: false
       # Whether to clear the configured Redis embedding index before ingest
       clear-before-ingest: false
+      # 是否创建 RedisEmbeddingStore（需要 Redis Stack / RediSearch）。
+      # 生产开启 true 后，syncFromAmap/optimize 会把新景点同时写入 MySQL 和 Redis 向量索引。
+      store-enabled: true
+      # 单景点同步时是否增量写入 Redis 向量索引（依赖 store-enabled=true）
+      sync-vector-enabled: true
       # AMap JSON files to convert into RAG documents
       content-pattern: "classpath*:content/*.json"
       # Whether to split documents before embedding ingest

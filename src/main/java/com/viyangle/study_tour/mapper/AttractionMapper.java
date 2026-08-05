@@ -15,6 +15,8 @@ public interface AttractionMapper {
 
     int updateByPoiId(Attraction attraction);
 
+    int upsert(Attraction attraction);
+
     Attraction selectByPoiId(@Param("poiId") String poiId);
 
     List<Attraction> selectByPoiIds(@Param("poiIds") List<String> poiIds);

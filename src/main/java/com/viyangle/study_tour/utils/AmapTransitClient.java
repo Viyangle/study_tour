@@ -35,6 +35,9 @@ public class AmapTransitClient {
     @Value("${app.amap.transit-endpoint:https://restapi.amap.com/v5/direction/transit/integrated}")
     private String endpoint;
 
+    @Value("${app.amap.detail-endpoint:https://restapi.amap.com/v5/place/detail}")
+    private String detailEndpoint;
+
     @Value("${app.amap.key:}")
     private String amapKey;
 
@@ -136,6 +139,42 @@ public class AmapTransitClient {
         return edge;
     }
 
+    /**
+     * 通过高德 place/detail 接口按 poiId 补全景点信息。
+     * 用于前端只提交了高德 poiId（未带名称/坐标等元数据）的场景。
+     * 查询失败时返回 null，由调用方决定是否继续。
+     */
+    public Attraction fetchAttraction(String poiId) {
+        if (blank(poiId) || blank(amapKey)) {
+            return null;
+        }
+        String url = buildDetailUrl(poiId);
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() != 200) {
+                return null;
+            }
+            String body = new String(response.body(), StandardCharsets.UTF_8);
+            JsonNode root = MAPPER.readTree(body);
+            if (!"1".equals(text(root, "status"))) {
+                return null;
+            }
+            JsonNode pois = root.path("pois");
+            if (!pois.isArray() || pois.isEmpty()) {
+                return null;
+            }
+            return toAttraction(pois.get(0));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private TransitEdge getTransitEdgeWithRetry(Attraction from, Attraction to) {
         int retries = Math.max(0, maxRetries);
         for (int attempt = 0; attempt <= retries; attempt++) {
@@ -225,6 +264,60 @@ public class AmapTransitClient {
             first = false;
         }
         return sb.toString();
+    }
+
+    private String buildDetailUrl(String poiId) {
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("key", amapKey);
+        query.put("id", poiId);
+        query.put("show_fields", "business");
+
+        StringBuilder sb = new StringBuilder(detailEndpoint).append("?");
+        boolean first = true;
+        for (Map.Entry<String, String> entry : query.entrySet()) {
+            if (!first) {
+                sb.append("&");
+            }
+            sb.append(URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8));
+            sb.append("=");
+            sb.append(URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8));
+            first = false;
+        }
+        return sb.toString();
+    }
+
+    private Attraction toAttraction(JsonNode poi) {
+        Attraction attraction = new Attraction();
+        attraction.setPoiId(firstText(poi, "id", "poi_id"));
+        attraction.setParentPoiId(firstText(poi, "parent", "parent_poi_id"));
+        attraction.setName(text(poi, "name"));
+        attraction.setAddress(text(poi, "address"));
+        attraction.setLocation(text(poi, "location"));
+        attraction.setPcode(text(poi, "pcode"));
+        attraction.setPname(text(poi, "pname"));
+        attraction.setCitycode(text(poi, "citycode"));
+        attraction.setCityname(text(poi, "cityname"));
+        attraction.setAdcode(text(poi, "adcode"));
+        attraction.setAdname(text(poi, "adname"));
+        attraction.setType(text(poi, "type"));
+        attraction.setTypecode(text(poi, "typecode"));
+        attraction.setDistance(text(poi, "distance"));
+        JsonNode business = poi.path("business");
+        attraction.setOpentimeToday(text(business, "opentime_today"));
+        attraction.setOpentimeWeek(text(business, "opentime_week"));
+        attraction.setTel(text(business, "tel"));
+        attraction.setStatus("ACTIVE");
+        return attraction;
+    }
+
+    private static String firstText(JsonNode node, String... fields) {
+        for (String field : fields) {
+            String value = text(node, field);
+            if (!blank(value)) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private String buildCacheKey(Attraction from, Attraction to) {

@@ -84,6 +84,36 @@ public class AmapAttractionRagDocumentLoader {
         return documents;
     }
 
+    /**
+     * 为单个景点构建 RAG 文档（用于新增景点后增量写入向量库）。
+     * 与全量加载使用同一套文本和 metadata 格式。
+     */
+    public Document buildDocument(Attraction attraction) {
+        if (attraction == null || attraction.getPoiId() == null || attraction.getPoiId().isBlank()
+                || attraction.getName() == null || attraction.getName().isBlank()) {
+            return null;
+        }
+        return buildDocument(attraction, loadTags(attraction.getPoiId()));
+    }
+
+    private List<String> loadTags(String poiId) {
+        List<AttractionTag> attractionTags = attractionTagMapper.selectByPoiId(poiId);
+        if (attractionTags == null || attractionTags.isEmpty()) {
+            return List.of();
+        }
+        List<String> tagNames = new ArrayList<>();
+        for (AttractionTag at : attractionTags) {
+            if (at == null || at.getTagId() == null) {
+                continue;
+            }
+            Tag tag = tagMapper.selectById(at.getTagId());
+            if (tag != null && tag.getName() != null && !tag.getName().isBlank()) {
+                tagNames.add(tag.getName());
+            }
+        }
+        return tagNames;
+    }
+
     private Document buildDocument(Attraction a, List<String> tags) {
         // 构建文档文本，包含 poi_id 以便检索端正则提取
         StringBuilder sb = new StringBuilder();

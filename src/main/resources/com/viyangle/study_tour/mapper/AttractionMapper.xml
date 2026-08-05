@@ -45,6 +45,31 @@
         where poi_id = #{poiId}
     </update>
 
+    <insert id="upsert" parameterType="com.viyangle.study_tour.pojo.Attraction">
+        insert into attractions
+        (poi_id, parent_poi_id, name, address, location, pcode, pname, citycode, cityname, adcode, adname, type, typecode, distance, opentime_today, opentime_week, tel, status)
+        values
+        (#{poiId}, #{parentPoiId}, #{name}, #{address}, #{location}, #{pcode}, #{pname}, #{citycode}, #{cityname}, #{adcode}, #{adname}, #{type}, #{typecode}, #{distance}, #{opentimeToday}, #{opentimeWeek}, #{tel}, coalesce(#{status}, 'ACTIVE'))
+        on duplicate key update
+        parent_poi_id = IF(VALUES(parent_poi_id) IS NULL OR VALUES(parent_poi_id) = '', parent_poi_id, VALUES(parent_poi_id)),
+        name = IF(VALUES(name) IS NULL OR VALUES(name) = '', name, VALUES(name)),
+        address = IF(VALUES(address) IS NULL OR VALUES(address) = '', address, VALUES(address)),
+        location = IF(VALUES(location) IS NULL OR VALUES(location) = '', location, VALUES(location)),
+        pcode = IF(VALUES(pcode) IS NULL OR VALUES(pcode) = '', pcode, VALUES(pcode)),
+        pname = IF(VALUES(pname) IS NULL OR VALUES(pname) = '', pname, VALUES(pname)),
+        citycode = IF(VALUES(citycode) IS NULL OR VALUES(citycode) = '', citycode, VALUES(citycode)),
+        cityname = IF(VALUES(cityname) IS NULL OR VALUES(cityname) = '', cityname, VALUES(cityname)),
+        adcode = IF(VALUES(adcode) IS NULL OR VALUES(adcode) = '', adcode, VALUES(adcode)),
+        adname = IF(VALUES(adname) IS NULL OR VALUES(adname) = '', adname, VALUES(adname)),
+        type = IF(VALUES(type) IS NULL OR VALUES(type) = '', type, VALUES(type)),
+        typecode = IF(VALUES(typecode) IS NULL OR VALUES(typecode) = '', typecode, VALUES(typecode)),
+        distance = IF(VALUES(distance) IS NULL OR VALUES(distance) = '', distance, VALUES(distance)),
+        opentime_today = IF(VALUES(opentime_today) IS NULL OR VALUES(opentime_today) = '', opentime_today, VALUES(opentime_today)),
+        opentime_week = IF(VALUES(opentime_week) IS NULL OR VALUES(opentime_week) = '', opentime_week, VALUES(opentime_week)),
+        tel = IF(VALUES(tel) IS NULL OR VALUES(tel) = '', tel, VALUES(tel)),
+        status = IF(VALUES(status) IS NULL OR VALUES(status) = '', status, VALUES(status))
+    </insert>
+
     <select id="selectByPoiId" parameterType="java.lang.String" resultType="com.viyangle.study_tour.pojo.Attraction">
         select <include refid="attractionColumns"/>
         from attractions
