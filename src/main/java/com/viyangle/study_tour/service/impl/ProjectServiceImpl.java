@@ -524,6 +524,7 @@ public class ProjectServiceImpl implements ProjectService {
         ProjectStatus current = ProjectStatus.from(project.getStatus());
         ProjectStatus target = ProjectStatus.from(targetStatus);
         if (current == target) {
+            validateTargetStatusRequirements(project, target);
             syncProjectGroupChat(project, target);
             return;
         }
@@ -621,6 +622,12 @@ public class ProjectServiceImpl implements ProjectService {
         if (!initialStatus.canBeInitialStatus()) {
             throw new IllegalArgumentException("Invalid initial project status: " + initialStatus.name());
         }
+        if ((initialStatus == ProjectStatus.OPEN || initialStatus == ProjectStatus.MATCHING)
+                && project.getLeaderAccountId() != null) {
+            throw new IllegalArgumentException(
+                    "Project status " + initialStatus.name() + " cannot have leaderAccountId"
+            );
+        }
         if (initialStatus.requiresLeader() && project.getLeaderAccountId() == null) {
             throw new IllegalArgumentException("Project status " + initialStatus.name() + " requires leaderAccountId");
         }
@@ -628,6 +635,12 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     private void validateTargetStatusRequirements(Project project, ProjectStatus targetStatus) {
+        if ((targetStatus == ProjectStatus.OPEN || targetStatus == ProjectStatus.MATCHING)
+                && project.getLeaderAccountId() != null) {
+            throw new IllegalArgumentException(
+                    "Project status " + targetStatus.name() + " cannot have leaderAccountId"
+            );
+        }
         if (targetStatus.requiresLeader() && project.getLeaderAccountId() == null) {
             throw new IllegalArgumentException("Project status " + targetStatus.name() + " requires leaderAccountId");
         }

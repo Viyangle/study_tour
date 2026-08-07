@@ -44,32 +44,13 @@ logging:
 langchain4j:
   open-ai:
     chat-model:
-      base-url: https://api.deepseek.com
-      api-key: ${CHAT_MODEL_KEY}
-      model-name: deepseek-v4-flash
+      base-url: https://api.deepseek.com # http://localhost:11434/v1
+      api-key: ${CHAT_MODEL_KEY} # ollama
+      model-name: deepseek-v4-flash # qwen3.6:35b
       log-requests: true
       log-responses: true
       timeout: 300s
       max-retries: 1
-
-#    # === Ollama 配置示例 ===
-#    # 使用 Ollama 时，取消下面注释并注释上方 DeepSeek 配置，
-#    # 同时设置 app.ai.ollama-enabled: true
-#    chat-model:
-#      base-url: http://localhost:11434/v1
-#      api-key: ollama
-#      model-name: qwen3.6:35b
-#      log-requests: true
-#      log-responses: true
-#      timeout: 300s
-#      max-retries: 1
-
-#    streaming-chat-model:
-#      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-#      api-key: ${OPENAI_API_KEY}
-#      model-name: qwen-max
-#      log-requests: true
-#      log-responses: true
 
     embedding-model:
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1 # http://localhost:11434/v1

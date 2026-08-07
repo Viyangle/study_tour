@@ -18,6 +18,8 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @Service
@@ -78,6 +80,7 @@ public class ChatServiceImpl implements ChatService {
         if (!STATUS_ACTIVE.equalsIgnoreCase(session.getStatus())) {
             throw new ForbiddenException("群组已删除或停用");
         }
+        requireActiveProject(session.getProjectId());
         String memberRole = chatSessionMapper.selectEligibleMemberRole(sessionId, currentAccountId);
         if (memberRole == null || memberRole.isBlank()) {
             throw new ForbiddenException("仅项目发布者、领队或参团成员可加入群组");
@@ -144,6 +147,8 @@ public class ChatServiceImpl implements ChatService {
         ChatSession existing = chatSessionMapper.selectByProjectId(projectId);
         if (existing != null) {
             chatSessionMapper.updateLeaderByProjectId(projectId, leaderAccountId);
+            chatSessionMapper.reactivateByProjectId(projectId);
+            existing = chatSessionMapper.selectByProjectId(projectId);
             synchronizeGroupMembers(existing, ownerAccountId, leaderAccountId);
             return existing;
         }
@@ -192,6 +197,10 @@ public class ChatServiceImpl implements ChatService {
                     project.getOwnerAccountId(),
                     project.getLeaderAccountId()
             );
+        }
+        if (!STATUS_ACTIVE.equalsIgnoreCase(session.getStatus())) {
+            chatSessionMapper.reactivateByProjectId(projectId);
+            session = chatSessionMapper.selectByProjectId(projectId);
         }
         if (STATUS_ACTIVE.equalsIgnoreCase(session.getStatus())) {
             String role = chatSessionMapper.selectEligibleMemberRole(session.getId(), accountId);
@@ -297,7 +306,7 @@ public class ChatServiceImpl implements ChatService {
         if (projectId == null) {
             throw new IllegalArgumentException("项目ID不能为空");
         }
-        Project project = projectMapper.selectById(projectId);
+        Project project = projectMapper.selectByIdForUpdate(projectId);
         if (project == null) {
             throw new ResourceNotFoundException("项目不存在, projectId=" + projectId);
         }
@@ -305,7 +314,22 @@ public class ChatServiceImpl implements ChatService {
         if (status == ProjectStatus.DONE || status == ProjectStatus.CANCELLED) {
             throw new ForbiddenException("已完成或已取消的项目不能创建群组");
         }
+        if ((status == ProjectStatus.OPEN || status == ProjectStatus.MATCHING)
+                && hasDeparted(project)) {
+            throw new ForbiddenException("project has departed, projectId=" + projectId);
+        }
         return project;
+    }
+
+    private boolean hasDeparted(Project project) {
+        if (project.getDepartureDate() == null) {
+            return false;
+        }
+        LocalTime departureTime = project.getDepartureTime() == null
+                ? LocalTime.MAX
+                : project.getDepartureTime();
+        return LocalDateTime.of(project.getDepartureDate(), departureTime)
+                .isBefore(LocalDateTime.now());
     }
 
     private void synchronizeGroupMembers(ChatSession session,

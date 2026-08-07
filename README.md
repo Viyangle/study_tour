@@ -1505,65 +1505,11 @@ GET /routes/17
 }
 ```
 
-#### 4.3.5 优化前端提交的完整路线
-
-- 方法：`POST`
-- 路径：`/routes/optimize`
-- 可选查询参数：`message`，用于补充优化目标
-- 描述：优化前端提交的路线，保存为一条新路线。可以调整顺序、游览时间、建议时长和通勤说明，也允许删除不合适的景点、并从“后端候选池（向量召回 + 同地区景点）”中新增景点。前端从高德搜索得到的 POI 即使尚未收录在 `attractions` 表中，也只需提交 `poiId`：后端会调用高德 place/detail 获取完整信息，一条龙完成 MySQL 登记和 Redis 向量索引增量更新；只有高德不可用时才回退使用请求携带的景点字段登记。
-- 限制：一次提交 1～20 个不重复且有效的 POI；最终路线 1～20 个，只能由“提交的景点 + 后端候选景点”组成
-
-请求示例：
-
-```http
-POST /routes/optimize?message=尽量减少折返，并保留午餐时间
-Content-Type: application/json
-```
-
-```json
-[
-  {
-    "poiId": "B00190BMRC",
-    "visitOrder": 1,
-    "visitTime": "2026-04-01T09:00:00",
-    "recommendedDuration": 120,
-    "notes": "",
-    "name": "总统府",
-    "location": "118.7969,32.0486",
-    "adcode": "320102",
-    "citycode": "025"
-  },
-  {
-    "poiId": "B00190AMPT",
-    "visitOrder": 2,
-    "visitTime": "2026-04-01T14:00:00",
-    "recommendedDuration": 90,
-    "notes": "",
-    "name": "朝天宫",
-    "location": "118.7807,32.0314",
-    "adcode": "320104",
-    "citycode": "025"
-  }
-]
-```
-
-> 说明：后端默认以高德 place/detail 返回的数据为准（只需 `poiId`）。`name`、`location`、`adcode`、`citycode` 等字段来自前端的高德搜索结果，仅在“高德接口不可用”时作为回退登记数据。Redis 向量索引增量更新依赖 Redis Stack，并需开启 `app.rag.embedding.store-enabled=true`。
-
-响应中的 `data` 是新保存路线的 ID：
-
-```json
-{
-  "code": 1,
-  "msg": "success",
-  "data": 20
-}
-```
-
-#### 4.3.6 AI 规划路线
+#### 4.3.5 AI 生成并优化路线
 
 - 方法：`POST`
 - 路径：`/routes/ai/{memoryId}`
-- 描述：根据自然语言请求由 AI 生成并保存路线
+- 描述：根据自然语言请求由 AI 生成路线，再自动优化景点顺序、游览时间、建议时长和通勤说明，最后保存优化后的路线。优化过程中可按需求增删候选景点。
 
 请求示例（不带用户偏好）：
 
