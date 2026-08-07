@@ -1509,7 +1509,8 @@ GET /routes/17
 
 - 方法：`POST`
 - 路径：`/routes/ai/{memoryId}`
-- 描述：根据自然语言请求由 AI 生成路线，再自动优化景点顺序、游览时间、建议时长和通勤说明，最后保存优化后的路线。优化过程中可按需求增删候选景点。
+- 描述：根据自然语言请求由 AI 生成路线，再自动优化景点顺序、游览时间、建议时长和通勤说明，最后保存优化后的路线。也可提交已有景点数组，直接按该数组优化，保留原 `/routes/optimize` 的输入方式。
+- 请求体：可选。提交 1～20 个不重复且有效的景点时，服务直接优化这些景点；不提交请求体时，服务根据 `message` 生成初稿后再优化。
 
 请求示例（不带用户偏好）：
 
@@ -1523,9 +1524,43 @@ POST /routes/ai/1?message=我要在南京，2026年3月20日开始的两天内�
 POST /routes/ai/1?message=我想去南京玩两天&accountId=6
 ```
 
+提交已有景点并优化（原优化路线的请求方式）：
+
+```http
+POST /routes/ai/1?message=尽量减少折返，并保留午餐时间
+Content-Type: application/json
+```
+
+```json
+[
+  {
+    "poiId": "B00190BMRC",
+    "visitOrder": 1,
+    "visitTime": "2026-04-01T09:00:00",
+    "recommendedDuration": 120,
+    "notes": "",
+    "name": "总统府",
+    "location": "118.7969,32.0486",
+    "adcode": "320102",
+    "citycode": "025"
+  },
+  {
+    "poiId": "B00190AMPT",
+    "visitOrder": 2,
+    "visitTime": "2026-04-01T14:00:00",
+    "recommendedDuration": 90,
+    "notes": "",
+    "name": "朝天宫",
+    "location": "118.7807,32.0314",
+    "adcode": "320104",
+    "citycode": "025"
+  }
+]
+```
+
 请求参数：
 
-- `message`：用户的自然语言需求（必填）
+- `message`：未提交请求体时必填；提交景点数组时可选，用于补充优化目标
 - `accountId`：用户 ID（可选，传入后会融合用户长期偏好标签，使 AI 生成的路线更贴合个人兴趣）
 
 响应结果：

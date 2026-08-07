@@ -76,12 +76,25 @@ public class RouteController {
     }
 
     @PostMapping("/ai/{memoryId}")
-    public Result generateRouteByAIV2(@PathVariable String memoryId, @RequestParam String message, @RequestParam(required = false) Long accountId) throws Exception {
+    public Result generateRouteByAIV2(@PathVariable String memoryId,
+                                      @RequestParam(required = false) String message,
+                                      @RequestParam(required = false) Long accountId,
+                                      @RequestBody(required = false) List<RouteAttraction> routeAttractions) throws Exception {
         long startMs = System.currentTimeMillis();
-        log.info("Generate and optimize route by AI v2 start, memoryId={}, accountId={}", memoryId, accountId);
-        AIRoutePlan generatedPlan = aiRoutePlanningService.planRouteV2(memoryId, message, accountId);
-        AIRoutePlan optimizedPlan = aiRoutePlanningService.optimizeSubmittedRoute(
-                toRouteAttractions(generatedPlan.getItems()), message);
+        AIRoutePlan optimizedPlan;
+        if (routeAttractions == null) {
+            if (message == null || message.isBlank()) {
+                throw new IllegalArgumentException("message cannot be empty when routeAttractions are not submitted");
+            }
+            log.info("Generate and optimize route by AI v2 start, memoryId={}, accountId={}", memoryId, accountId);
+            AIRoutePlan generatedPlan = aiRoutePlanningService.planRouteV2(memoryId, message, accountId);
+            optimizedPlan = aiRoutePlanningService.optimizeSubmittedRoute(
+                    toRouteAttractions(generatedPlan.getItems()), message);
+        } else {
+            log.info("Optimize submitted route by AI v2 start, memoryId={}, accountId={}, attractionCount={}",
+                    memoryId, accountId, routeAttractions.size());
+            optimizedPlan = aiRoutePlanningService.optimizeSubmittedRoute(routeAttractions, message);
+        }
         Result result = Result.success(routeService.saveOrUpdateAIConversationRoute(
                 memoryId, optimizedPlan.getTag(), toRouteAttractions(optimizedPlan.getItems())));
         long costMs = System.currentTimeMillis() - startMs;
