@@ -18,5 +18,7 @@ public class AttractionAdjacency {
     private String toPoiId;
     private Integer transitMinutes;  // 公交通勤时间(分钟)，null 表示无公交
     private Integer distanceM;       // 交通距离(米)
+    private String relationType;     // GEOGRAPHIC / THEMATIC
+    private Double similarityScore;  // 语义相似度(0-1)，仅 THEMATIC 有值
     private LocalDateTime createdAt;
 }

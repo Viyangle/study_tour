@@ -2,6 +2,7 @@ package com.viyangle.study_tour.graph;
 
 import com.viyangle.study_tour.utils.AttractionAdjacencyCalculator;
 import com.viyangle.study_tour.utils.AttractionTagBatchLabeler;
+import com.viyangle.study_tour.utils.SemanticEdgeCalculator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,21 @@ public class KnowledgeGraphAutoInitializer {
 
     @Value("${langchain4j.open-ai.chat-model.api-key:}")
     private String openaiApiKey;
+
+    @Value("${semantic.edge.api-key:}")
+    private String semanticEdgeApiKey;
+
+    @Value("${semantic.edge.base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}")
+    private String semanticEdgeBaseUrl;
+
+    @Value("${semantic.edge.model-name:qwen-plus}")
+    private String semanticEdgeModel;
+
+    @Value("${semantic.edge.batch-size:10}")
+    private int semanticEdgeBatchSize;
+
+    @Value("${semantic.edge.sleep-millis:500}")
+    private long semanticEdgeSleepMillis;
 
     @Value("${app.amap.key:}")
     private String amapKey;
@@ -97,8 +113,29 @@ public class KnowledgeGraphAutoInitializer {
                     log.error("知识图谱自动检测: 相邻关系计算失败: {}", e.getMessage(), e);
                 }
 
+                // 检测是否需要算语义边
+                boolean semanticProcessed = false;
+                try {
+                    int withoutSemantic = SemanticEdgeCalculator.countWithoutSemanticEdges(conn);
+                    if (withoutSemantic > 0) {
+                        if (semanticEdgeApiKey == null || semanticEdgeApiKey.isBlank()) {
+                            log.warn("知识图谱自动检测: {} 个景点缺少语义边，但 SEMANTIC_EDGE_API_KEY 未配置，跳过", withoutSemantic);
+                        } else {
+                            log.info("知识图谱自动检测: {} 个景点缺少语义边，开始增量计算...", withoutSemantic);
+                            SemanticEdgeCalculator.processIncremental(conn, semanticEdgeApiKey,
+                                    semanticEdgeBaseUrl, semanticEdgeModel,
+                                    semanticEdgeBatchSize, semanticEdgeSleepMillis);
+                            semanticProcessed = true;
+                        }
+                    } else {
+                        log.info("知识图谱自动检测: 所有景点已有语义边");
+                    }
+                } catch (Exception e) {
+                    log.error("知识图谱自动检测: 语义边计算失败: {}", e.getMessage(), e);
+                }
+
                 // 如果有数据更新，重新加载知识图谱
-                if (tagProcessed || adjacencyProcessed) {
+                if (tagProcessed || adjacencyProcessed || semanticProcessed) {
                     log.info("知识图谱自动检测: 数据已更新，重新加载知识图谱...");
                     knowledgeGraph.reload();
                     log.info("知识图谱自动检测: 知识图谱重新加载完成");
