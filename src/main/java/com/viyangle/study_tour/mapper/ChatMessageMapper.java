@@ -21,8 +21,8 @@ public interface ChatMessageMapper {
 
     List<ChatMessage> selectAll();
 
-    /**
-     * 按会话id查询消息列表（按发送时间升序）
-     */
-    List<ChatMessage> selectBySessionId(@Param("sessionId") Long sessionId);
+    /** 查询指定历史页；第 1 页为最近一页，页内按发送时间升序。 */
+    List<ChatMessage> selectPageBySessionId(@Param("sessionId") Long sessionId,
+                                            @Param("offset") long offset,
+                                            @Param("pageSize") int pageSize);
 }

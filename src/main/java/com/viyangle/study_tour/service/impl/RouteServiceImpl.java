@@ -5,8 +5,11 @@ import com.viyangle.study_tour.mapper.AccountMapper;
 import com.viyangle.study_tour.mapper.AccountTagPrefMapper;
 import com.viyangle.study_tour.mapper.AttractionMapper;
 import com.viyangle.study_tour.mapper.RouteAttractionMapper;
+import com.viyangle.study_tour.mapper.RouteFavoriteMapper;
 import com.viyangle.study_tour.mapper.RouteMapper;
 import com.viyangle.study_tour.mapper.TagMapper;
+import com.viyangle.study_tour.exception.ResourceNotFoundException;
+import com.viyangle.study_tour.exception.UnauthorizedException;
 import com.viyangle.study_tour.pojo.Account;
 import com.viyangle.study_tour.pojo.AccountTagPref;
 import com.viyangle.study_tour.pojo.Attraction;
@@ -42,6 +45,9 @@ public class RouteServiceImpl implements RouteService {
 
     @Autowired
     private RouteAttractionMapper routeAttractionMapper;
+
+    @Autowired
+    private RouteFavoriteMapper routeFavoriteMapper;
 
     @Autowired
     private AttractionMapper attractionMapper;
@@ -253,5 +259,40 @@ public class RouteServiceImpl implements RouteService {
     @Override
     public List<RouteAttraction> getRouteById(Long id) {
         return routeAttractionMapper.selectByRouteId(id);
+    }
+
+    @Override
+    @Transactional
+    public void addFavorite(Long routeId, Long accountId) {
+        requireAuthenticatedAccount(accountId);
+        requireExistingRoute(routeId);
+        // 由联合主键兜底，重复收藏按成功处理。
+        routeFavoriteMapper.insertIfAbsent(accountId, routeId);
+    }
+
+    @Override
+    @Transactional
+    public void removeFavorite(Long routeId, Long accountId) {
+        requireAuthenticatedAccount(accountId);
+        if (routeId == null) {
+            throw new IllegalArgumentException("路线ID不能为空");
+        }
+        // 未收藏时删除影响 0 行，仍按成功处理，方便前端重试。
+        routeFavoriteMapper.deleteByAccountIdAndRouteId(accountId, routeId);
+    }
+
+    private void requireAuthenticatedAccount(Long accountId) {
+        if (accountId == null) {
+            throw new UnauthorizedException("未认证用户");
+        }
+    }
+
+    private void requireExistingRoute(Long routeId) {
+        if (routeId == null) {
+            throw new IllegalArgumentException("路线ID不能为空");
+        }
+        if (routeMapper.selectById(routeId) == null) {
+            throw new ResourceNotFoundException("路线不存在, routeId=" + routeId);
+        }
     }
 }

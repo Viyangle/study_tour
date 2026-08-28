@@ -21,7 +21,7 @@ spring:
 # MyBatis
 mybatis:
   configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
     map-underscore-to-camel-case: true
 
 # Aliyun OSS
@@ -38,7 +38,7 @@ logging:
     file: UTF-8
   level:
     org.springframework.jdbc.support.JdbcTransactionManager: debug
-    dev.langchain4j: DEBUG
+    dev.langchain4j: INFO
 
 # langchain4j
 langchain4j:
@@ -47,8 +47,14 @@ langchain4j:
       base-url: https://api.deepseek.com # http://localhost:11434/v1
       api-key: ${CHAT_MODEL_KEY} # ollama
       model-name: deepseek-v4-flash # qwen3.6:35b
-      log-requests: true
-      log-responses: true
+      temperature: 0
+      max-tokens: 2048
+      response-format: json_object
+      # Ollama OpenAI-compatible API: prevent Qwen thinking tokens from consuming
+      # max-tokens and leaving choices[0].message.content empty.
+      reasoning-effort: ${CHAT_REASONING_EFFORT:none}
+      log-requests: false
+      log-responses: false
       timeout: 300s
       max-retries: 1
 
@@ -56,8 +62,8 @@ langchain4j:
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1 # http://localhost:11434/v1
       api-key: ${EMBEDDING_MODEL_KEY} # ollama
       model-name: qwen3.7-text-embedding # qwen3-embedding:4b
-      log-requests: true
-      log-responses: true
+      log-requests: false
+      log-responses: false
       max-segments-per-batch: 10
 
   community:
@@ -107,6 +113,8 @@ app:
     # 当使用 Ollama 时设为 true，将使用不带 function calling 的 OllamaRouteComposerService
     # 注意：开启后需要同时将 langchain4j.open-ai.chat-model 指向 Ollama 地址
     ollama-enabled: false
+    # Qwen 路线 JSON 任务不需要思维链；Ollama 模式会在提示词末尾追加 /no_think
+    ollama-disable-thinking: true
   security:
     enabled: true
   rag:

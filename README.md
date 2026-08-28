@@ -1573,6 +1573,44 @@ Content-Type: application/json
 }
 ```
 
+#### 4.3.6 收藏路线
+
+- 方法：`POST`
+- 路径：`/routes/{id}/favorite`
+- 描述：当前登录账号收藏指定路线
+- 权限：`USER`、`LEADER`（`BOTH` 同样可用）
+- 当前账号由 JWT 自动识别，前端不传 `accountId`
+- 重复收藏按成功处理
+
+```http
+POST /routes/19/favorite
+Authorization: Bearer <token>
+```
+
+#### 4.3.7 取消收藏路线
+
+- 方法：`DELETE`
+- 路径：`/routes/{id}/favorite`
+- 描述：当前登录账号取消收藏指定路线
+- 权限：`USER`、`LEADER`（`BOTH` 同样可用）
+- 当前账号由 JWT 自动识别，前端不传 `accountId`
+- 重复取消收藏按成功处理
+
+```http
+DELETE /routes/19/favorite
+Authorization: Bearer <token>
+```
+
+成功响应：
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": null
+}
+```
+
 ### 4.4 评论相关
 
 #### 4.4.1 创建评论
@@ -1972,12 +2010,18 @@ GET /chat/sessions
 
 - 方法：`GET`
 - 路径：`/chat/sessions/{sessionId}/messages`
-- 描述：项目群成员拉取指定群聊的历史消息；群组停用后历史消息仍保留
+- 描述：项目群成员分页拉取指定群聊的历史消息；群组停用后历史消息仍保留
+
+请求参数：
+
+- `pageNum`：历史页码，默认 `1`；第 `1` 页是最近一页，数字越大消息越早
+- `pageSize`：每页消息数，默认 `30`，最大 `100`
+- 每页数据内部仍按发送时间正序返回，方便前端直接按时间展示
 
 请求示例：
 
 ```http
-GET /chat/sessions/1/messages
+GET /chat/sessions/1/messages?pageNum=1&pageSize=30
 ```
 
 响应结果：

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Slf4j
@@ -81,10 +82,18 @@ public class ChatController {
     }
 
     @GetMapping("/sessions/{sessionId}/messages")
-    public Result listMessages(@PathVariable Long sessionId) {
+    public Result listMessages(@PathVariable Long sessionId,
+                               @RequestParam(defaultValue = "1") Integer pageNum,
+                               @RequestParam(defaultValue = "30") Integer pageSize) {
         Long currentAccountId = SecurityContextUtil.currentAccountId();
-        log.info("拉取消息: sessionId={}, accountId={}", sessionId, currentAccountId);
-        return Result.success(chatService.listMessages(sessionId, currentAccountId));
+        log.info("分页拉取消息: sessionId={}, accountId={}, pageNum={}, pageSize={}",
+                sessionId, currentAccountId, pageNum, pageSize);
+        return Result.success(chatService.listMessages(
+                sessionId,
+                currentAccountId,
+                pageNum,
+                pageSize
+        ));
     }
 
     @GetMapping("/sessions/{sessionId}/members")

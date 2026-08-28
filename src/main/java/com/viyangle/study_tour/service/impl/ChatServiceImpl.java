@@ -28,6 +28,8 @@ public class ChatServiceImpl implements ChatService {
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String ROLE_ADMIN = "ADMIN";
     private static final String ROLE_PARTICIPANT = "PARTICIPANT";
+    private static final int DEFAULT_MESSAGE_PAGE_SIZE = 30;
+    private static final int MAX_MESSAGE_PAGE_SIZE = 100;
 
     @Autowired
     private ChatSessionMapper chatSessionMapper;
@@ -272,13 +274,21 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public List<ChatMessage> listMessages(Long sessionId, Long currentAccountId) {
+    public List<ChatMessage> listMessages(Long sessionId,
+                                          Long currentAccountId,
+                                          Integer pageNum,
+                                          Integer pageSize) {
         if (currentAccountId == null) {
             throw new UnauthorizedException("未认证用户");
         }
 
         requireSessionParticipant(sessionId, currentAccountId);
-        return chatMessageMapper.selectBySessionId(sessionId);
+        int page = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int size = pageSize == null || pageSize < 1
+                ? DEFAULT_MESSAGE_PAGE_SIZE
+                : Math.min(pageSize, MAX_MESSAGE_PAGE_SIZE);
+        long offset = (long) (page - 1) * size;
+        return chatMessageMapper.selectPageBySessionId(sessionId, offset, size);
     }
 
     @Override

@@ -50,10 +50,11 @@ public interface ChatService {
      */
     Long sendMessage(SendChatMessageRequest request, Long currentAccountId);
 
-    /**
-     * 拉取会话消息列表
-     */
-    List<ChatMessage> listMessages(Long sessionId, Long currentAccountId);
+    /** 拉取会话历史页；第 1 页为最近一页，默认每页 30 条。 */
+    List<ChatMessage> listMessages(Long sessionId,
+                                   Long currentAccountId,
+                                   Integer pageNum,
+                                   Integer pageSize);
 
     /** 查询群成员及每个账号代表的实际参团人数。 */
     List<ChatGroupMember> listGroupMembers(Long sessionId, Long currentAccountId);

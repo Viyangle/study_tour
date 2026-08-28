@@ -11,6 +11,7 @@ import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.service.RouteService;
 import com.viyangle.study_tour.service.ProjectService;
+import com.viyangle.study_tour.utils.SecurityContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -57,6 +58,24 @@ public class RouteController {
     public Result getRouteById(@PathVariable Long id) {
         log.info("Get route: {}", id);
         return Result.success(routeService.getRouteById(id));
+    }
+
+    @PostMapping("/{id}/favorite")
+    @RequireRole({"USER", "LEADER"})
+    public Result addFavorite(@PathVariable Long id) {
+        Long accountId = SecurityContextUtil.currentAccountId();
+        log.info("收藏路线: routeId={}, accountId={}", id, accountId);
+        routeService.addFavorite(id, accountId);
+        return Result.success();
+    }
+
+    @DeleteMapping("/{id}/favorite")
+    @RequireRole({"USER", "LEADER"})
+    public Result removeFavorite(@PathVariable Long id) {
+        Long accountId = SecurityContextUtil.currentAccountId();
+        log.info("取消收藏路线: routeId={}, accountId={}", id, accountId);
+        routeService.removeFavorite(id, accountId);
+        return Result.success();
     }
 
     @PostMapping("/manual")

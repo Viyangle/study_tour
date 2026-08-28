@@ -42,10 +42,15 @@
         from chat_messages
     </select>
 
-    <select id="selectBySessionId" resultType="com.viyangle.study_tour.pojo.ChatMessage">
+    <select id="selectPageBySessionId" resultType="com.viyangle.study_tour.pojo.ChatMessage">
         select id, session_id, sender_account_id, content, msg_type, sent_at
-        from chat_messages
-        where session_id = #{sessionId}
+        from (
+            select id, session_id, sender_account_id, content, msg_type, sent_at
+            from chat_messages
+            where session_id = #{sessionId}
+            order by sent_at desc, id desc
+            limit #{offset}, #{pageSize}
+        ) recent_messages
         order by sent_at asc, id asc
     </select>
 

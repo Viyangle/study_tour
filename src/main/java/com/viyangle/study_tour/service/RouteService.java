@@ -15,4 +15,8 @@ public interface RouteService {
     List<Route> getPagedRoutesByPreference(Long accountId, Integer pageNum, Integer pageSize);
 
     List<RouteAttraction> getRouteById(Long id);
+
+    void addFavorite(Long routeId, Long accountId);
+
+    void removeFavorite(Long routeId, Long accountId);
 }

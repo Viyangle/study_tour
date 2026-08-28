@@ -51,7 +51,8 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     private static final String CONSTRAINT_KEY_PREFIX = "ai:route:constraint:";
     private static final Duration CONSTRAINT_TTL = Duration.ofDays(7);
     private static final int MAX_USER_MESSAGE_HISTORY = 12;
-    private static final int MAX_OPTIMIZE_CANDIDATES = 20;
+    private static final int MAX_SUBMITTED_ROUTE_ITEMS = 20;
+    private static final int MAX_AUTO_MODEL_CANDIDATES = 12;
     private static final Pattern EXCLUDE_NAME_PATTERN = Pattern.compile("不要\\s*([^，。；,.;\\s]+)");
     private static final Set<String> RESET_KEYWORDS = Set.of("重新开始", "清空", "重置", "new route");
     private static final Set<String> CHANGE_KEYWORDS = Set.of("换", "替换", "不要");
@@ -108,8 +109,13 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     @Value("${app.ai.ollama-enabled:false}")
     private boolean ollamaEnabled;
 
+    @Value("${app.ai.ollama-disable-thinking:true}")
+    private boolean ollamaDisableThinking;
+
     @Override
     public AIRoutePlan planRouteV2(String memoryId, String message, Long accountId) throws Exception {
+        long totalStartedAt = System.nanoTime();
+        long stageStartedAt = totalStartedAt;
         RouteConstraintState state = loadOrCreateState(memoryId, message);
         if (containsAnyKeyword(message, RESET_KEYWORDS)) {
             state = new RouteConstraintState();
@@ -118,11 +124,15 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
         mergeExclusionConstraints(state, message);
         enrichExcludePoiIdsFromNames(state);
+        long constraintMs = elapsedMillis(stageStartedAt);
 
         String retrievalQuery = buildRetrievalQuery(message, state);
+        stageStartedAt = System.nanoTime();
         VectorRetrievalResult retrievalResult = vectorCandidateRetrieverService.retrieveCandidatesWithTexts(retrievalQuery, 40, 3);
         List<String> candidatePoiIds = applyStateFilterOnPoiIds(retrievalResult.getPoiIds(), state);
+        long vectorRetrievalMs = elapsedMillis(stageStartedAt);
 
+        stageStartedAt = System.nanoTime();
         // 知识图谱补充召回：从图谱中按标签+地区检索候选景点
         List<String> kgPoiIds = retrieveCandidatesFromGraph(message, state, accountId);
         if (!kgPoiIds.isEmpty()) {
@@ -149,7 +159,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         
         log.info("AI路线规划调试: 向量+图谱候选数量={}", candidates.size());
         if (candidates.size() < 2) {
-            candidates = loadFallbackAttractions(15);
+            candidates = loadFallbackAttractions(MAX_AUTO_MODEL_CANDIDATES);
             log.info("AI路线规划调试: fallback候选数量={}", candidates.size());
             candidates = applyStateFilterOnAttractions(candidates, state);
             log.info("AI路线规划调试: 过滤后候选数量={}, excludePoiIds={}", candidates.size(), state.getExcludePoiIds());
@@ -159,51 +169,84 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             throw new IllegalArgumentException("Candidate POIs are not enough for routing after applying constraints. 当前候选数: " + candidates.size());
         }
 
-        List<AmapTransitClient.TransitEdge> matrix = amapTransitClient.buildUndirectedMatrix(candidates);
-        
         // 提取用户偏好标签，用于 prompt 中说明
         List<String> userPrefTags = extractUserPreferenceTags(accountId);
-        
-        String finalPrompt = buildFinalPrompt(message, state, candidates, matrix, retrievalResult.getRetrievedTexts(), userPrefTags);
-        String finalText;
-        if (ollamaEnabled && ollamaRouteComposerService != null) {
-            // Ollama 模式：不使用 tools，将参考景点对预先注入 prompt
-            String ollamaPrompt = enrichPromptWithReferencePairs(finalPrompt);
-            log.info("Ollama模式: 使用不带tools的OllamaRouteComposerService");
-            finalText = ollamaRouteComposerService.chat(ollamaPrompt);
-        } else {
-            finalText = routeComposerService.chat(finalPrompt);
-        }
+        long candidateRankingMs = elapsedMillis(stageStartedAt);
 
+        stageStartedAt = System.nanoTime();
+        List<AmapTransitClient.TransitEdge> matrix = amapTransitClient.buildUndirectedMatrix(candidates);
+        long matrixMs = elapsedMillis(stageStartedAt);
+
+        stageStartedAt = System.nanoTime();
+        String finalPrompt = buildFinalPrompt(message, state, candidates, matrix, retrievalResult.getRetrievedTexts(), userPrefTags);
+        long promptBuildMs = elapsedMillis(stageStartedAt);
+        String preparedPrompt = finalPrompt;
+        stageStartedAt = System.nanoTime();
+        if (ollamaEnabled && ollamaRouteComposerService != null) {
+            // Ollama 模式：不使用 tools，将参考景点对预先注入 prompt。
+            preparedPrompt = prepareOllamaPrompt(enrichPromptWithReferencePairs(finalPrompt));
+        }
+        long modelPreparationMs = elapsedMillis(stageStartedAt);
+
+        String finalText;
+        stageStartedAt = System.nanoTime();
+        if (ollamaEnabled && ollamaRouteComposerService != null) {
+            log.info("Ollama模式: 使用不带tools的OllamaRouteComposerService");
+            finalText = ollamaRouteComposerService.chat(preparedPrompt);
+        } else {
+            finalText = routeComposerService.chat(preparedPrompt);
+        }
+        long modelMs = elapsedMillis(stageStartedAt);
+
+        stageStartedAt = System.nanoTime();
         AIRoutePlan plan = parseAiPlan(finalText);
         validateFinalItems(plan.getItems(), candidates, state, message);
 
         updateStateAfterPlan(state, message, plan);
         saveState(memoryId, state);
         logPlanningDebug(memoryId, retrievalQuery, retrievalResult, candidatePoiIds, state, plan);
+        long finalizeMs = elapsedMillis(stageStartedAt);
+        log.info("AI route stage timing, mode=plan, memoryId={}, candidates={}, matrixEdges={}, "
+                        + "constraintMs={}, vectorRetrievalMs={}, candidateRankingMs={}, matrixMs={}, "
+                        + "promptBuildMs={}, modelPreparationMs={}, modelMs={}, finalizeMs={}, totalMs={}",
+                memoryId, candidates.size(), matrix.size(), constraintMs, vectorRetrievalMs,
+                candidateRankingMs, matrixMs, promptBuildMs, modelPreparationMs, modelMs, finalizeMs,
+                elapsedMillis(totalStartedAt));
         return plan;
     }
 
     @Override
     public AIRoutePlan optimizeSubmittedRoute(List<RouteAttraction> routeAttractions, String message) throws Exception {
+        long totalStartedAt = System.nanoTime();
+        long stageStartedAt = totalStartedAt;
         List<RouteAttraction> submitted = validateSubmittedRoute(routeAttractions);
 
         // 前端可能提交高德搜索到、但后端景点表尚未收录的 POI。
         // 这里把这类 POI 自动登记（或复活）到 attractions 表，保证后续保存路线不受外键限制。
         List<Attraction> submittedAttractions = loadOrRegisterAttractions(submitted);
 
-        // 补充可新增的候选景点：向量召回 + 同地区景点，总候选不超过 20 个，控制交通矩阵规模。
+        // 补充可新增的候选景点：向量召回 + 同地区景点；自动候选控制在 12 个，已提交景点全部保留。
         List<Attraction> addableCandidates = loadOptimizeAddableCandidates(submitted, submittedAttractions, message);
         List<Attraction> candidates = mergeOptimizeCandidates(submittedAttractions, addableCandidates);
+        long candidatePreparationMs = elapsedMillis(stageStartedAt);
 
+        stageStartedAt = System.nanoTime();
         List<AmapTransitClient.TransitEdge> matrix = amapTransitClient.buildUndirectedMatrix(candidates);
+        long matrixMs = elapsedMillis(stageStartedAt);
+        stageStartedAt = System.nanoTime();
         String prompt = buildSubmittedRouteOptimizationPrompt(submitted, message, candidates, matrix);
+        long promptBuildMs = elapsedMillis(stageStartedAt);
+        String preparedPrompt = ollamaEnabled && ollamaRouteComposerService != null
+                ? prepareOllamaPrompt(prompt) : prompt;
         String aiText;
+        stageStartedAt = System.nanoTime();
         if (ollamaEnabled && ollamaRouteComposerService != null) {
-            aiText = ollamaRouteComposerService.chat(prompt);
+            aiText = ollamaRouteComposerService.chat(preparedPrompt);
         } else {
-            aiText = routeComposerService.chat(prompt);
+            aiText = routeComposerService.chat(preparedPrompt);
         }
+        long modelMs = elapsedMillis(stageStartedAt);
+        stageStartedAt = System.nanoTime();
         AIRoutePlan plan = parseAiPlan(aiText);
         Set<String> allowedPoiIds = candidates.stream()
                 .map(Attraction::getPoiId)
@@ -211,6 +254,12 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                 .map(poiId -> poiId.trim().toUpperCase(Locale.ROOT))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         validateSubmittedOptimization(plan.getItems(), allowedPoiIds);
+        long finalizeMs = elapsedMillis(stageStartedAt);
+        log.info("AI route stage timing, mode=optimize, submitted={}, candidates={}, matrixEdges={}, "
+                        + "candidatePreparationMs={}, matrixMs={}, promptBuildMs={}, modelMs={}, "
+                        + "finalizeMs={}, totalMs={}",
+                submitted.size(), candidates.size(), matrix.size(), candidatePreparationMs,
+                matrixMs, promptBuildMs, modelMs, finalizeMs, elapsedMillis(totalStartedAt));
         return plan;
     }
 
@@ -218,7 +267,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         if (routeAttractions == null || routeAttractions.isEmpty()) {
             throw new IllegalArgumentException("At least one route attraction is required for optimization");
         }
-        if (routeAttractions.size() > MAX_OPTIMIZE_CANDIDATES) {
+        if (routeAttractions.size() > MAX_SUBMITTED_ROUTE_ITEMS) {
             throw new IllegalArgumentException("At most 20 route attractions can be optimized at once");
         }
 
@@ -303,7 +352,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         if (optimizedItems == null || optimizedItems.isEmpty()) {
             throw new IllegalArgumentException("Optimized route must not be empty");
         }
-        if (optimizedItems.size() > MAX_OPTIMIZE_CANDIDATES) {
+        if (optimizedItems.size() > MAX_SUBMITTED_ROUTE_ITEMS) {
             throw new IllegalArgumentException("Optimized route cannot contain more than 20 attractions");
         }
 
@@ -477,7 +526,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     private List<Attraction> loadOptimizeAddableCandidates(List<RouteAttraction> submitted,
                                                            List<Attraction> submittedAttractions,
                                                            String message) {
-        int maxAddable = Math.max(0, MAX_OPTIMIZE_CANDIDATES - submitted.size());
+        int maxAddable = Math.max(0, MAX_AUTO_MODEL_CANDIDATES - submitted.size());
         if (maxAddable <= 0) {
             return List.of();
         }
@@ -548,6 +597,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                                                      List<Attraction> addableCandidates) {
         List<Attraction> candidates = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
+        int candidateLimit = Math.max(MAX_AUTO_MODEL_CANDIDATES, submittedAttractions.size());
         for (Attraction attraction : submittedAttractions) {
             if (attraction == null || attraction.getPoiId() == null || attraction.getPoiId().isBlank()) {
                 continue;
@@ -558,7 +608,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             }
         }
         for (Attraction attraction : addableCandidates) {
-            if (candidates.size() >= MAX_OPTIMIZE_CANDIDATES || attraction == null
+            if (candidates.size() >= candidateLimit || attraction == null
                     || attraction.getPoiId() == null || attraction.getPoiId().isBlank()) {
                 continue;
             }
@@ -757,10 +807,21 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                 list.add(attraction);
             }
         }
-        if (list.size() > 20) {
-            list = new ArrayList<>(list.subList(0, 20));
+        if (list.size() > MAX_AUTO_MODEL_CANDIDATES) {
+            list = new ArrayList<>(list.subList(0, MAX_AUTO_MODEL_CANDIDATES));
         }
         return list;
+    }
+
+    private String prepareOllamaPrompt(String prompt) {
+        if (!ollamaDisableThinking || prompt == null || prompt.isBlank()) {
+            return prompt;
+        }
+        return prompt + "\n\n/no_think";
+    }
+
+    private long elapsedMillis(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 
     private List<Attraction> loadFallbackAttractions(int limit) {

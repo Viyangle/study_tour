@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.viyangle.study_tour.pojo.Attraction;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -20,13 +23,17 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+@Slf4j
 @Component
 public class AmapTransitClient {
 
@@ -67,30 +74,49 @@ public class AmapTransitClient {
             .build();
 
     private final AtomicLong nextAllowedRequestTsMs = new AtomicLong(0L);
+    private final AtomicLong matrixThreadSequence = new AtomicLong(0L);
+    private final ConcurrentMap<String, CompletableFuture<TransitEdge>> inFlightEdges = new ConcurrentHashMap<>();
+    private volatile ExecutorService matrixExecutor;
+
+    @PostConstruct
+    void initializeMatrixExecutor() {
+        ensureMatrixExecutor();
+    }
+
+    @PreDestroy
+    void destroyMatrixExecutor() {
+        shutdownExecutor(matrixExecutor);
+    }
 
     public List<TransitEdge> buildUndirectedMatrix(List<Attraction> attractions) {
         if (attractions == null || attractions.size() < 2) {
             return List.of();
         }
 
-        List<Pair> pairs = new ArrayList<>();
+        long startedAt = System.nanoTime();
+        Map<String, Pair> pairsByCacheKey = new LinkedHashMap<>();
         for (int i = 0; i < attractions.size(); i++) {
             for (int j = i + 1; j < attractions.size(); j++) {
-                pairs.add(new Pair(attractions.get(i), attractions.get(j)));
+                Pair pair = new Pair(attractions.get(i), attractions.get(j));
+                String cacheKey = buildCacheKey(pair.from(), pair.to());
+                if (cacheKey != null) {
+                    pairsByCacheKey.putIfAbsent(cacheKey, pair);
+                }
             }
         }
 
-        int workerCount = Math.max(1, parallelism);
-        ExecutorService executor = Executors.newFixedThreadPool(workerCount);
-        List<CompletableFuture<TransitEdge>> futures = new ArrayList<>(pairs.size());
-        for (Pair pair : pairs) {
-            futures.add(CompletableFuture.supplyAsync(
-                    () -> getTransitEdgeWithRetry(pair.from(), pair.to()),
-                    executor
-            ));
+        Map<String, TransitEdge> cachedEdges = readCachedEdges(pairsByCacheKey.keySet().stream().toList());
+        List<CompletableFuture<TransitEdge>> futures = new ArrayList<>(pairsByCacheKey.size());
+        for (Map.Entry<String, Pair> entry : pairsByCacheKey.entrySet()) {
+            TransitEdge cachedEdge = cachedEdges.get(entry.getKey());
+            if (cachedEdge != null) {
+                futures.add(CompletableFuture.completedFuture(cachedEdge));
+            } else {
+                futures.add(getTransitEdgeAsync(entry.getKey(), entry.getValue()));
+            }
         }
 
-        List<TransitEdge> edges = new ArrayList<>(pairs.size());
+        List<TransitEdge> edges = new ArrayList<>(pairsByCacheKey.size());
         for (CompletableFuture<TransitEdge> future : futures) {
             try {
                 TransitEdge edge = future.get();
@@ -101,8 +127,49 @@ public class AmapTransitClient {
                 // Keep matrix generation best-effort; missing edges are tolerated by downstream planner.
             }
         }
-        shutdownExecutor(executor);
+        log.info("AMap transit matrix timing, candidates={}, pairs={}, cacheHits={}, cacheMisses={}, "
+                        + "resultEdges={}, costMs={}",
+                attractions.size(), pairsByCacheKey.size(), cachedEdges.size(),
+                pairsByCacheKey.size() - cachedEdges.size(), edges.size(), elapsedMillis(startedAt));
         return edges;
+    }
+
+    private Map<String, TransitEdge> readCachedEdges(List<String> cacheKeys) {
+        if (cacheKeys == null || cacheKeys.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            List<String> cachedValues = redisTemplate.opsForValue().multiGet(cacheKeys);
+            if (cachedValues == null || cachedValues.isEmpty()) {
+                return Map.of();
+            }
+            Map<String, TransitEdge> result = new LinkedHashMap<>();
+            int count = Math.min(cacheKeys.size(), cachedValues.size());
+            for (int i = 0; i < count; i++) {
+                String cached = cachedValues.get(i);
+                if (cached == null || cached.isBlank()) {
+                    continue;
+                }
+                try {
+                    result.put(cacheKeys.get(i), MAPPER.readValue(cached, TransitEdge.class));
+                } catch (Exception ignored) {
+                    // A malformed cache entry is treated as a miss and refreshed below.
+                }
+            }
+            return result;
+        } catch (Exception ignored) {
+            return Map.of();
+        }
+    }
+
+    private CompletableFuture<TransitEdge> getTransitEdgeAsync(String cacheKey, Pair pair) {
+        CompletableFuture<TransitEdge> future = inFlightEdges.computeIfAbsent(cacheKey,
+                key -> CompletableFuture.supplyAsync(
+                    () -> getTransitEdgeWithRetry(pair.from(), pair.to()),
+                    ensureMatrixExecutor()
+                ));
+        future.whenComplete((result, error) -> inFlightEdges.remove(cacheKey, future));
+        return future;
     }
 
     public TransitEdge getTransitEdge(Attraction from, Attraction to) {
@@ -321,7 +388,14 @@ public class AmapTransitClient {
     }
 
     private String buildCacheKey(Attraction from, Attraction to) {
-        return "amap:transit:v1:" + from.getPoiId() + ":" + to.getPoiId();
+        if (from == null || to == null || blank(from.getPoiId()) || blank(to.getPoiId())) {
+            return null;
+        }
+        String fromPoiId = from.getPoiId().trim().toUpperCase(Locale.ROOT);
+        String toPoiId = to.getPoiId().trim().toUpperCase(Locale.ROOT);
+        String first = fromPoiId.compareTo(toPoiId) <= 0 ? fromPoiId : toPoiId;
+        String second = fromPoiId.compareTo(toPoiId) <= 0 ? toPoiId : fromPoiId;
+        return "amap:transit:v1:" + first + ":" + second;
     }
 
     private static List<String> extractLines(JsonNode segments) {
@@ -395,7 +469,34 @@ public class AmapTransitClient {
         }
     }
 
+    private ExecutorService ensureMatrixExecutor() {
+        ExecutorService current = matrixExecutor;
+        if (current != null && !current.isShutdown()) {
+            return current;
+        }
+        synchronized (this) {
+            current = matrixExecutor;
+            if (current == null || current.isShutdown()) {
+                int workerCount = Math.max(1, parallelism);
+                matrixExecutor = Executors.newFixedThreadPool(workerCount, runnable -> {
+                    Thread thread = new Thread(runnable,
+                            "amap-transit-" + matrixThreadSequence.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                });
+            }
+            return matrixExecutor;
+        }
+    }
+
+    private long elapsedMillis(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
+    }
+
     private void shutdownExecutor(ExecutorService executor) {
+        if (executor == null) {
+            return;
+        }
         executor.shutdown();
         try {
             if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
