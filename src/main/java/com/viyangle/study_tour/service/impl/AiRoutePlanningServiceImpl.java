@@ -34,6 +34,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -1326,6 +1327,46 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         // 融合：60% 标签匹配 + 40% PPR
         double lambda = 0.6;
         return lambda * tagMatchScore + (1 - lambda) * pprScore * 10; // PPR 放大 10 倍以平衡量级
+    }
+
+    /**
+     * 逐轮选择 PPR 分数最高的候选，同时过滤已排除和重复的景点。
+     * 同分时保留候选原有顺序，避免排序结果在相同输入下发生抖动。
+     */
+    private List<Attraction> iterativePPRSelection(List<Attraction> candidates,
+                                                    Map<String, Double> pprScores,
+                                                    int targetSize,
+                                                    List<String> excludePoiIds) {
+        if (candidates == null || candidates.isEmpty() || targetSize <= 0) {
+            return List.of();
+        }
+
+        Set<String> excluded = normalizeSet(excludePoiIds);
+        Map<String, Attraction> remaining = new LinkedHashMap<>();
+        for (Attraction candidate : candidates) {
+            if (candidate == null || blank(candidate.getPoiId())) {
+                continue;
+            }
+            String normalizedPoiId = candidate.getPoiId().trim().toUpperCase(Locale.ROOT);
+            if (!excluded.contains(normalizedPoiId)) {
+                remaining.putIfAbsent(normalizedPoiId, candidate);
+            }
+        }
+
+        List<Attraction> selected = new ArrayList<>(Math.min(targetSize, remaining.size()));
+        while (selected.size() < targetSize && !remaining.isEmpty()) {
+            String bestKey = null;
+            double bestScore = Double.NEGATIVE_INFINITY;
+            for (Map.Entry<String, Attraction> entry : remaining.entrySet()) {
+                double score = getCombinedScore(entry.getValue().getPoiId(), pprScores);
+                if (bestKey == null || score > bestScore) {
+                    bestKey = entry.getKey();
+                    bestScore = score;
+                }
+            }
+            selected.add(remaining.remove(bestKey));
+        }
+        return selected;
     }
 
     /**

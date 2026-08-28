@@ -92,11 +92,6 @@ public class AttractionAdjacencyCalculator {
         }
         System.out.println("共 " + cityGroups.size() + " 个城市, " + allPairs.size() + " 个景点对需要查询");
 
-        // 先清空旧数据
-        try (PreparedStatement del = conn.prepareStatement("DELETE FROM attraction_adjacency")) {
-            del.executeUpdate();
-        }
-
         // 收集所有参与计算的 poiId
         List<String> allPoiIds = new ArrayList<>();
         for (AttractionInfo info : attractions) {
@@ -211,7 +206,9 @@ public class AttractionAdjacencyCalculator {
      */
     private static int saveResults(Connection conn, List<AdjacencyResult> results, boolean clearExisting, List<String> processedPoiIds) throws Exception {
         if (clearExisting) {
-            try (PreparedStatement del = conn.prepareStatement("DELETE FROM attraction_adjacency")) {
+            // 全量重算只替换地理边，保留已计算的语义边。
+            try (PreparedStatement del = conn.prepareStatement(
+                    "DELETE FROM attraction_adjacency WHERE relation_type = 'GEOGRAPHIC'")) {
                 del.executeUpdate();
             }
         }
@@ -220,7 +217,8 @@ public class AttractionAdjacencyCalculator {
         java.util.Set<String> hasNeighbor = new java.util.HashSet<>();
 
         int saved = 0;
-        String sql = "INSERT INTO attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, created_at) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, relation_type, similarity_score, created_at) " +
+                "VALUES (?, ?, ?, ?, 'GEOGRAPHIC', NULL, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (AdjacencyResult r : results) {
                 if (r.distanceM < 0 || r.distanceM > DISTANCE_THRESHOLD_METERS) {
@@ -278,7 +276,8 @@ public class AttractionAdjacencyCalculator {
      * 为没有同城市 pair 可查的景点插入占位记录。
      */
     private static int insertPlaceholders(Connection conn, List<String> poiIds) throws Exception {
-        String sql = "INSERT INTO attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, created_at) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, relation_type, similarity_score, created_at) " +
+                "VALUES (?, ?, ?, ?, 'GEOGRAPHIC', NULL, ?)";
         int count = 0;
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (String poiId : poiIds) {
@@ -312,7 +311,8 @@ public class AttractionAdjacencyCalculator {
     public static int countWithoutAdjacency(Connection conn) throws Exception {
         String sql = "SELECT COUNT(*) FROM attractions a " +
                 "WHERE a.location IS NOT NULL AND a.location != '' " +
-                "AND NOT EXISTS (SELECT 1 FROM attraction_adjacency adj WHERE adj.from_poi_id = a.poi_id)";
+                "AND NOT EXISTS (SELECT 1 FROM attraction_adjacency adj " +
+                "WHERE adj.from_poi_id = a.poi_id AND adj.relation_type = 'GEOGRAPHIC')";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             return rs.next() ? rs.getInt(1) : 0;
@@ -326,7 +326,8 @@ public class AttractionAdjacencyCalculator {
         String sql = "SELECT a.poi_id, a.name, a.location, a.citycode, a.adcode " +
                 "FROM attractions a " +
                 "WHERE a.location IS NOT NULL AND a.location != '' " +
-                "AND NOT EXISTS (SELECT 1 FROM attraction_adjacency adj WHERE adj.from_poi_id = a.poi_id) " +
+                "AND NOT EXISTS (SELECT 1 FROM attraction_adjacency adj " +
+                "WHERE adj.from_poi_id = a.poi_id AND adj.relation_type = 'GEOGRAPHIC') " +
                 "ORDER BY a.adcode, a.poi_id";
         List<AttractionInfo> list = new ArrayList<>();
         try (PreparedStatement ps = conn.prepareStatement(sql);

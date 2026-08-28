@@ -6,14 +6,16 @@
 
     <insert id="insert" parameterType="com.viyangle.study_tour.pojo.AttractionAdjacency">
         insert into attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, relation_type, similarity_score, created_at)
-        values (#{fromPoiId}, #{toPoiId}, #{transitMinutes}, #{distanceM}, #{relationType}, #{similarityScore}, #{createdAt})
+        values (#{fromPoiId}, #{toPoiId}, #{transitMinutes}, #{distanceM},
+                COALESCE(#{relationType}, 'GEOGRAPHIC'), #{similarityScore}, #{createdAt})
     </insert>
 
     <insert id="batchInsert">
         insert into attraction_adjacency(from_poi_id, to_poi_id, transit_minutes, distance_m, relation_type, similarity_score, created_at)
         values
         <foreach collection="list" item="item" separator=",">
-            (#{item.fromPoiId}, #{item.toPoiId}, #{item.transitMinutes}, #{item.distanceM}, #{item.relationType}, #{item.similarityScore}, #{item.createdAt})
+            (#{item.fromPoiId}, #{item.toPoiId}, #{item.transitMinutes}, #{item.distanceM},
+             COALESCE(#{item.relationType}, 'GEOGRAPHIC'), #{item.similarityScore}, #{item.createdAt})
         </foreach>
     </insert>
 
