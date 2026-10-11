@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.ProjectAbandonRecordMapper">
+
+    <insert id="insert" parameterType="com.viyangle.study_tour.pojo.ProjectAbandonRecord"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into project_abandon_records
+            (project_id, leader_account_id, reason, previous_status, departure_at, abandoned_at)
+        values
+            (#{projectId}, #{leaderAccountId}, #{reason}, #{previousStatus}, #{departureAt}, #{abandonedAt})
+    </insert>
+
+    <select id="selectByProjectId" resultType="com.viyangle.study_tour.pojo.ProjectAbandonRecord">
+        select id, project_id, leader_account_id, reason, previous_status,
+               departure_at, abandoned_at, created_at
+        from project_abandon_records
+        where project_id = #{projectId}
+        order by abandoned_at desc, id desc
+    </select>
+
+</mapper>

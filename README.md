@@ -1,5 +1,7 @@
 # Study Tour API 文档
 
+权限收尾与后续计划见 [BACKEND_TODO.md](BACKEND_TODO.md)。账号响应不返回 `passwordHash`；受保护接口使用 access token，refresh token 仅用于 `/login/refresh`。账号禁用或角色变更在下一次认证时生效。
+
 ## 1. 基础信息
 
 - 项目名称：`study_tour`
@@ -19,6 +21,10 @@
   "data": {}
 }
 ```
+
+例外：路线规划 Agent 接口 `/routes/agent/runs` 与 `/health` 按前端约定直接返回 JSON 对象，
+不包裹 `Result`；错误体为 `{"error": "..."}`，参数校验失败为 HTTP 422 + `{"detail": [...]}`。
+详见 [4.3.8](#438-路线规划-agent-接口异步任务)。
 
 #### 4.6.4 同步单个高德 POI（一条龙）
 
@@ -84,7 +90,6 @@ POST /attractions/sync/B00190BBCZ
   "role": "LEADER",
   "username": "Leader",
   "phone": "10010001001",
-  "passwordHash": "123456",
   "regionCode": "210000",
   "avatarUrl": null,
   "intro": null,
@@ -259,12 +264,16 @@ Authorization: Bearer <token>
 
 - 方法：`POST`
 - 路径：`/projects/{projectId}/abandon`
-- 描述：仅当前接单领队可操作。项目必须处于 `CONFIRMED` 且尚未到出发时间；成功后清空领队并将项目恢复为 `OPEN`，其他领队可重新接单。
+- 参数：`reason` 必填，去除首尾空格后 5–200 字；查询串 `?reason=xxx`、JSON 请求体 `{"reason":"xxx"}`、表单参数 `reason=xxx` 三种传法都支持
+- 描述：仅当前接单领队可操作。项目必须处于 `CONFIRMED`，且距出发时间至少 6 小时（恰好 6 小时允许）；成功后清空领队并将项目恢复为 `OPEN`，其他领队可重新接单，同时写入一条放弃审计记录。
+- 失败：原因缺失 / 空白 / 少于 5 字 / 超过 200 字、出发时间缺失 → `400`；距出发不足 6 小时、非当前领队、状态不是 `CONFIRMED` → `403`
 
 ```http
-POST /projects/20/abandon
+POST /projects/20/abandon?reason=临时家里有事，无法带队
 Authorization: Bearer <leader-token>
 ```
+
+放弃记录可用 `GET /projects/20/abandon-records` 查询（项目发布者、当前或曾放弃的领队、`ADMIN` 可查看）。
 
 ### 我的资料看板
 
@@ -355,6 +364,13 @@ Authorization: Bearer <token>
 - `LEADING`：我作为领队的项目
 - `JOINED`：我作为参与者加入的项目
 
+状态与阶段筛选（可组合，非法值返回 `400`，不再静默忽略）：
+
+- `status`：单个原始状态，如 `OPEN`、`CONFIRMED`、`DONE`
+- `statuses`：多个原始状态，重复传参即可（`?statuses=CONFIRMED&statuses=IN_PROGRESS`）
+- `stage`：阶段筛选，`ACCEPTED` → `CONFIRMED/IN_PROGRESS`，`COMPLETED` → `DONE`
+- 优先级：`stage` > `statuses` > `status`
+
 统一分页响应位于 `data`：
 
 ```json
@@ -388,7 +404,7 @@ Authorization: Bearer <token>
 
 - 方法：`POST`
 - 路径：`/register`
-- 描述：注册普通用户或领队用户
+- 描述：公开注册保留用户自行选择角色的能力，可选择 `USER/LEADER/BOTH`。`role` 必填，不区分大小写，服务端会归一化为大写；公开注册不允许使用 `ADMIN`，不会再强制注册为 `USER`。
 
 请求示例：
 
@@ -398,7 +414,7 @@ Authorization: Bearer <token>
   "phone": "10010001003",
   "password": "123456",
   "confirmPassword": "123456",
-  "role": "Both",
+  "role": "USER",
   "regionCode": "320102"
 }
 ```
@@ -440,7 +456,6 @@ Authorization: Bearer <token>
             "role": "BOTH",
             "username": "B",
             "phone": "10010001003",
-            "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
             "regionCode": "320102",
             "avatarUrl": null,
             "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
@@ -448,8 +463,8 @@ Authorization: Bearer <token>
             "createdAt": "2026-03-30T16:37:02",
             "updatedAt": "2026-03-30T16:37:02"
         },
-        "token": "eyJhbGciOiJIUzI1NiJ9.eyJhY2NvdW50SWQiOjYsInJvbGUiOiJCT1RIIiwic3ViIjoiNiIsImlhdCI6MTc3NDg2MDk3NCwiZXhwIjoxNzc0OTQ3Mzc0fQ.QJpzeDOqgYuyyfe1WC1UuNydQy1ip16lt5Z-lXig2_E",
-        "refreshToken": "eyJhbGciOiJIUzI1NiJ9.eyJhY2NvdW50SWQiOjYsInN1YiI6IjYiLCJpYXQiOjE3NzQ4NjA5NzQsImV4cCI6MTc3NTQ2NTc3NH0.vCx7buXk5EackWc-_pd5kzQnpYH5SqPJZPsn4doFcUE"
+        "token": "<access-token>",
+        "refreshToken": "<refresh-token>"
     }
 }
 ```
@@ -521,7 +536,6 @@ GET /accounts/6
         "role": "BOTH",
         "username": "B",
         "phone": "10010001003",
-        "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
         "regionCode": "320102",
         "avatarUrl": null,
         "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
@@ -545,8 +559,7 @@ GET /accounts/6
 {
   "username": "B同学",
   "regionCode": "320100",
-  "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png",
-  "status": 1
+  "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png"
 }
 ```
 
@@ -555,7 +568,7 @@ GET /accounts/6
 - `username`：用户名（可选）
 - `regionCode`：所在地区编码（可选）
 - `avatarUrl`：头像 URL（可选，通常先调用 `/upload` 获取）
-- `status`：账号状态（可选）
+- `status`：账号状态（可选；本人可提交自己的状态，`ADMIN` 可提交任意用户的状态）
 
 响应结果：
 
@@ -568,7 +581,6 @@ GET /accounts/6
         "role": "BOTH",
         "username": "B同学",
         "phone": "10010001003",
-        "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
         "regionCode": "320100",
         "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png",
         "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
@@ -613,7 +625,7 @@ GET /accounts/6
 
 - 方法：`PUT`
 - 路径：`/accounts/{id}/role`
-- 权限：仅本人可改；`ADMIN` 可改任意用户。普通用户只能设置 `USER/LEADER/BOTH`，`ADMIN` 角色仅允许管理员设置。
+- 权限：本人可调用并切换自己的 `USER/LEADER/BOTH` 角色；`ADMIN` 可管理任意用户，并可设置 `USER/LEADER/BOTH/ADMIN`。普通用户不能将自己或他人设置为 `ADMIN`。
 - 描述：单独修改账号角色。若修改为 `LEADER` 或 `BOTH`，后端会自动补齐领队资料记录。修改当前登录用户自己的角色时，响应会返回新的 `token` 和 `refreshToken`，前端应替换本地旧 token。
 
 请求示例：
@@ -636,7 +648,6 @@ GET /accounts/6
             "role": "LEADER",
             "username": "B同学",
             "phone": "10010001003",
-            "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
             "regionCode": "320100",
             "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png",
             "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
@@ -713,7 +724,6 @@ GET /accounts/6
         "role": "BOTH",
         "username": "B同学",
         "phone": "10010001003",
-        "passwordHash": "$2a$10$TyGCL9uuMIS7p4u7VT4u/eP0jnRCM0lpELK9wLbej2v.IHffa9AoC",
         "regionCode": "320100",
         "avatarUrl": "https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png",
         "intro": "喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。",
@@ -1201,16 +1211,54 @@ POST /projects/1/accept
 - 方法：`POST`
 - 路径：`/projects/{id}/abandon`
 - 权限：`LEADER`（`BOTH` 继承该权限）；仅当前项目领队可操作
-- 描述：项目处于 `CONFIRMED` 且未到出发时间时，清空 `leaderAccountId`、将状态恢复为 `OPEN`，并同步移除群聊领队身份。
+- 参数：`reason` 必填，去除首尾空格后 5–200 字；查询串 `?reason=xxx`、JSON 请求体 `{"reason":"xxx"}`、表单参数 `reason=xxx` 三种传法都支持
+- 描述：项目处于 `CONFIRMED` 且距出发时间至少 6 小时（恰好 6 小时允许）时，清空 `leaderAccountId`、将状态恢复为 `OPEN`，同步移除群聊领队身份，并写入一条放弃审计记录。时间校验、状态恢复、审计写入与群聊移除在同一事务中。
+- 失败：`reason` 缺失 / 空白 / 少于 5 字 / 超过 200 字 → `400`；`departureDate` 或 `departureTime` 缺失 → `400`，文案为“订单时间异常，请联系客服处理”；距出发不足 6 小时、项目非 `CONFIRMED`、非当前接单领队 → `403`
+- 依赖：升级已有数据库需先执行 `scripts/create_project_abandon_records.sql` 新建 `project_abandon_records`；表不存在时审计记录写入失败并整笔回滚，接口返回 `500`
 
 请求示例：
 
 ```http
-POST /projects/1/abandon
+POST /projects/1/abandon?reason=临时家里有事，无法带队
 Authorization: Bearer <leader-token>
 ```
 
-#### 4.2.11 更新项目状态
+#### 4.2.11 查询放弃带队记录
+
+- 方法：`GET`
+- 路径：`/projects/{id}/abandon-records`
+- 权限：项目发布者、当前接单领队、曾放弃该项目的领队、`ADMIN`；其它账号 `403`
+- 描述：按操作时间倒序返回该项目的放弃审计记录，包含项目、领队、原因、放弃前状态、出发时间快照与操作时间。
+
+请求示例：
+
+```http
+GET /projects/1/abandon-records
+Authorization: Bearer <token>
+```
+
+响应结果（`data` 为记录数组）：
+
+```json
+{
+    "code": 1,
+    "msg": "success",
+    "data": [
+        {
+            "id": 1,
+            "projectId": 1,
+            "leaderAccountId": 3,
+            "reason": "临时家里有事，无法带队",
+            "previousStatus": "CONFIRMED",
+            "departureAt": "2026-11-10T09:00:00",
+            "abandonedAt": "2026-10-10T15:30:00",
+            "createdAt": "2026-10-10T15:30:00"
+        }
+    ]
+}
+```
+
+#### 4.2.12 更新项目状态
 
 - 方法：`POST`
 - 路径：`/projects/{id}/status`
@@ -1509,10 +1557,11 @@ GET /routes/17
 
 - 方法：`POST`
 - 路径：`/routes/ai/{memoryId}`
+- 权限：必须登录，用户身份来自 access token。相同 `memoryId` 在不同账号下分别保存状态和路线映射，不能访问或覆盖其他账号的会话。旧无归属会话缓存不迁移，已保存路线不删除。
 - 描述：根据自然语言请求由 AI 生成路线，再自动优化景点顺序、游览时间、建议时长和通勤说明，最后保存优化后的路线。也可提交已有景点数组，直接按该数组优化，保留原 `/routes/optimize` 的输入方式。
 - 请求体：可选。提交 1～20 个不重复且有效的景点时，服务直接优化这些景点；不提交请求体时，服务根据 `message` 生成初稿后再优化。
 
-请求示例（不带用户偏好）：
+请求示例（自动使用当前登录用户偏好）：
 
 ```http
 POST /routes/ai/1?message=我要在南京，2026年3月20日开始的两天内进行历史方面的旅游，请给我规划一个路线
@@ -1561,7 +1610,8 @@ Content-Type: application/json
 请求参数：
 
 - `message`：未提交请求体时必填；提交景点数组时可选，用于补充优化目标
-- `accountId`：用户 ID（可选，传入后会融合用户长期偏好标签，使 AI 生成的路线更贴合个人兴趣）
+- `accountId`：兼容参数，可省略；提供时必须等于当前登录用户 ID，否则返回 403。省略时自动使用当前登录用户偏好。
+- `memoryId`：非空，最多 128 个字符；由后端结合当前账号隔离，不要在前端拼接账号命名空间。
 
 响应结果：
 
@@ -1611,6 +1661,123 @@ Authorization: Bearer <token>
 }
 ```
 
+#### 4.3.8 路线规划 Agent 接口（异步任务）
+
+按前端 `docs/API.md`、`docs/openapi.json` 实现的异步规划接口。完整字段与取值范围以 `docs/openapi.json`
+为准，本节只说明后端接入方式与实现边界。
+
+- `POST /routes/agent/runs`：创建一轮异步规划，立即返回 HTTP 202 和任务视图；模型与地图查询在后台执行
+- `GET /routes/agent/runs/{runId}`：查询阶段、事件与结果，建议每 1.8～2 秒轮询，终态后停止
+- `DELETE /routes/agent/runs/{runId}`：取消规划，返回与查询一致的 Run 对象
+- `GET /health`：本服务健康检查，无需登录，返回 `{"status":"ok","version":"1.0"}`
+
+权限与身份：
+
+- 前三个接口必须携带 `Authorization: Bearer <access token>`；未登录或 token 无效返回 401
+- 请求体中的 `accountId` 必须等于登录账号，否则返回 403；账号身份一律以 token 为准
+- 查询、取消其他账号的任务与“任务不存在”同样返回 404
+- 响应是直接 JSON 对象，不包裹 `Result`；错误体为 `{"error": "..."}`；
+  参数或未知字段校验失败返回 HTTP 422 和 FastAPI 风格 `{"detail": [{"type","loc","msg","input","ctx"}]}`
+
+创建请求示例：
+
+```http
+POST /routes/agent/runs
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "requestId": "7e547d16-f693-4c21-b143-0123456789ab",
+  "memoryId": "user-1-route-conversation-01",
+  "accountId": 1,
+  "message": "南京亲子历史研学，控制在4小时，预算每人200元，尽量少走路，必须去南京博物院",
+  "history": [],
+  "currentRoute": [],
+  "constraints": {
+    "city": "南京",
+    "days": 1,
+    "dailyMinutes": 240,
+    "budget": 200,
+    "maxWalkingMeters": 2000,
+    "modes": ["walking", "transit"],
+    "mustVisit": ["南京博物院"]
+  },
+  "origin": null
+}
+```
+
+创建响应（HTTP 202）：
+
+```json
+{
+  "runId": "a67f99cfbb9f4532a1ee009988776655",
+  "status": "queued",
+  "stage": "等待规划",
+  "events": [],
+  "result": null,
+  "error": null
+}
+```
+
+查询响应的 `status` 为 `queued`、`running`、`completed`、`failed`、`cancelled`。
+HTTP 200 不等于任务成功：`completed` 时再看 `result.kind`，`plan` 是方案、`clarification` 是追问；
+任务失败时为 HTTP 200 + `status=failed` + `error`。
+
+关键行为：
+
+- 幂等：同账号、同 `requestId`、同请求体重复提交返回已有任务（HTTP 202，不重复规划）；
+  同 `requestId` 不同内容返回 409
+- 会话互斥：同账号同 `memoryId` 同时只能有一个活跃任务，否则返回 409
+- 限流：单账号 60 秒内最多新建 6 次，全局活跃任务最多 8 个，保存任务上限 500 条，
+  超出返回 429；幂等重复不占用新建额度
+- 任务保留：从创建时刻算 30 分钟，运行中不清理，终态记录在后续请求时清理
+- 取消：`DELETE` 只结束后台任务并释放会话锁，不删除路线与账号数据；已完成/失败/取消的任务返回现有终态；
+  取消在检查点生效，已经在执行中的模型或地图调用可能仍会完成
+- 结果不落库：方案通过 `requiresAcceptance=true` 提示客户端确认后再应用；
+  发布沿用原 `/routes/manual` 和发布接口
+
+运行限制（`application.yaml` 中的 `app.agent.*`，均为可配置项）：
+
+| 配置项 | 默认值 | 含义 |
+| --- | --- | --- |
+| `app.agent.execution-timeout` | 240s | 单轮整体执行时间上限，超时任务置为 failed |
+| `app.agent.run-ttl` | 30m | 终态任务保留时间 |
+| `app.agent.max-stored-runs` | 500 | 保存任务上限 |
+| `app.agent.max-active-runs` | 8 | 全局活跃任务上限 |
+| `app.agent.create-window` / `max-creates-per-window` | 60s / 6 | 单账号新建频率 |
+| `app.agent.max-events` | 110 | 每次查询返回的事件条数上限 |
+| `app.agent.worker-threads` | 4 | 后台执行线程数 |
+| `app.agent.max-direction-requests` | 90 | 单轮最多发起的高德路径规划请求数 |
+
+交通段的高德路径规划由 `AmapDirectionClient` 完成，相关配置同样可覆盖：
+`app.amap.walking-endpoint`、`app.amap.driving-endpoint`、`app.amap.transit-endpoint`
+（默认分别为高德 v5 的 walking / driving / transit/integrated 地址）、
+`app.amap.direction-timeout-seconds`（10）、`app.amap.direction-qps`（8）、
+`app.amap.direction-cache-ttl-minutes`（10，同一路径短时间内重复读直接复用，不再发起请求）。
+未配置 `app.amap.key`、端点不可用或高德返回错误时，交通段退化为直线估算并写入 `warnings`。
+
+与 `docs/API.md` 的已知差异（联调前请确认）：
+
+- 任务存储为进程内存，单 worker 部署；多 worker 随机分发时不能依赖内存任务与限流，与文档第 8 节说明一致
+- 规划主体复用 `POST /routes/ai/{memoryId}` 的既有链路（向量/图谱召回 + 模型），
+  事件是“理解需求 / 检索候选地点 / 核实地点详情 / 计算交通段 / 校验行程与约束 / 方案已完成”这几个真实步骤，
+  不是文档示例里的模型内部工具调用流水；当前没有接入天气工具，因此不会出现 `get_weather` 事件
+- 结构化 `constraints` 会拼成一段约束摘要随 `message` 传给既有规划链路，属于适配而非形式化约束求解
+- 景点库没有票价字段，因此 `estimatedCost` 目前只统计高德返回的已知交通费用（通常为 0），
+  `unknownCosts` 会把每个未核价的地点和交通段都算进去，并写入 `warnings`
+- 高德路径规划不可用（未配置 key、鉴权失败、限流）时，交通段退化为直线距离 + 经验速度估算，
+  `source=直线估算`，`walkingMeters=null`，并写入 `warnings`，不会当成已知值
+- 硬约束（必去地点、每天时长、最晚结束时间、步行上限）冲突时返回 `result.kind=clarification` 追问，
+  不会返回 `feasible=false` 的方案（契约中 `feasible` 恒为 `true`、`issues` 恒为空数组）
+- `memoryId` 沿用后端既有会话键上限 128 个字符（文档放宽到 160），超过 128 直接返回 422，
+  不会等到后台执行时才失败
+
+外部身份校验接口：`GET /login/me` 供需要单独部署 Agent 服务的场景核验 token
+（本后端内联实现 Agent 时用不到，JWT 过滤器已直接校验同一批 token），
+返回 `{"code":1,"msg":"success","data":{"accountId":1}}`，未登录返回 401；账号来自 token，不接受请求方指定。
+
 ### 4.4 评论相关
 
 #### 4.4.1 创建评论
@@ -1618,6 +1785,7 @@ Authorization: Bearer <token>
 - 方法：`POST`
 - 路径：`/reviews`
 - 描述：创建评论并可提交标签分数 （5分制）（reviewType暂时只有USER_TO_LEADER）
+- 作者由当前登录账号确定；请求中的 `fromAccountId` 被忽略，可省略。
 
 请求示例：
 
@@ -1648,6 +1816,7 @@ Authorization: Bearer <token>
 - 方法：`DELETE`
 - 路径：`/reviews/{id}`
 - 描述：按评论 ID 删除评论
+- 权限：仅评论作者或 `ADMIN`；其他用户返回 403，记录不存在返回 404。
 
 请求示例：
 
@@ -1670,6 +1839,7 @@ DELETE /reviews/10
 - 方法：`PUT`
 - 路径：`/reviews/{id}`
 - 描述：更新评论主体与标签分数
+- 权限：仅评论作者或 `ADMIN`；仅评分、内容可修改。作者、项目、路线、被评价账号和评价类型以数据库原记录为准，不接受通过更新迁移归属。
 
 请求示例：
 

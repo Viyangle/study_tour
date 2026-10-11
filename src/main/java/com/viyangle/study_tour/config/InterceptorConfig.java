@@ -25,7 +25,10 @@ public class InterceptorConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         if (securityEnabled) {
             registry.addInterceptor(permissionInterceptor)
-                .addPathPatterns("/projects/**", "/routes/**", "/reviews/**", "/accounts/**", "/leader/**", "/chat/**")
+                // Permission annotations are also used by infrastructure endpoints such as
+                // /attractions/reindex. Register the interceptor for every MVC path so a
+                // newly annotated controller cannot accidentally bypass authorization.
+                .addPathPatterns("/**")
                 .excludePathPatterns("/login/**", "/register/**", "/login/ping");
         }
 

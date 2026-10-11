@@ -1,5 +1,6 @@
 package com.viyangle.study_tour.service.impl;
 
+import com.viyangle.study_tour.utils.AiConversationScope;
 import com.github.pagehelper.PageHelper;
 import com.viyangle.study_tour.mapper.AccountMapper;
 import com.viyangle.study_tour.mapper.AccountTagPrefMapper;
@@ -37,7 +38,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class RouteServiceImpl implements RouteService {
-    private static final String AI_ROUTE_MAPPING_KEY_PREFIX = "ai:route:memory:";
+    private static final String AI_ROUTE_MAPPING_KEY_PREFIX = "ai:route:v2:memory:";
 
 
     @Autowired
@@ -93,7 +94,7 @@ public class RouteServiceImpl implements RouteService {
     @Transactional
     @Override
     public Long saveOrUpdateAIConversationRoute(String memoryId, String tag, List<RouteAttraction> routeAttractions) {
-        String mappingKey = AI_ROUTE_MAPPING_KEY_PREFIX + memoryId;
+        String mappingKey = AI_ROUTE_MAPPING_KEY_PREFIX + AiConversationScope.storageId(memoryId);
         String routeIdText = redisTemplate.opsForValue().get(mappingKey);
         String regionAdcode = resolveRegionAdcode(routeAttractions);
 

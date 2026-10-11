@@ -12,6 +12,7 @@ import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.service.RouteService;
 import com.viyangle.study_tour.service.ProjectService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
+import com.viyangle.study_tour.utils.AiConversationScope;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -99,6 +100,8 @@ public class RouteController {
                                       @RequestParam(required = false) String message,
                                       @RequestParam(required = false) Long accountId,
                                       @RequestBody(required = false) List<RouteAttraction> routeAttractions) throws Exception {
+        accountId = AiConversationScope.requireAccount(accountId);
+        AiConversationScope.storageId(memoryId);
         long startMs = System.currentTimeMillis();
         AIRoutePlan optimizedPlan;
         if (routeAttractions == null) {

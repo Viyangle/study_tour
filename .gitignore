@@ -1,6 +1,21 @@
 # Maven
 target/
 
+# Local tooling caches and temporary output
+node_modules/
+.npm-cache*/
+.pnpm-cache/
+.pnpm-store/
+.tmp-*/
+__pycache__/
+*.py[cod]
+
+# Local exports and evaluation output
+/docs.zip
+/study_tour.sql
+/eval_out/
+/src/main/resources/others/
+
 # IDE
 .idea/
 *.iml

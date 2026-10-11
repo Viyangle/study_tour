@@ -220,8 +220,11 @@
                     )
                 </otherwise>
             </choose>
-            <if test="status != null and status != ''">
-                and p.status = #{status}
+            <if test="statuses != null and statuses.size() > 0">
+                and p.status in
+                <foreach collection="statuses" item="status" open="(" separator="," close=")">
+                    #{status}
+                </foreach>
             </if>
         </where>
         order by p.departure_date desc, p.departure_time desc, p.created_at desc

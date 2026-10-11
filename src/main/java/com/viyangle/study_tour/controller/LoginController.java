@@ -5,13 +5,17 @@ import com.viyangle.study_tour.pojo.LoginRequest;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.service.AccountService;
 import com.viyangle.study_tour.utils.JwtUtil;
+import com.viyangle.study_tour.utils.SecurityContextUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -140,6 +144,10 @@ public class LoginController {
             if (!jwtUtil.validateToken(refreshToken, jwtUtil.extractUsername(refreshToken))) {
                 return Result.error("刷新 token 无效或已过期");
             }
+            // Existing refresh tokens have no role claim; access tokens must not be reused here.
+            if (jwtUtil.extractRole(refreshToken) != null) {
+                return Result.error("请使用refreshToken刷新登录状态");
+            }
             
             // 2. 检查 refresh token 的剩余有效期（应该至少还有 1 天以上）
             Date expiration = jwtUtil.extractExpiration(refreshToken);
@@ -157,8 +165,8 @@ public class LoginController {
             Long accountId = jwtUtil.extractAccountId(refreshToken);
             Account account = accountService.getById(accountId);
             
-            if (account == null) {
-                return Result.error("用户不存在");
+            if (account == null || !Integer.valueOf(1).equals(account.getStatus())) {
+                return Result.error("用户不存在或已禁用");
             }
             
             // 4. 生成新的 access token（24 小时有效）
@@ -178,5 +186,32 @@ public class LoginController {
             log.error("刷新 token 失败：{}", e.getMessage());
             return Result.error("刷新 token 失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * 当前登录身份接口（供行程规划 Agent 等服务端调用）
+     * URL：GET /login/me
+     * 请求头：Authorization: Bearer &lt;access token&gt;
+     * 处理：由 JwtAuthFilter 校验 token 并加载数据库当前账号状态，
+     * 因此 refresh token、已禁用账号、过期或伪造 token 都会在进入本方法前被拒绝。
+     * 返回：200 + Result 包装的 {"accountId": 正整数}，与接口文档列出的两种可接受格式一致；
+     * 不额外返回角色等字段，避免调用方使用严格响应模型时被拒。
+     * 未认证时返回 HTTP 401，客户端或 Agent 应按 401 处理。
+     * 说明：身份只来自 token，不接受调用方自行传入的账号 ID。
+     */
+    @GetMapping("/me")
+    public ResponseEntity<Result> currentAccount() {
+        Long accountId = SecurityContextUtil.currentAccountId();
+        if (accountId == null) {
+            // 正常路径由安全过滤器返回 401；此分支兜底 app.security.enabled=false 等场景。
+            log.warn("获取当前登录身份失败：未认证请求");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Result.error("未登录或token无效"));
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("accountId", accountId);
+        log.info("获取当前登录身份：accountId={}", accountId);
+        return ResponseEntity.ok(Result.success(data));
     }
 }

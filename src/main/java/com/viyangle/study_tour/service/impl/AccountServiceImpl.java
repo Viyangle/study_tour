@@ -51,7 +51,8 @@ public class AccountServiceImpl implements AccountService {
             return null;
         }
         Account account = accountMapper.selectByPhone(loginRequest.getPhone());
-        if (account != null && passwordEncoder.matches(loginRequest.getPassword(), account.getPasswordHash())) {
+        if (account != null && Integer.valueOf(1).equals(account.getStatus())
+                && passwordEncoder.matches(loginRequest.getPassword(), account.getPasswordHash())) {
             return account;
         }
         return null;
@@ -62,12 +63,16 @@ public class AccountServiceImpl implements AccountService {
         if (registerRequest == null || !PhoneValidator.isValidChineseMainlandMobile(registerRequest.getPhone())) {
             throw new IllegalArgumentException("手机号格式不正确");
         }
+        String requestedRole = normalizeRole(registerRequest.getRole());
+        if (!USER_EDITABLE_ROLES.contains(requestedRole)) {
+            throw new ForbiddenException("注册仅支持USER/LEADER/BOTH角色");
+        }
         if (accountMapper.existsByPhone(registerRequest.getPhone())) {
             return -1L;
         }
 
         Account account = new Account();
-        account.setRole(registerRequest.getRole());
+        account.setRole(requestedRole);
         account.setUsername(registerRequest.getUsername());
         account.setPhone(registerRequest.getPhone());
         account.setPasswordHash(passwordEncoder.encode(registerRequest.getPassword()));
@@ -130,24 +135,15 @@ public class AccountServiceImpl implements AccountService {
     @Override
     public Account updateRole(Long accountId, String role) {
         requireSelfOrAdmin(accountId);
-
         String normalizedRole = normalizeRole(role);
-        Long currentAccountId = SecurityContextUtil.currentAccountId();
-        String currentRole = SecurityContextUtil.currentRole();
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(currentRole);
-        if (!isAdmin && "ADMIN".equals(normalizedRole)) {
-            throw new ForbiddenException("普通用户不能设置ADMIN角色");
-        }
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(SecurityContextUtil.currentRole());
         if (!isAdmin && !USER_EDITABLE_ROLES.contains(normalizedRole)) {
-            throw new IllegalArgumentException("角色仅支持USER/LEADER/BOTH");
+            throw new ForbiddenException("普通用户不能设置ADMIN角色");
         }
 
         Account existing = accountMapper.selectById(accountId);
         if (existing == null) {
             throw new ResourceNotFoundException("用户不存在, accountId=" + accountId);
-        }
-        if (!isAdmin && !accountId.equals(currentAccountId)) {
-            throw new ForbiddenException("无权修改他人角色");
         }
 
         Account update = new Account();

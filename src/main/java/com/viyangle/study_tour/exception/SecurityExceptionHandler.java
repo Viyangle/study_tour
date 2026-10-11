@@ -1,6 +1,7 @@
 package com.viyangle.study_tour.exception;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.viyangle.study_tour.agent.dto.AgentError;
 import com.viyangle.study_tour.pojo.Result;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,6 +32,11 @@ public class SecurityExceptionHandler implements AuthenticationEntryPoint, Acces
                          HttpServletResponse response,
                          AuthenticationException authException) throws IOException, ServletException {
         log.warn("Authentication failed, uri={}, reason={}", request.getRequestURI(), authException.getMessage());
+        if (isAgentPath(request)) {
+            // /routes/agent/** 按前端约定返回 {"error": "..."}，不走 Result 包装。
+            writeJson(response, HttpServletResponse.SC_UNAUTHORIZED, new AgentError("未登录或token无效"));
+            return;
+        }
         writeJson(response, HttpServletResponse.SC_UNAUTHORIZED, Result.error("未登录或token无效"));
     }
 
@@ -39,13 +45,22 @@ public class SecurityExceptionHandler implements AuthenticationEntryPoint, Acces
                        HttpServletResponse response,
                        AccessDeniedException accessDeniedException) throws IOException, ServletException {
         log.warn("Access denied, uri={}, reason={}", request.getRequestURI(), accessDeniedException.getMessage());
+        if (isAgentPath(request)) {
+            writeJson(response, HttpServletResponse.SC_FORBIDDEN, new AgentError("权限不足"));
+            return;
+        }
         writeJson(response, HttpServletResponse.SC_FORBIDDEN, Result.error("权限不足"));
     }
 
-    private void writeJson(HttpServletResponse response, int status, Result result) throws IOException {
+    private boolean isAgentPath(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return uri != null && uri.startsWith("/routes/agent/");
+    }
+
+    private void writeJson(HttpServletResponse response, int status, Object body) throws IOException {
         response.setStatus(status);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write(objectMapper.writeValueAsString(result));
+        response.getWriter().write(objectMapper.writeValueAsString(body));
     }
 }

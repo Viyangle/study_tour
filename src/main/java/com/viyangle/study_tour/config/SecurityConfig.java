@@ -41,7 +41,9 @@ public class SecurityConfig {
 
         if (securityEnabled) {
             http.authorizeHttpRequests(auth -> auth
-                .requestMatchers("/login/**", "/register", "/register/**", "/regions/**").permitAll()
+                // 身份查询接口供 Agent 服务端校验用户 token，必须携带有效 access token。
+                .requestMatchers("/login/me").authenticated()
+                .requestMatchers("/login/**", "/register", "/register/**", "/regions/**", "/health").permitAll()
                 .anyRequest().authenticated()
             );
             http.exceptionHandling(ex -> ex

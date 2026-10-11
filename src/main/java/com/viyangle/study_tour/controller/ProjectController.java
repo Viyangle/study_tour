@@ -2,6 +2,8 @@ package com.viyangle.study_tour.controller;
 
 import com.viyangle.study_tour.annotation.OperationLog;
 import com.viyangle.study_tour.annotation.RequireRole;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.JoinProjectRequest;
 import com.viyangle.study_tour.pojo.Result;
@@ -20,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -31,6 +35,10 @@ public class ProjectController {
 
     @Autowired
     private KnowledgeGraphRecommendService recommendService;
+
+    /** 解析 JSON 形式的请求体；保留默认实例，便于不经过 Spring 构造控制器时也能工作。 */
+    @Autowired
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @GetMapping
     @OperationLog(value = "分页获取项目", type = "PROJECT_QUERY")
@@ -96,14 +104,19 @@ public class ProjectController {
     @OperationLog(value = "查询我的项目", type = "PROJECT_QUERY")
     public Result getMyProjects(@RequestParam(defaultValue = "ALL") String relation,
                                 @RequestParam(required = false) String status,
+                                @RequestParam(required = false) String stage,
+                                @RequestParam(required = false) List<String> statuses,
                                 @RequestParam(defaultValue = "1") Integer pageNum,
                                 @RequestParam(defaultValue = "10") Integer pageSize) {
         Long accountId = SecurityContextUtil.currentAccountId();
-        log.info("查询我的项目: accountId={}, relation={}, status={}", accountId, relation, status);
+        log.info("查询我的项目: accountId={}, relation={}, status={}, stage={}, statuses={}",
+                accountId, relation, status, stage, statuses);
         return Result.success(projectService.getMyProjects(
                 accountId,
                 relation,
                 status,
+                stage,
+                statuses,
                 pageNum,
                 pageSize
         ));
@@ -180,11 +193,52 @@ public class ProjectController {
     @PostMapping("/{id}/abandon")
     @OperationLog(value = "领队放弃带队并重新开放项目", type = "PROJECT_UPDATE")
     @RequireRole({"LEADER"})
-    public Result abandonProject(@PathVariable Long id) {
+    public Result abandonProject(@PathVariable Long id,
+                                 @RequestParam(required = false) String reason,
+                                 @RequestBody(required = false) String rawBody) {
         Long accountId = SecurityContextUtil.currentAccountId();
-        log.info("领队放弃带队: projectId={}, leaderAccountId={}", id, accountId);
-        projectService.abandonProject(id, accountId);
+        // 兼容三种传法：查询串 ?reason=xxx、JSON 体 {"reason":"xxx"}、表单编码 reason=xxx
+        // （表单参数由 @RequestParam 解析；用 String 接收请求体可避免表单编码被判为不支持的媒体类型）。
+        // 三者都缺失时按 400 拒绝。
+        String effectiveReason = reason != null ? reason : extractReasonFromJsonBody(rawBody);
+        log.info("领队放弃带队: projectId={}, leaderAccountId={}, reasonProvided={}",
+                id, accountId, effectiveReason != null);
+        projectService.abandonProject(id, accountId, effectiveReason);
         return Result.success();
+    }
+
+    /**
+     * 查询项目的放弃带队审计记录。
+     *
+     * <p>返回项目、领队、原因、放弃前状态与操作时间；仅项目发布者、接单领队（含已放弃的领队）与 ADMIN 可查询。</p>
+     */
+    @GetMapping("/{id}/abandon-records")
+    @OperationLog(value = "查询放弃带队记录", type = "PROJECT_QUERY")
+    public Result getAbandonRecords(@PathVariable Long id) {
+        log.info("查询放弃带队记录: projectId={}", id);
+        return Result.success(projectService.getAbandonRecords(
+                id,
+                SecurityContextUtil.currentAccountId(),
+                SecurityContextUtil.currentRole()
+        ));
+    }
+
+    private String extractReasonFromJsonBody(String rawBody) {
+        if (rawBody == null || rawBody.isBlank()) {
+            return null;
+        }
+        String trimmed = rawBody.trim();
+        if (!trimmed.startsWith("{")) {
+            // 非 JSON 的请求体不做猜测，交给 service 按“原因缺失”拒绝。
+            return null;
+        }
+        try {
+            JsonNode reason = objectMapper.readTree(trimmed).get("reason");
+            return reason == null || reason.isNull() ? null : reason.asText();
+        } catch (Exception e) {
+            log.warn("解析放弃原因请求体失败: {}", e.getMessage());
+            return null;
+        }
     }
 
     @PostMapping("/{id}/status")

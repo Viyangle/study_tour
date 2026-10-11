@@ -1,5 +1,6 @@
 package com.viyangle.study_tour.pojo;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,6 +15,7 @@ public class Account {
     private String role;
     private String username;
     private String phone;
+    @JsonIgnore
     private String passwordHash;
     private String regionCode;
     private String avatarUrl;

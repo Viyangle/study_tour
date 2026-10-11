@@ -1,11 +1,15 @@
 package com.viyangle.study_tour.interceptor;
 
 import com.viyangle.study_tour.annotation.RequireRole;
-import com.viyangle.study_tour.utils.JwtUtil;
+import com.viyangle.study_tour.utils.SecurityContextUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -15,45 +19,36 @@ import java.lang.reflect.Method;
 @Component
 public class PermissionInterceptor implements HandlerInterceptor {
 
-    private final JwtUtil jwtUtil;
-
-    public PermissionInterceptor(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
-    }
-
     @Override
     public boolean preHandle(HttpServletRequest request,
                              HttpServletResponse response,
                              Object handler) throws Exception {
 
-        if (!(handler instanceof HandlerMethod)) {
+        if (!(handler instanceof HandlerMethod handlerMethod)) {
             return true;
         }
 
-        HandlerMethod handlerMethod = (HandlerMethod) handler;
         Method method = handlerMethod.getMethod();
-
-        RequireRole requireRole = method.getAnnotation(RequireRole.class);
+        RequireRole requireRole = AnnotatedElementUtils.findMergedAnnotation(method, RequireRole.class);
+        if (requireRole == null) {
+            requireRole = AnnotatedElementUtils.findMergedAnnotation(
+                    handlerMethod.getBeanType(), RequireRole.class);
+        }
         if (requireRole == null) {
             return true;
         }
 
-        String authHeader = request.getHeader("Authorization");
-        String currentRole = null;
-        String userId = "anonymous";
-
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            try {
-                userId = jwtUtil.extractUsername(token);
-                currentRole = jwtUtil.extractRole(token);
-            } catch (Exception e) {
-                log.warn("Token parse failed: {}", e.getMessage());
-            }
-        } else {
-            log.warn("Authorization header missing");
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
+            log.warn("Authentication required, uri={}", request.getRequestURI());
+            writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, "未登录或token无效");
+            return false;
         }
 
+        String currentRole = SecurityContextUtil.currentRole();
+        String userId = authentication.getName();
         String[] requiredRoles = requireRole.value();
         boolean hasPermission = false;
         if (currentRole != null) {
@@ -67,13 +62,9 @@ public class PermissionInterceptor implements HandlerInterceptor {
 
         if (!hasPermission) {
             log.warn("Permission denied, userId={}, currentRole={}, requiredRoles={}",
-                userId, currentRole, String.join(", ", requiredRoles));
-
-            response.setStatus(403);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write(
-                "{\"code\": 0, \"msg\": \"权限不足，需要[" + String.join(", ", requiredRoles) + "]角色\", \"data\": null}"
-            );
+                    userId, currentRole, String.join(", ", requiredRoles));
+            writeJsonError(response, HttpServletResponse.SC_FORBIDDEN,
+                    "权限不足，需要[" + String.join(", ", requiredRoles) + "]角色");
             return false;
         }
 
@@ -86,5 +77,18 @@ public class PermissionInterceptor implements HandlerInterceptor {
             return false;
         }
         return "USER".equalsIgnoreCase(requiredRole) || "LEADER".equalsIgnoreCase(requiredRole);
+    }
+
+    private void writeJsonError(HttpServletResponse response, int status, String message) throws Exception {
+        response.setStatus(status);
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write(
+                "{\"code\":0,\"msg\":\"" + escapeJson(message) + "\",\"data\":null}"
+        );
+    }
+
+    private String escapeJson(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

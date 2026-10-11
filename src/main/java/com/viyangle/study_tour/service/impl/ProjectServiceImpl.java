@@ -9,6 +9,7 @@ import com.viyangle.study_tour.mapper.AccountMapper;
 import com.viyangle.study_tour.mapper.AccountTagPrefMapper;
 import com.viyangle.study_tour.mapper.ChatSessionMapper;
 import com.viyangle.study_tour.mapper.ProjectMapper;
+import com.viyangle.study_tour.mapper.ProjectAbandonRecordMapper;
 import com.viyangle.study_tour.mapper.ProjectMemberMapper;
 import com.viyangle.study_tour.mapper.RouteMapper;
 import com.viyangle.study_tour.mapper.TagMapper;
@@ -17,6 +18,7 @@ import com.viyangle.study_tour.pojo.AccountTagPref;
 import com.viyangle.study_tour.pojo.ChatSession;
 import com.viyangle.study_tour.pojo.PageResponse;
 import com.viyangle.study_tour.pojo.Project;
+import com.viyangle.study_tour.pojo.ProjectAbandonRecord;
 import com.viyangle.study_tour.pojo.ProjectMember;
 import com.viyangle.study_tour.pojo.ProjectStatus;
 import com.viyangle.study_tour.pojo.Route;
@@ -35,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -49,11 +53,30 @@ public class ProjectServiceImpl implements ProjectService {
     private static final String ROLE_ADMIN = "ADMIN";
     private static final String ROLE_LEADER = "LEADER";
 
+    /** 放弃带队必须距离出发时间至少这么多小时（恰好满足时允许）。 */
+    private static final long ABANDON_LEAD_HOURS = 6L;
+
+    /** 放弃原因去除首尾空格后的字数范围。 */
+    private static final int ABANDON_REASON_MIN_LENGTH = 5;
+    private static final int ABANDON_REASON_MAX_LENGTH = 200;
+
+    /**
+     * 「我的项目」阶段筛选到原始状态的映射。
+     *
+     * <p>ACCEPTED＝已接单且未结束（CONFIRMED、IN_PROGRESS），COMPLETED＝已完成（DONE）。</p>
+     */
+    private static final Map<String, List<String>> MY_PROJECT_STAGES = Map.of(
+            "ACCEPTED", List.of("CONFIRMED", "IN_PROGRESS"),
+            "COMPLETED", List.of("DONE"));
+
     @Autowired
     private ProjectMapper projectMapper;
 
     @Autowired
     private ProjectMemberMapper projectMemberMapper;
+
+    @Autowired
+    private ProjectAbandonRecordMapper projectAbandonRecordMapper;
 
     @Autowired
     private RouteMapper routeMapper;
@@ -207,6 +230,8 @@ public class ProjectServiceImpl implements ProjectService {
     public PageResponse<Project> getMyProjects(Long accountId,
                                                String relation,
                                                String status,
+                                               String stage,
+                                               List<String> statuses,
                                                Integer pageNum,
                                                Integer pageSize) {
         Account viewer = requireAccount(accountId);
@@ -217,11 +242,44 @@ public class ProjectServiceImpl implements ProjectService {
         List<Project> projects = projectMapper.selectByAccountRelation(
                 accountId,
                 normalizeRelation(relation),
-                normalizeStatus(status)
+                resolveMyProjectStatuses(status, stage, statuses)
         );
         PageInfo<Project> pageInfo = new PageInfo<>(projects);
         projects.forEach(project -> enrichProject(project, viewer));
         return PageResponse.of(projects, pageInfo.getTotal(), page, size);
+    }
+
+    /**
+     * 解析「我的项目」的状态筛选条件。
+     *
+     * <p>非法 {@code stage} 或非法原始状态都抛 {@link IllegalArgumentException}（映射为 400），
+     * 不会被静默忽略。优先级：{@code stage} → {@code statuses} → {@code status}。</p>
+     */
+    private List<String> resolveMyProjectStatuses(String status, String stage, List<String> statuses) {
+        String normalizedStage = trimToNull(stage);
+        if (normalizedStage != null) {
+            List<String> mapped = MY_PROJECT_STAGES.get(normalizedStage.toUpperCase(Locale.ROOT));
+            if (mapped == null) {
+                throw new IllegalArgumentException(
+                        "非法的阶段筛选 stage=" + stage + "，仅支持 ACCEPTED、COMPLETED");
+            }
+            return mapped;
+        }
+        List<String> resolved = new ArrayList<>();
+        if (statuses != null) {
+            for (String value : statuses) {
+                String normalized = trimToNull(value);
+                if (normalized != null) {
+                    resolved.add(ProjectStatus.from(normalized).name());
+                }
+            }
+            return resolved.isEmpty() ? null : resolved.stream().distinct().toList();
+        }
+        String normalizedStatus = trimToNull(status);
+        if (normalizedStatus != null) {
+            resolved.add(ProjectStatus.from(normalizedStatus).name());
+        }
+        return resolved.isEmpty() ? null : resolved.stream().distinct().toList();
     }
 
     @Override
@@ -419,10 +477,11 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Transactional
     @Override
-    public void abandonProject(Long id, Long leaderAccountId) {
+    public void abandonProject(Long id, Long leaderAccountId, String reason) {
         if (leaderAccountId == null) {
             throw new UnauthorizedException("未认证用户");
         }
+        String normalizedReason = normalizeAbandonReason(reason);
 
         Project project = projectMapper.selectByIdForUpdate(id);
         if (project == null) {
@@ -435,15 +494,80 @@ public class ProjectServiceImpl implements ProjectService {
         if (status != ProjectStatus.CONFIRMED) {
             throw new ForbiddenException("仅已接单且未开始的项目可放弃带队, status=" + status.name());
         }
-        if (hasDeparted(project)) {
-            throw new ForbiddenException("项目已到出发时间，不能放弃带队, projectId=" + id);
+
+        // 出发时间缺失视为订单时间异常，不使用默认时间继续执行。
+        LocalDateTime departure = requireDepartureForAbandon(project);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime earliestAllowedAbandon = departure.minusHours(ABANDON_LEAD_HOURS);
+        if (now.isAfter(earliestAllowedAbandon)) {
+            throw new ForbiddenException(
+                    "距出发时间不足 " + ABANDON_LEAD_HOURS + " 小时，不能放弃带队（剩余约 "
+                            + Math.max(0, Duration.between(now, departure).toMinutes()) + " 分钟）, projectId=" + id);
         }
 
         int affected = projectMapper.casAbandonProject(id, leaderAccountId);
         if (affected == 0) {
             throw new ForbiddenException("放弃带队失败，项目状态已发生变化, projectId=" + id);
         }
+        projectAbandonRecordMapper.insert(new ProjectAbandonRecord(
+                null,
+                id,
+                leaderAccountId,
+                normalizedReason,
+                status.name(),
+                departure,
+                now,
+                null
+        ));
         chatService.removeProjectLeader(id, leaderAccountId);
+    }
+
+    @Override
+    public List<ProjectAbandonRecord> getAbandonRecords(Long projectId, Long accountId, String role) {
+        if (accountId == null) {
+            throw new UnauthorizedException("未认证用户");
+        }
+        if (projectId == null) {
+            throw new IllegalArgumentException("项目ID不能为空");
+        }
+        Project project = projectMapper.selectById(projectId);
+        if (project == null) {
+            throw new ResourceNotFoundException("项目不存在, projectId=" + projectId);
+        }
+        List<ProjectAbandonRecord> records = projectAbandonRecordMapper.selectByProjectId(projectId);
+        boolean admin = role != null && ROLE_ADMIN.equalsIgnoreCase(role.trim());
+        boolean owner = accountId.equals(project.getOwnerAccountId());
+        boolean currentLeader = accountId.equals(project.getLeaderAccountId());
+        // 放弃后 leader_account_id 会被清空，因此曾经放弃过的领队也要能查看自己的记录。
+        boolean formerLeader = records.stream()
+                .anyMatch(record -> accountId.equals(record.getLeaderAccountId()));
+        if (!admin && !owner && !currentLeader && !formerLeader) {
+            throw new ForbiddenException("仅项目发布者、接单领队或管理员可查看放弃记录, projectId=" + projectId);
+        }
+        return records;
+    }
+
+    /** 放弃原因必填，去除首尾空格后 5-200 字。 */
+    private String normalizeAbandonReason(String reason) {
+        String trimmed = reason == null ? "" : reason.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("放弃原因不能为空");
+        }
+        if (trimmed.length() < ABANDON_REASON_MIN_LENGTH) {
+            throw new IllegalArgumentException("放弃原因不能少于 " + ABANDON_REASON_MIN_LENGTH + " 个字");
+        }
+        if (trimmed.length() > ABANDON_REASON_MAX_LENGTH) {
+            throw new IllegalArgumentException("放弃原因不能超过 " + ABANDON_REASON_MAX_LENGTH + " 个字");
+        }
+        return trimmed;
+    }
+
+    /** 出发日期或时间缺失时按「订单时间异常」拒绝操作，而不是使用默认时间。 */
+    private LocalDateTime requireDepartureForAbandon(Project project) {
+        if (project.getDepartureDate() == null || project.getDepartureTime() == null) {
+            throw new IllegalArgumentException("订单时间异常，请联系客服处理");
+        }
+        return LocalDateTime.of(project.getDepartureDate(), project.getDepartureTime());
     }
 
     private boolean hasDeparted(Project project) {

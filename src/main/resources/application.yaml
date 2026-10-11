@@ -117,6 +117,26 @@ app:
     ollama-disable-thinking: true
   security:
     enabled: true
+  # 路线规划 Agent 接口（/routes/agent/runs）运行限制，详见 docs/API.md 第 8 节
+  agent:
+    # 单轮整体执行时间上限
+    execution-timeout: 240s
+    # 任务保留时间；终态任务按请求触发清理，运行中任务不清理
+    run-ttl: 30m
+    # 保存任务上限
+    max-stored-runs: 500
+    # 全局活跃任务上限
+    max-active-runs: 8
+    # 单账号新建频率窗口与上限；幂等重复不占额度
+    create-window: 60s
+    max-creates-per-window: 6
+    # 每次查询最多返回的事件条数
+    max-events: 110
+    # 后台执行线程数
+    worker-threads: 4
+    # 单轮最多发起的高德路径规划请求数
+    max-direction-requests: 90
+    sweep-interval: 1m
   rag:
     embedding:
       # Whether to ingest classpath:content documents on startup
@@ -143,6 +163,13 @@ app:
   amap:
     key: ${AMAP_KEY:}
     transit-endpoint: https://restapi.amap.com/v5/direction/transit/integrated
+    # Agent 交通段使用的高德路径规划端点
+    walking-endpoint: https://restapi.amap.com/v5/direction/walking
+    driving-endpoint: https://restapi.amap.com/v5/direction/driving
+    # 路径规划：超时、QPS 限速、同路径缓存时间
+    direction-timeout-seconds: 10
+    direction-qps: 8
+    direction-cache-ttl-minutes: 10
     transit-timeout-seconds: 20
     transit-cache-ttl-hours: 24
     transit-sleep-millis: 80

@@ -40,7 +40,7 @@ public interface ProjectMapper {
 
     List<Project> selectByAccountRelation(@Param("accountId") Long accountId,
                                           @Param("relation") String relation,
-                                          @Param("status") String status);
+                                          @Param("statuses") List<String> statuses);
 
     List<Project> selectByCompositeFilter(@Param("preferredTags") List<String> preferredTags,
                                           @Param("sortRegionCode") String sortRegionCode,

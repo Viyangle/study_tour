@@ -638,3 +638,24 @@ CREATE TABLE IF NOT EXISTS attraction_adjacency (
     INDEX idx_adjacency_to (to_poi_id),
     INDEX idx_adjacency_type (relation_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='景点相邻关系(地理+语义)';
+
+-- ============================================================
+-- 领队放弃带队审计记录表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS project_abandon_records (
+    id                BIGINT       NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+    project_id        BIGINT       NOT NULL COMMENT '被放弃的项目ID',
+    leader_account_id BIGINT       NOT NULL COMMENT '放弃带队的领队账号ID',
+    reason            VARCHAR(200) NOT NULL COMMENT '放弃原因(去首尾空格后5-200字)',
+    previous_status   VARCHAR(20)  NOT NULL COMMENT '放弃前的项目状态',
+    departure_at      DATETIME     DEFAULT NULL COMMENT '放弃时项目的出发时间快照',
+    abandoned_at      DATETIME     NOT NULL COMMENT '放弃操作时间(服务器时间)',
+    created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '写入时间',
+    PRIMARY KEY (id),
+    INDEX idx_abandon_records_project (project_id, abandoned_at),
+    INDEX idx_abandon_records_leader (leader_account_id, abandoned_at),
+    CONSTRAINT fk_abandon_records_project FOREIGN KEY (project_id)
+        REFERENCES projects (id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_abandon_records_leader FOREIGN KEY (leader_account_id)
+        REFERENCES accounts (id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='领队放弃带队审计记录';

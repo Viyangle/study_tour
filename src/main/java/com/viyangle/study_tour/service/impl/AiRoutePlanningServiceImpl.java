@@ -22,6 +22,7 @@ import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ReferencePairService;
 import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
+import com.viyangle.study_tour.utils.AiConversationScope;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,7 +50,8 @@ import java.util.stream.Collectors;
 @Service
 public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
-    private static final String CONSTRAINT_KEY_PREFIX = "ai:route:constraint:";
+    // Separate namespace also prevents legacy caller-chosen memoryIds from colliding.
+    private static final String CONSTRAINT_KEY_PREFIX = "ai:route:v2:constraint:";
     private static final Duration CONSTRAINT_TTL = Duration.ofDays(7);
     private static final int MAX_USER_MESSAGE_HISTORY = 12;
     private static final int MAX_SUBMITTED_ROUTE_ITEMS = 20;
@@ -115,6 +117,8 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
     @Override
     public AIRoutePlan planRouteV2(String memoryId, String message, Long accountId) throws Exception {
+        accountId = AiConversationScope.requireAccount(accountId);
+        AiConversationScope.storageId(memoryId);
         long totalStartedAt = System.nanoTime();
         long stageStartedAt = totalStartedAt;
         RouteConstraintState state = loadOrCreateState(memoryId, message);
@@ -1039,7 +1043,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             return state;
         }
 
-        String raw = redisTemplate.opsForValue().get(CONSTRAINT_KEY_PREFIX + memoryId);
+        String raw = redisTemplate.opsForValue().get(CONSTRAINT_KEY_PREFIX + AiConversationScope.storageId(memoryId));
         if (raw == null || raw.isBlank()) {
             RouteConstraintState state = new RouteConstraintState();
             state.setLastUserMessage(message);
@@ -1062,7 +1066,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         }
         try {
             String json = objectMapper.writeValueAsString(state);
-            redisTemplate.opsForValue().set(CONSTRAINT_KEY_PREFIX + memoryId, json, CONSTRAINT_TTL);
+            redisTemplate.opsForValue().set(CONSTRAINT_KEY_PREFIX + AiConversationScope.storageId(memoryId), json, CONSTRAINT_TTL);
         } catch (Exception e) {
             log.warn("Failed to save route constraint state, memoryId={}", memoryId, e);
         }

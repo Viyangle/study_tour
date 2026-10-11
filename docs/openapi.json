@@ -1,0 +1,1231 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "研学路线 Agent API",
+    "version": "1.0",
+    "description": "依据 2026-10-10 当前代码整理。任务响应直接返回 JSON，不使用旧后端 code/msg/data 包装。请求 schema 从 FastAPI 导出，响应 schema 按当前返回对象补充。memoryId 不单独保存对话，调用者须传 history/constraints/currentRoute。"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "本 Agent 健康检查",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "正常运行",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/routes/agent/runs": {
+      "post": {
+        "summary": "创建一轮异步规划",
+        "operationId": "start_routes_agent_runs_post",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              },
+              "example": {
+                "requestId": "7e547d16-f693-4c21-b143-0123456789ab",
+                "memoryId": "user-1-route-conversation-01",
+                "accountId": 1,
+                "message": "南京亲子历史研学，控制在4小时，预算每人200元，必须去南京博物院",
+                "history": [],
+                "currentRoute": [],
+                "constraints": {
+                  "city": "南京",
+                  "date": "2026-10-11",
+                  "dailyMinutes": 240,
+                  "budget": 200,
+                  "modes": [
+                    "walking",
+                    "transit"
+                  ],
+                  "mustVisit": [
+                    "南京博物院"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "任务已接受；幂等重试可能返回已有终态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录，token验证失败或认证接入失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "accountId与登录身份不一致",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "相同请求ID内容不同，或会话已有活跃任务",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过新建频率、并发或存储上限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Route Agent"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "HTTP 202 仅表示任务已接受。同账号/requestId/同请求体去重；重试传相同请求体。同账号同memoryId不能并发运行。"
+      }
+    },
+    "/routes/agent/runs/{run_id}": {
+      "get": {
+        "summary": "查询进度与结果",
+        "operationId": "status_routes_agent_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "任务当前状态；可能完成、失败、取消或仍在运行",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录，token验证失败或认证接入失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在、过期、服务重启丢失或不属于当前账号",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Route Agent"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "HTTP 200 不等于任务成功：检查 status，再区分 result.kind=plan 或 clarification。events 是最近事件列表，不是增量流。"
+      },
+      "delete": {
+        "summary": "取消一轮规划",
+        "operationId": "cancel_routes_agent_runs__run_id__delete",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "任务当前状态；可能完成、失败、取消或仍在运行",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录，token验证失败或认证接入失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在、过期、服务重启丢失或不属于当前账号",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Route Agent"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "已处于终态的任务返回现有终态，不保证一定返回 cancelled。不删除路线。"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Constraints": {
+        "properties": {
+          "city": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "City",
+            "default": ""
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "days": {
+            "type": "integer",
+            "maximum": 7,
+            "minimum": 1,
+            "title": "Days",
+            "default": 1
+          },
+          "dailyMinutes": {
+            "type": "integer",
+            "maximum": 960,
+            "minimum": 30,
+            "title": "Dailyminutes",
+            "default": 480
+          },
+          "startTime": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Starttime",
+            "default": "09:00"
+          },
+          "finishByTime": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishbytime"
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000000,
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget"
+          },
+          "maxWalkingMeters": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100000,
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxwalkingmeters"
+          },
+          "modes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "walking",
+                "transit",
+                "driving"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Modes"
+          },
+          "mustVisit": {
+            "items": {
+              "type": "string",
+              "maxLength": 160,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Mustvisit"
+          },
+          "avoid": {
+            "items": {
+              "type": "string",
+              "maxLength": 160,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Avoid"
+          },
+          "interests": {
+            "items": {
+              "type": "string",
+              "maxLength": 160,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Interests"
+          },
+          "group": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Group",
+            "default": ""
+          },
+          "accessibility": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Accessibility",
+            "default": ""
+          },
+          "pace": {
+            "type": "string",
+            "enum": [
+              "relaxed",
+              "balanced",
+              "intensive"
+            ],
+            "title": "Pace",
+            "default": "balanced"
+          },
+          "returnToStart": {
+            "type": "boolean",
+            "title": "Returntostart",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Constraints"
+      },
+      "CurrentStop": {
+        "properties": {
+          "poiId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$",
+            "title": "Poiid"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Name",
+            "default": ""
+          },
+          "recommendedDuration": {
+            "type": "integer",
+            "maximum": 960,
+            "minimum": 0,
+            "title": "Recommendedduration",
+            "default": 60
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "poiId"
+        ],
+        "title": "CurrentStop"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Origin": {
+        "properties": {
+          "longitude": {
+            "type": "number",
+            "maximum": 136,
+            "minimum": 73,
+            "title": "Longitude"
+          },
+          "latitude": {
+            "type": "number",
+            "maximum": 54,
+            "minimum": 3,
+            "title": "Latitude"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "longitude",
+          "latitude"
+        ],
+        "title": "Origin"
+      },
+      "PlanRequest": {
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,100}$",
+            "title": "Requestid"
+          },
+          "memoryId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$",
+            "title": "Memoryid"
+          },
+          "accountId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "title": "Accountid"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "title": "History"
+          },
+          "currentRoute": {
+            "items": {
+              "$ref": "#/components/schemas/CurrentStop"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Currentroute"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Origin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requestId",
+          "memoryId",
+          "accountId",
+          "message"
+        ],
+        "title": "PlanRequest"
+      },
+      "Turn": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "Turn"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ToolEvent": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string",
+            "enum": [
+              "set_constraints",
+              "search_places",
+              "get_place_details",
+              "search_nearby",
+              "use_current_location",
+              "get_weather",
+              "calculate_leg",
+              "optimize_order",
+              "build_itinerary",
+              "finish_plan",
+              "ask_user",
+              "unknown"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed",
+              "failed",
+              "needs_revision"
+            ]
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "工具耗时，运行中可能没有此字段"
+          }
+        },
+        "required": [
+          "label",
+          "status"
+        ]
+      },
+      "RouteNode": {
+        "type": "object",
+        "properties": {
+          "poiId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string",
+            "description": "经度,纬度"
+          },
+          "address": {
+            "type": "string"
+          },
+          "cityname": {
+            "type": "string"
+          },
+          "citycode": {
+            "type": "string"
+          },
+          "adcode": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "typecode": {
+            "type": "string"
+          },
+          "tel": {
+            "type": "string"
+          },
+          "opentimeToday": {
+            "type": "string"
+          },
+          "opentimeWeek": {
+            "type": "string"
+          },
+          "visitOrder": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "visitTime": {
+            "type": "string",
+            "description": "日期或第N天 + HH:mm"
+          },
+          "recommendedDuration": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 480
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "poiId",
+          "name",
+          "location",
+          "address",
+          "cityname",
+          "citycode",
+          "adcode",
+          "type",
+          "typecode",
+          "tel",
+          "opentimeToday",
+          "opentimeWeek",
+          "visitOrder",
+          "visitTime",
+          "recommendedDuration",
+          "notes"
+        ]
+      },
+      "VisitSchedule": {
+        "type": "object",
+        "properties": {
+          "poiId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "arrival": {
+            "type": "string"
+          },
+          "departure": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 480
+          },
+          "learningGoal": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "poiId",
+          "name",
+          "arrival",
+          "departure",
+          "minutes",
+          "learningGoal"
+        ]
+      },
+      "BreakSchedule": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "break"
+          },
+          "arrival": {
+            "type": "string"
+          },
+          "departure": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 240
+          }
+        },
+        "required": [
+          "type",
+          "arrival",
+          "departure",
+          "minutes"
+        ]
+      },
+      "DaySummary": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schedule": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/VisitSchedule"
+                },
+                {
+                  "$ref": "#/components/schemas/BreakSchedule"
+                }
+              ]
+            }
+          },
+          "totalMinutes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "包含已规划通勤/休息/缓冲/等待"
+          },
+          "walkingMeters": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "当日地点间通勤步行，不含场馆内部"
+          },
+          "estimatedCost": {
+            "type": "number",
+            "minimum": 0,
+            "description": "每人当日已统计费用估算"
+          },
+          "legCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "finishTime": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "date",
+          "schedule",
+          "totalMinutes",
+          "walkingMeters",
+          "estimatedCost",
+          "legCount",
+          "finishTime"
+        ]
+      },
+      "Leg": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "origin": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "originName": {
+            "type": "string"
+          },
+          "destinationName": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "walking",
+              "transit",
+              "driving"
+            ]
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "distanceMeters": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "walkingMeters": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "description": "目前公交费用有值，其他情况为null"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "polyline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "[经度,纬度]；各段独立绘制"
+          },
+          "instructions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "origin",
+          "destination",
+          "originName",
+          "destinationName",
+          "mode",
+          "minutes",
+          "distanceMeters",
+          "walkingMeters",
+          "cost",
+          "polyline",
+          "instructions",
+          "source",
+          "note"
+        ]
+      },
+      "AgentPlan": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "plan"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2500
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "feasible": {
+            "type": "boolean",
+            "const": true
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 0
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteNode"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DaySummary"
+            },
+            "minItems": 1,
+            "maxItems": 7
+          },
+          "legs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Leg"
+            }
+          },
+          "estimatedCost": {
+            "type": "number",
+            "minimum": 0,
+            "description": "每人全程已统计估算，不含未知费用"
+          },
+          "unknownCosts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "addedPoiIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removedPoiIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiresAcceptance": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "kind",
+          "message",
+          "assumptions",
+          "constraints",
+          "feasible",
+          "issues",
+          "warnings",
+          "nodes",
+          "days",
+          "legs",
+          "estimatedCost",
+          "unknownCosts",
+          "addedPoiIds",
+          "removedPoiIds",
+          "requiresAcceptance"
+        ]
+      },
+      "Clarification": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "clarification"
+          },
+          "message": {
+            "type": "string",
+            "description": "澄清原因，可为空",
+            "maxLength": 500
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteNode"
+            },
+            "maxItems": 0
+          },
+          "legs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Leg"
+            },
+            "maxItems": 0
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          }
+        },
+        "required": [
+          "kind",
+          "message",
+          "questions",
+          "nodes",
+          "legs",
+          "constraints"
+        ]
+      },
+      "RunView": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolEvent"
+            },
+            "maxItems": 110
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentPlan"
+              },
+              {
+                "$ref": "#/components/schemas/Clarification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "runId",
+          "status",
+          "stage",
+          "events",
+          "result",
+          "error"
+        ]
+      },
+      "AgentError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "version": {
+            "type": "string",
+            "const": "1.0"
+          }
+        },
+        "required": [
+          "status",
+          "version"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "现有系统登录token，非模型供应商密钥"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787",
+      "description": "本地服务示例；导入后替换为已部署 Agent 或网关地址"
+    }
+  ]
+}

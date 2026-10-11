@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.RouteFavoriteMapper">
+
+    <insert id="insertIfAbsent">
+        insert into route_favorites (account_id, route_id)
+        values (#{accountId}, #{routeId})
+        on duplicate key update route_id = #{routeId}
+    </insert>
+
+    <delete id="deleteByAccountIdAndRouteId">
+        delete from route_favorites
+        where account_id = #{accountId}
+          and route_id = #{routeId}
+    </delete>
+
+</mapper>

@@ -2,9 +2,13 @@ package com.viyangle.study_tour.controller;
 
 import com.viyangle.study_tour.annotation.OperationLog;
 import com.viyangle.study_tour.annotation.RequireRole;
+import com.viyangle.study_tour.exception.ForbiddenException;
+import com.viyangle.study_tour.exception.ResourceNotFoundException;
+import com.viyangle.study_tour.exception.UnauthorizedException;
 import com.viyangle.study_tour.pojo.Review;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.service.ReviewService;
+import com.viyangle.study_tour.utils.SecurityContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -28,7 +32,9 @@ public class ReviewController {
             Review review = new Review();
             review.setProjectId(Long.valueOf(request.get("projectId").toString()));
             review.setRouteId(Long.valueOf(request.get("routeId").toString()));
-            review.setFromAccountId(Long.valueOf(request.get("fromAccountId").toString()));
+            // The reviewer is always taken from the authenticated account.  A
+            // client supplied fromAccountId is deliberately ignored.
+            review.setFromAccountId(SecurityContextUtil.currentAccountId());
 
             if (request.containsKey("toAccountId") && request.get("toAccountId") != null) {
                 review.setToAccountId(Long.valueOf(request.get("toAccountId").toString()));
@@ -44,6 +50,7 @@ public class ReviewController {
             Long reviewId = reviewService.createReview(review);
             return Result.success(reviewId);
         } catch (Exception e) {
+            rethrowAuthorizationException(e);
             log.error("Create review failed", e);
             return Result.error("Create review failed: " + e.getMessage());
         }
@@ -51,7 +58,7 @@ public class ReviewController {
 
     @DeleteMapping("/{id}")
     @OperationLog(value = "Delete review", type = "REVIEW_DELETE")
-    @RequireRole({"USER", "LEADER"})
+    @RequireRole({"USER", "LEADER", "ADMIN"})
     public Result deleteReview(@PathVariable Long id) {
         log.info("Delete review: {}", id);
         boolean success = reviewService.deleteReview(id);
@@ -60,7 +67,7 @@ public class ReviewController {
 
     @PutMapping("/{id}")
     @OperationLog(value = "Update review", type = "REVIEW_UPDATE")
-    @RequireRole({"USER", "LEADER"})
+    @RequireRole({"USER", "LEADER", "ADMIN"})
     public Result updateReview(@PathVariable Long id, @RequestBody Map<String, Object> request) {
         log.info("Update review: {}", id);
         try {
@@ -68,7 +75,8 @@ public class ReviewController {
             review.setId(id);
             review.setProjectId(Long.valueOf(request.get("projectId").toString()));
             review.setRouteId(Long.valueOf(request.get("routeId").toString()));
-            review.setFromAccountId(Long.valueOf(request.get("fromAccountId").toString()));
+            // Ownership and immutable review context are resolved by the
+            // service from the persisted review and current authentication.
 
             if (request.containsKey("toAccountId") && request.get("toAccountId") != null) {
                 review.setToAccountId(Long.valueOf(request.get("toAccountId").toString()));
@@ -84,8 +92,21 @@ public class ReviewController {
             boolean success = reviewService.updateReview(review);
             return success ? Result.success() : Result.error("Update review failed");
         } catch (Exception e) {
+            rethrowAuthorizationException(e);
             log.error("Update review failed", e);
             return Result.error("Update review failed: " + e.getMessage());
+        }
+    }
+
+    private void rethrowAuthorizationException(Exception exception) {
+        if (exception instanceof UnauthorizedException unauthorizedException) {
+            throw unauthorizedException;
+        }
+        if (exception instanceof ForbiddenException forbiddenException) {
+            throw forbiddenException;
+        }
+        if (exception instanceof ResourceNotFoundException resourceNotFoundException) {
+            throw resourceNotFoundException;
         }
     }
 
