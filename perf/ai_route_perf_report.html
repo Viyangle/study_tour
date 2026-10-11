@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>AI 路线生成性能</title>
+<style>
+body{font-family:"Microsoft YaHei",system-ui,sans-serif;background:#f9f9f7;color:#0b0b0b;margin:0;padding:32px;}
+.card{background:#fcfcfb;border:1px solid #e1e0d9;border-radius:10px;padding:20px 24px;margin:0 auto 24px;max-width:1100px;}
+h1{font-size:22px;margin:0 0 6px;} h2{font-size:16px;margin:0 0 4px;color:#0b0b0b;}
+.sub{color:#52514e;font-size:13px;margin-bottom:14px;}
+table{border-collapse:collapse;margin:12px 0;font-size:13px;width:100%;}
+th,td{border-bottom:1px solid #e1e0d9;padding:6px 10px;text-align:right;}
+th{color:#52514e;font-weight:600;} th:first-child,td:first-child{text-align:left;}
+.note{color:#898781;font-size:12px;margin-top:8px;}
+</style></head><body>
+<div class="card"><h1>AI 路线生成性能</h1><div class="sub">服务器 http://47.94.95.110:8080 · 账号 id=6 · 并发≤10 · 每档2轮 · 平均生成时间（客户端墙钟，秒）</div>
+<h2>① 多用户并发 → 平均生成时间</h2>
+<svg width="520" height="326" viewBox="0 0 520 326">
+<line x1="44" y1="256" x2="476" y2="256" stroke="#c3c2b7"/>
+<path d="M44.0,256.0 L92.0,229.4 L188.0,177.1 L380.0,76.0 L476.0,44.0" fill="none" stroke="#2a78d6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="44.0" cy="256.0" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><circle cx="92.0" cy="229.4" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><circle cx="188.0" cy="177.1" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><circle cx="380.0" cy="76.0" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><circle cx="476.0" cy="44.0" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><text x="44.0" y="248.0" font-size="11" fill="#52514e" text-anchor="middle">53.8s</text><text x="92.0" y="221.4" font-size="11" fill="#52514e" text-anchor="middle">98.1s</text><text x="188.0" y="169.1" font-size="11" fill="#52514e" text-anchor="middle">185.0s</text><text x="380.0" y="68.0" font-size="11" fill="#52514e" text-anchor="middle">353.1s</text><text x="476.0" y="36.0" font-size="11" fill="#52514e" text-anchor="middle">406.3s</text><text x="44.0" y="274" font-size="11" fill="#898781" text-anchor="middle">1</text><text x="92.0" y="274" font-size="11" fill="#898781" text-anchor="middle">2</text><text x="188.0" y="274" font-size="11" fill="#898781" text-anchor="middle">4</text><text x="380.0" y="274" font-size="11" fill="#898781" text-anchor="middle">8</text><text x="476.0" y="274" font-size="11" fill="#898781" text-anchor="middle">10</text>
+<text x="44" y="18" font-size="12" fill="#52514e">平均生成时间 (秒)</text>
+</svg>
+<table>
+<tr><th>并发用户数</th><th>平均</th><th>P50</th><th>P95</th><th>最大</th><th>样本数</th><th>失败</th></tr>
+<tr><td>1</td><td>53.8s</td><td>39.3s</td><td>68.4s</td><td>68.4s</td><td>2</td><td>0</td></tr><tr><td>2</td><td>98.1s</td><td>89.4s</td><td>120.0s</td><td>120.0s</td><td>4</td><td>0</td></tr><tr><td>4</td><td>185.0s</td><td>162.5s</td><td>296.8s</td><td>296.8s</td><td>8</td><td>0</td></tr><tr><td>8</td><td>353.1s</td><td>346.5s</td><td>458.6s</td><td>458.6s</td><td>16</td><td>0</td></tr><tr><td>10</td><td>406.3s</td><td>399.9s</td><td>579.3s</td><td>579.3s</td><td>16</td><td>4</td></tr>
+</table>
+<div class="note">并发=10 时 20 个样本中 4 个失败（3 个 HTTP 500、1 个客户端超时 &gt;600s）。</div>
+</div>
+<div class="card"><h2>② 路线复杂程度（提交景点数 N）→ 生成时间</h2>
+<svg width="520" height="326" viewBox="0 0 520 326">
+<line x1="44" y1="256" x2="476" y2="256" stroke="#c3c2b7"/>
+<path d="M44.0,256.0 L120.2,155.9 L196.5,44.0 L272.7,167.1 L348.9,110.3 L425.2,148.4 L476.0,131.7" fill="none" stroke="#eb6834" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="44.0" cy="256.0" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><circle cx="120.2" cy="155.9" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><circle cx="196.5" cy="44.0" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><circle cx="272.7" cy="167.1" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><circle cx="348.9" cy="110.3" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><circle cx="425.2" cy="148.4" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><circle cx="476.0" cy="131.7" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><text x="44.0" y="248.0" font-size="11" fill="#52514e" text-anchor="middle">28.6s</text><text x="120.2" y="147.9" font-size="11" fill="#52514e" text-anchor="middle">38.7s</text><text x="196.5" y="36.0" font-size="11" fill="#52514e" text-anchor="middle">50.1s</text><text x="272.7" y="159.1" font-size="11" fill="#52514e" text-anchor="middle">37.6s</text><text x="348.9" y="102.3" font-size="11" fill="#52514e" text-anchor="middle">43.4s</text><text x="425.2" y="140.4" font-size="11" fill="#52514e" text-anchor="middle">39.5s</text><text x="476.0" y="123.7" font-size="11" fill="#52514e" text-anchor="middle">41.2s</text><text x="44.0" y="274" font-size="11" fill="#898781" text-anchor="middle">3</text><text x="120.2" y="274" font-size="11" fill="#898781" text-anchor="middle">6</text><text x="196.5" y="274" font-size="11" fill="#898781" text-anchor="middle">9</text><text x="272.7" y="274" font-size="11" fill="#898781" text-anchor="middle">12</text><text x="348.9" y="274" font-size="11" fill="#898781" text-anchor="middle">15</text><text x="425.2" y="274" font-size="11" fill="#898781" text-anchor="middle">18</text><text x="476.0" y="274" font-size="11" fill="#898781" text-anchor="middle">20</text>
+<text x="44" y="18" font-size="12" fill="#52514e">平均生成时间 (秒)</text>
+</svg>
+<table>
+<tr><th>提交景点数 N</th><th>平均</th><th>P50</th><th>P95</th><th>最大</th><th>样本数</th><th>失败</th></tr>
+<tr><td>3</td><td>28.6s</td><td>24.7s</td><td>32.4s</td><td>32.4s</td><td>2</td><td>0</td></tr><tr><td>6</td><td>38.7s</td><td>32.1s</td><td>45.4s</td><td>45.4s</td><td>2</td><td>0</td></tr><tr><td>9</td><td>50.1s</td><td>49.6s</td><td>50.7s</td><td>50.7s</td><td>2</td><td>0</td></tr><tr><td>12</td><td>37.6s</td><td>37.1s</td><td>38.1s</td><td>38.1s</td><td>2</td><td>0</td></tr><tr><td>15</td><td>43.4s</td><td>43.4s</td><td>43.4s</td><td>43.4s</td><td>1</td><td>1</td></tr><tr><td>18</td><td>39.5s</td><td>39.5s</td><td>39.5s</td><td>39.5s</td><td>1</td><td>1</td></tr><tr><td>20</td><td>41.2s</td><td>38.2s</td><td>44.2s</td><td>44.2s</td><td>2</td><td>0</td></tr>
+</table>
+<div class="note">N=15/18 各出现 1 次 HTTP 400（LLM 输出不合规，被后端校验拦截），不影响成功样本统计。</div>
+</div>
+</body></html>

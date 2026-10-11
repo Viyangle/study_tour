@@ -1,0 +1,6 @@
+﻿mode,scenario,scope,endpoint,concurrency,duration_s,total,ok,errors,error_rate_pct,avg_ms,p50_ms,p90_ms,p95_ms,p99_ms,min_ms,max_ms,throughput_req_s,bytes_avg
+concurrency,projects,overall,projects,1,10.134,43,43,0,0,235.588,244.245,384.359,551.061,559.723,85.084,559.723,4.243,9540.9
+concurrency,projects,overall,projects,2,10.167,42,42,0,0,483.984,420.088,1002.366,1009.443,1028.205,104.173,1028.205,4.131,9538.7
+concurrency,projects,overall,projects,4,10.627,36,36,0,0,1152.93,1227.325,2071.234,2085.482,2138.816,157.681,2138.816,3.388,9559.7
+concurrency,projects,overall,projects,8,11.852,49,49,0,0,1842.462,1717.071,4251.078,4287.694,4408.805,344.853,4408.805,4.134,9545.1
+concurrency,projects,overall,projects,16,13.34,51,51,0,0,3739.449,3391.835,8517.376,8642.636,8762.384,638.249,8762.384,3.823,9560.5

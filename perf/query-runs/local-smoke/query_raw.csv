@@ -1,0 +1,6 @@
+﻿started_at,mode,scenario,endpoint,concurrency,worker,sequence,ms,ok,status,code,bytes,error
+2026-08-26T09:25:34.080Z,smoke,projects,projects,1,1,1,245.91,true,200,1,9596,
+2026-08-26T09:25:34.327Z,smoke,projects-filter,projects-filter,1,1,1,194.975,true,200,1,9568,
+2026-08-26T09:25:34.522Z,smoke,projects-explained,projects-explained,1,1,1,166.468,true,200,1,37010,
+2026-08-26T09:25:34.689Z,smoke,routes,routes,1,1,1,82.672,true,200,1,1295,
+2026-08-26T09:25:34.772Z,smoke,attractions,attractions,1,1,1,30.568,true,200,1,5547,

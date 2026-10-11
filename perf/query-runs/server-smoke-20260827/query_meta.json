@@ -1,0 +1,51 @@
+{
+  "runId": "query-20260827T070435Z",
+  "startedAt": "2026-08-27T07:04:35.172Z",
+  "finishedAt": "2026-08-27T07:04:37.386Z",
+  "config": {
+    "mode": "smoke",
+    "scenario": "mix",
+    "baseUrl": "http://47.94.95.110:8080",
+    "concurrencyLevels": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64,
+      128
+    ],
+    "durationPerLevelSeconds": 15,
+    "sustainedConcurrency": 32,
+    "sustainedDurationSeconds": 60,
+    "warmupSeconds": 2,
+    "cooldownMs": 1500,
+    "requestTimeoutMs": 30000,
+    "pageSize": 10,
+    "pageRange": [
+      1,
+      3
+    ],
+    "filterKeyword": "",
+    "filterRegionCode": "320100",
+    "filterTag": "",
+    "filterStatus": "OPEN",
+    "onlyAvailable": true,
+    "insecure": true,
+    "mixWeights": {
+      "projects": 50,
+      "projects-filter": 20,
+      "projects-explained": 10,
+      "routes": 15,
+      "attractions": 5
+    }
+  },
+  "loadGenerator": {
+    "node": "v22.23.2",
+    "platform": "win32",
+    "arch": "x64",
+    "cpuLogicalCores": 16,
+    "hostname": "Viyangle"
+  }
+}

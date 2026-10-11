@@ -1,0 +1,2218 @@
+{
+  "info": {
+    "_postman_id": "e55021f3-b887-4ab5-ae51-88c124b3b781",
+    "name": "Study Tour API",
+    "description": "根据项目 README.md 自动生成。登录成功后会自动保存 token 和 refreshToken；除公开接口外，其他请求统一继承 Bearer Token。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "codex-readme-generator"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.variables.get(\"baseUrl\")) {",
+          "    throw new Error(\"请先设置 baseUrl，或选择 Study Tour 环境\");",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://47.94.95.110:8080",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "统一返回格式",
+      "item": [
+        {
+          "name": "同步单个高德 POI（一条龙）",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attractions/sync/:poiId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attractions",
+                "sync",
+                ":poiId"
+              ],
+              "variable": [
+                {
+                  "key": "poiId",
+                  "value": "1",
+                  "description": "README 路径参数：poiId"
+                }
+              ]
+            },
+            "description": "按高德 poiId 同步单个景点：高德 place/detail 取数 → 写入 `attractions` 表（upsert）→ 增量更新 Redis 向量索引。适合前端从高德选点后立即调用，让该景点马上进入后端景点库和向量检索候选。\n\n来源：README.md 第 31 行"
+          },
+          "response": []
+        },
+        {
+          "name": "POST /attractions/reindex",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attractions/reindex",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attractions",
+                "reindex"
+              ]
+            },
+            "description": "2. 调用管理接口 POST /attractions/reindex（需 ADMIN 角色），内部先清空索引再按数据库全量写入。\n\n来源：README.md 第 64 行"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "领队端页面接口",
+      "item": [
+        {
+          "name": "我的资料看板",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leader/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leader",
+                "profile"
+              ]
+            },
+            "description": "一次返回头像、姓名、领队简介、真实评价统计、接单统计、偏好标签和最近三条评价。\n\n来源：README.md 第 280 行"
+          },
+          "response": []
+        },
+        {
+          "name": "领队评价列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leader/reviews?pageNum=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leader",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1",
+                  "description": "默认 `1`"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "默认 `20`，最大 `100`"
+                }
+              ]
+            },
+            "description": "只返回 `USER_TO_LEADER` 类型评价，并附带评价人姓名和头像，按时间倒序排列。\n\n来源：README.md 第 308 行"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "项目聚合接口",
+      "item": [
+        {
+          "name": "可接项目",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/available?pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "available"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "可接项目\n\n来源：README.md 第 347 行"
+          },
+          "response": []
+        },
+        {
+          "name": "我的项目",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/mine?relation=ALL&status=OPEN&pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "mine"
+              ],
+              "query": [
+                {
+                  "key": "relation",
+                  "value": "ALL"
+                },
+                {
+                  "key": "status",
+                  "value": "OPEN"
+                },
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "我的项目\n\n来源：README.md 第 356 行"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4.1 用户相关",
+      "item": [
+        {
+          "name": "用户注册",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "register"
+              ]
+            },
+            "description": "公开注册保留用户自行选择角色的能力，可选择 `USER/LEADER/BOTH`。`role` 必填，不区分大小写，服务端会归一化为大写；公开注册不允许使用 `ADMIN`，不会再强制注册为 `USER`。\n\n来源：README.md 第 405 行",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"B\",\n  \"phone\": \"10010001003\",\n  \"password\": \"123456\",\n  \"confirmPassword\": \"123456\",\n  \"role\": \"USER\",\n  \"regionCode\": \"320102\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "用户登录",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "login"
+              ]
+            },
+            "description": "按手机号和密码登录，返回账号信息与双 Token （目前暂时不需要）\n\n来源：README.md 第 434 行",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"19910001003\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const result = pm.response.json();",
+                  "",
+                  "pm.test(\"登录成功并返回 Token\", function () {",
+                  "    pm.expect(result.code).to.eql(1);",
+                  "    pm.expect(result.data).to.have.property(\"token\");",
+                  "});",
+                  "",
+                  "if (result.code === 1 && result.data?.token) {",
+                  "    pm.collectionVariables.set(\"token\", result.data.token);",
+                  "    pm.environment.set(\"token\", result.data.token);",
+                  "}",
+                  "",
+                  "if (result.code === 1 && result.data?.refreshToken) {",
+                  "    pm.collectionVariables.set(\"refreshToken\", result.data.refreshToken);",
+                  "    pm.environment.set(\"refreshToken\", result.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "刷新登录 Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/login/refresh?refreshToken={{refreshToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "login",
+                "refresh"
+              ],
+              "query": [
+                {
+                  "key": "refreshToken",
+                  "value": "{{refreshToken}}"
+                }
+              ]
+            },
+            "description": "使用 `refreshToken` 刷新访问令牌\n\n来源：README.md 第 480 行",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "服务连通性检查",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/login/ping",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "login",
+                "ping"
+              ]
+            },
+            "description": "连通性检查\n\n来源：README.md 第 498 行",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "获取用户详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "根据用户 ID 获取用户信息\n\n来源：README.md 第 518 行"
+          },
+          "response": []
+        },
+        {
+          "name": "修改个人信息",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "修改账号基础资料。手机号 `phone` 暂不支持修改，若请求体包含 `phone` 应返回错误。角色不通过该接口修改，请使用 `PUT /accounts/{id}/role`。密码不通过该接口修改，请使用 `PUT /accounts/{id}/password`。普通用户简介不通过该接口修改，请使用 `PUT /accounts/{id}/userIntro`。\n\n来源：README.md 第 551 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"B同学\",\n  \"regionCode\": \"320100\",\n  \"avatarUrl\": \"https://study-tour-image.oss-cn-beijing.aliyuncs.com/avatar.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "修改用户角色",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id",
+                "role"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "单独修改账号角色。若修改为 `LEADER` 或 `BOTH`，后端会自动补齐领队资料记录。修改当前登录用户自己的角色时，响应会返回新的 `token` 和 `refreshToken`，前端应替换本地旧 token。\n\n来源：README.md 第 626 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"LEADER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "修改密码",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id/password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id",
+                "password"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "修改登录密码。新密码会使用 BCrypt 加密后保存。\n\n来源：README.md 第 666 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"123456\",\n  \"newPassword\": \"654321\",\n  \"confirmPassword\": \"654321\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "修改普通用户简介",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id/userIntro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id",
+                "userIntro"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "修改 `accounts.intro` 中的普通用户简介，长度不超过 500 个字符。\n\n来源：README.md 第 703 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intro\": \"喜欢把城市历史、博物馆展览和实地观察结合起来，偏好节奏清晰的研学路线。\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "获取用户标签偏好",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id/tagPrefs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id",
+                "tagPrefs"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "获取指定用户标签偏好列表\n\n来源：README.md 第 739 行"
+          },
+          "response": []
+        },
+        {
+          "name": "修改用户标签偏好",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id/tagPrefs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id",
+                "tagPrefs"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "覆盖式更新用户标签偏好\n\n来源：README.md 第 770 行",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"accountId\": 6,\n    \"tagId\": 1\n  },\n  {\n    \"accountId\": 6,\n    \"tagId\": 2\n  }\n]",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "获取领队资料",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id/leaderProfile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id",
+                "leaderProfile"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "获取领队资料\n\n来源：README.md 第 802 行"
+          },
+          "response": []
+        },
+        {
+          "name": "修改领队简介",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/:id/intro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                ":id",
+                "intro"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "更新领队简介\n\n来源：README.md 第 829 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intro\": \"多年研学带队经验\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "文件上传（OSS）",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "upload"
+              ]
+            },
+            "description": "上传图片文件，返回可访问 URL\n\n来源：README.md 第 854 行",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "选择需要上传的图片文件"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4.2 项目相关",
+      "item": [
+        {
+          "name": "获取项目列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects?accountId=6&pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "6",
+                  "description": "用户 ID（必填）"
+                },
+                {
+                  "key": "pageNum",
+                  "value": "1",
+                  "description": "页码（可选，默认 `1`， 起始为`1`）"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10",
+                  "description": "每页数量（可选，默认 `10`）"
+                },
+                {
+                  "key": "keyword",
+                  "value": "南京",
+                  "description": "项目关键字（可选，不区分英文大小写，模糊匹配标题、标签、状态、出发点、领队要求和参与者要求）",
+                  "disabled": true
+                },
+                {
+                  "key": "withExplanation",
+                  "value": "true",
+                  "description": "是否返回推荐理由（可选，默认 `false`；传 `true` 时返回推荐分数和理由）",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "按用户偏好分页获取项目列表，支持返回推荐理由\n\n来源：README.md 第 880 行"
+          },
+          "response": []
+        },
+        {
+          "name": "复合筛选项目",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/filter?accountId=6&pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "filter"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "6",
+                  "description": "用户 ID（可选，用于默认排序）"
+                },
+                {
+                  "key": "pageNum",
+                  "value": "1",
+                  "description": "页码（可选，默认 `1`，起始为 `1`）"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10",
+                  "description": "每页数量（可选，默认 `10`）"
+                },
+                {
+                  "key": "keyword",
+                  "value": "南京",
+                  "description": "关键字（可选，不区分英文大小写，模糊匹配标题、标签、状态、出发点、领队要求和参与者要求）",
+                  "disabled": true
+                },
+                {
+                  "key": "regionCode",
+                  "value": "320100",
+                  "description": "地区编码（可选，精确匹配或同城市前四位匹配；传入后覆盖账号地区）",
+                  "disabled": true
+                },
+                {
+                  "key": "tag",
+                  "value": "博物馆研学",
+                  "description": "研学标签（可选，精确匹配；传入后覆盖账号标签偏好）",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "OPEN",
+                  "description": "项目状态（可选，`OPEN/MATCHING/CONFIRMED/IN_PROGRESS/DONE/CANCELLED`）",
+                  "disabled": true
+                },
+                {
+                  "key": "departureDateFrom",
+                  "value": "2026-05-01",
+                  "description": "出发日期起始值（可选，格式 `yyyy-MM-dd`）",
+                  "disabled": true
+                },
+                {
+                  "key": "departureDateTo",
+                  "value": "2026-06-30",
+                  "description": "出发日期结束值（可选，格式 `yyyy-MM-dd`）",
+                  "disabled": true
+                },
+                {
+                  "key": "onlyAvailable",
+                  "value": "true",
+                  "description": "是否只看可报名项目（可选，`true` 时要求 `OPEN/MATCHING` 且未满员）",
+                  "disabled": true
+                },
+                {
+                  "key": "ownerAccountId",
+                  "value": "1",
+                  "description": "项目创建者账号 ID（可选）",
+                  "disabled": true
+                },
+                {
+                  "key": "leaderAccountId",
+                  "value": "3",
+                  "description": "领队账号 ID（可选）",
+                  "disabled": true
+                },
+                {
+                  "key": "hasLeader",
+                  "value": "false",
+                  "description": "是否已有领队（可选，`true/false`）",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "按多个条件复合筛选项目。不传筛选参数时，返回未筛选列表，并按 `accountId` 对应账号的地区和标签偏好排序；传入 `regionCode` 或 `tag` 时，会覆盖账号信息中的地区和标签偏好，同时作为筛选条件。\n\n来源：README.md 第 953 行"
+          },
+          "response": []
+        },
+        {
+          "name": "获取项目详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "根据项目 ID 获取项目详情\n\n来源：README.md 第 1013 行"
+          },
+          "response": []
+        },
+        {
+          "name": "获取项目成员",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id",
+                "members"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "获取项目成员列表\n\n来源：README.md 第 1049 行"
+          },
+          "response": []
+        },
+        {
+          "name": "创建项目",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ]
+            },
+            "description": "兼容的项目创建接口；新前端优先使用 `/routes/{routeId}/publish`\n\n来源：README.md 第 1088 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routeId\": 2,\n  \"leaderAccountId\": 3,\n  \"title\": \"北京历史文化研学\",\n  \"departureDate\": \"2026-03-12\",\n  \"departureTime\": \"08:30:00\",\n  \"startPointType\": \"MANUAL\",\n  \"startPoint\": \"北京南站北广场\",\n  \"leaderRequirements\": \"有博物馆研学经验\",\n  \"participantRequirements\": \"请勿迟到\",\n  \"representedCount\": 3,\n  \"maxMembers\": null,\n  \"status\": \"OPEN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "加入项目",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id/join",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id",
+                "join"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "普通用户携带自己代表的实际参团人数加入项目；后端会锁定项目并校验人数上限\n\n来源：README.md 第 1124 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"representedCount\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "退出项目",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id/quit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id",
+                "quit"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "普通参与者退出尚未开始的 `OPEN/MATCHING/CONFIRMED` 项目。成员状态更新为 `QUIT`，其代表人数从 `currentMembers` 中释放，并同步退出项目群；项目发布者不能退出，当前领队需先调用放弃带队接口。\n\n来源：README.md 第 1149 行"
+          },
+          "response": []
+        },
+        {
+          "name": "指定项目领队",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id/leader",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id",
+                "leader"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "为项目指定领队账号\n\n来源：README.md 第 1163 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leaderAccountId\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "领队接单",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id",
+                "accept"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "领队确认接单，接单后项目状态流转\n\n来源：README.md 第 1188 行"
+          },
+          "response": []
+        },
+        {
+          "name": "领队放弃带队并重新开放项目",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id/abandon?reason=%E4%B8%B4%E6%97%B6%E5%AE%B6%E9%87%8C%E6%9C%89%E4%BA%8B%EF%BC%8C%E6%97%A0%E6%B3%95%E5%B8%A6%E9%98%9F",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id",
+                "abandon"
+              ],
+              "query": [
+                {
+                  "key": "reason",
+                  "value": "临时家里有事，无法带队"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "项目处于 `CONFIRMED` 且距出发时间至少 6 小时（恰好 6 小时允许）时，清空 `leaderAccountId`、将状态恢复为 `OPEN`，同步移除群聊领队身份，并写入一条放弃审计记录。时间校验、状态恢复、审计写入与群聊移除在同一事务中。\n\n来源：README.md 第 1211 行"
+          },
+          "response": []
+        },
+        {
+          "name": "查询放弃带队记录",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id/abandon-records",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id",
+                "abandon-records"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "按操作时间倒序返回该项目的放弃审计记录，包含项目、领队、原因、放弃前状态、出发时间快照与操作时间。\n\n来源：README.md 第 1228 行"
+          },
+          "response": []
+        },
+        {
+          "name": "更新项目状态",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id/status?status=IN_PROGRESS",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                ":id",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "IN_PROGRESS",
+                  "description": "目标状态（必填），可选值：`OPEN/MATCHING/CONFIRMED/IN_PROGRESS/DONE/CANCELLED`"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "更新项目状态（状态流转需符合业务规则）\n\n来源：README.md 第 1263 行"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4.3 路线相关",
+      "item": [
+        {
+          "name": "获取路线列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/routes?accountId=1&pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "1",
+                  "description": "用户 ID（必填）"
+                },
+                {
+                  "key": "pageNum",
+                  "value": "1",
+                  "description": "页码（可选，默认 `1`）"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10",
+                  "description": "每页数量（可选，默认 `10`）"
+                }
+              ]
+            },
+            "description": "按用户偏好分页获取路线列表\n\n来源：README.md 第 1292 行"
+          },
+          "response": []
+        },
+        {
+          "name": "获取路线详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/routes/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "根据路线 ID 获取路线节点\n\n来源：README.md 第 1349 行"
+          },
+          "response": []
+        },
+        {
+          "name": "发布路线为项目",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/routes/:routeId/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                ":routeId",
+                "publish"
+              ],
+              "variable": [
+                {
+                  "key": "routeId",
+                  "value": "2",
+                  "description": "README 路径参数：routeId"
+                }
+              ]
+            },
+            "description": "供路线卡片上的“发布”按钮进入独立详情页后提交；路线 ID、地区和标签由后端确定，发布状态固定为 `OPEN`\n\n来源：README.md 第 1480 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"南京历史研学拼单\",\n  \"representedCount\": 3,\n  \"departureDate\": \"2026-08-01\",\n  \"departureTime\": \"08:30:00\",\n  \"startPointType\": \"CURRENT_LOCATION\",\n  \"startPoint\": \"118.796877,32.060255\",\n  \"leaderRequirements\": \"熟悉南京历史，可做讲解\",\n  \"participantRequirements\": \"适合10岁以上学生\",\n  \"maxMembers\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "手动生成路线",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/routes/manual",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                "manual"
+              ]
+            },
+            "description": "手动提交路线节点并生成路线\n\n来源：README.md 第 1514 行",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"poiId\": \"B00190BMRC\",\n    \"visitOrder\": 1,\n    \"visitTime\": \"2026-04-01T09:00:00\",\n    \"recommendedDuration\": 120,\n    \"notes\": \"先参观总统府\"\n  },\n  {\n    \"poiId\": \"B00190AMPT\",\n    \"visitOrder\": 2,\n    \"visitTime\": \"2026-04-01T11:30:00\",\n    \"recommendedDuration\": 90,\n    \"notes\": \"步行前往朝天宫\"\n  },\n  {\n    \"poiId\": \"B001905325\",\n    \"visitOrder\": 3,\n    \"visitTime\": \"2026-04-01T14:00:00\",\n    \"recommendedDuration\": 120,\n    \"notes\": \"下午参观阅江楼\"\n  }\n]",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "AI 生成并优化路线",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/routes/ai/:memoryId?message=%E6%88%91%E8%A6%81%E5%9C%A8%E5%8D%97%E4%BA%AC%EF%BC%8C2026%E5%B9%B43%E6%9C%8820%E6%97%A5%E5%BC%80%E5%A7%8B%E7%9A%84%E4%B8%A4%E5%A4%A9%E5%86%85%E8%BF%9B%E8%A1%8C%E5%8E%86%E5%8F%B2%E6%96%B9%E9%9D%A2%E7%9A%84%E6%97%85%E6%B8%B8%EF%BC%8C%E8%AF%B7%E7%BB%99%E6%88%91%E8%A7%84%E5%88%92%E4%B8%80%E4%B8%AA%E8%B7%AF%E7%BA%BF",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                "ai",
+                ":memoryId"
+              ],
+              "query": [
+                {
+                  "key": "message",
+                  "value": "我要在南京，2026年3月20日开始的两天内进行历史方面的旅游，请给我规划一个路线",
+                  "description": "未提交请求体时必填；提交景点数组时可选，用于补充优化目标"
+                },
+                {
+                  "key": "accountId",
+                  "value": "6",
+                  "description": "兼容参数，可省略；提供时必须等于当前登录用户 ID，否则返回 403。省略时自动使用当前登录用户偏好。",
+                  "disabled": true
+                },
+                {
+                  "key": "memoryId",
+                  "value": "",
+                  "description": "非空，最多 128 个字符；由后端结合当前账号隔离，不要在前端拼接账号命名空间。",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "memoryId",
+                  "value": "1",
+                  "description": "README 路径参数：memoryId"
+                }
+              ]
+            },
+            "description": "根据自然语言请求由 AI 生成路线，再自动优化景点顺序、游览时间、建议时长和通勤说明，最后保存优化后的路线。也可提交已有景点数组，直接按该数组优化，保留原 `/routes/optimize` 的输入方式。\n\n来源：README.md 第 1558 行",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"poiId\": \"B00190BMRC\",\n    \"visitOrder\": 1,\n    \"visitTime\": \"2026-04-01T09:00:00\",\n    \"recommendedDuration\": 120,\n    \"notes\": \"\",\n    \"name\": \"总统府\",\n    \"location\": \"118.7969,32.0486\",\n    \"adcode\": \"320102\",\n    \"citycode\": \"025\"\n  },\n  {\n    \"poiId\": \"B00190AMPT\",\n    \"visitOrder\": 2,\n    \"visitTime\": \"2026-04-01T14:00:00\",\n    \"recommendedDuration\": 90,\n    \"notes\": \"\",\n    \"name\": \"朝天宫\",\n    \"location\": \"118.7807,32.0314\",\n    \"adcode\": \"320104\",\n    \"citycode\": \"025\"\n  }\n]",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "收藏路线",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/routes/:id/favorite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                ":id",
+                "favorite"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "当前登录账号收藏指定路线\n\n来源：README.md 第 1628 行"
+          },
+          "response": []
+        },
+        {
+          "name": "取消收藏路线",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/routes/:id/favorite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                ":id",
+                "favorite"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "当前登录账号取消收藏指定路线\n\n来源：README.md 第 1642 行"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /routes/agent/runs/{runId}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/routes/agent/runs/:runId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                "agent",
+                "runs",
+                ":runId"
+              ],
+              "variable": [
+                {
+                  "key": "runId",
+                  "value": "1",
+                  "description": "README 路径参数：runId"
+                }
+              ]
+            },
+            "description": "GET /routes/agent/runs/{runId}：查询阶段、事件与结果，建议每 1.8～2 秒轮询，终态后停止\n\n来源：README.md 第 1670 行"
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /routes/agent/runs/{runId}",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/routes/agent/runs/:runId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                "agent",
+                "runs",
+                ":runId"
+              ],
+              "variable": [
+                {
+                  "key": "runId",
+                  "value": "1",
+                  "description": "README 路径参数：runId"
+                }
+              ]
+            },
+            "description": "DELETE /routes/agent/runs/{runId}：取消规划，返回与查询一致的 Run 对象\n\n来源：README.md 第 1671 行"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "GET /health：本服务健康检查，无需登录，返回 {\"status\":\"ok\",\"version\":\"1.0\"}\n\n来源：README.md 第 1672 行"
+          },
+          "response": []
+        },
+        {
+          "name": "路线规划 Agent 接口（异步任务）",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/routes/agent/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "routes",
+                "agent",
+                "runs"
+              ]
+            },
+            "description": "路线规划 Agent 接口（异步任务）\n\n来源：README.md 第 1685 行"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /login/me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/login/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "login",
+                "me"
+              ]
+            },
+            "description": "外部身份校验接口：GET /login/me 供需要单独部署 Agent 服务的场景核验 token\n\n来源：README.md 第 1777 行",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4.4 评论相关",
+      "item": [
+        {
+          "name": "创建评论",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews"
+              ]
+            },
+            "description": "创建评论并可提交标签分数 （5分制）（reviewType暂时只有USER_TO_LEADER）\n\n来源：README.md 第 1785 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": 1,\n  \"routeId\": 2,\n  \"fromAccountId\": 1,\n  \"toAccountId\": 3,\n  \"reviewType\": \"USER_TO_LEADER\",\n  \"overallScore\": 5,\n  \"content\": \"整体体验很好\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "删除评论",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "按评论 ID 删除评论\n\n来源：README.md 第 1816 行"
+          },
+          "response": []
+        },
+        {
+          "name": "修改评论",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "更新评论主体与标签分数\n\n来源：README.md 第 1839 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": 1,\n  \"routeId\": 2,\n  \"fromAccountId\": 1,\n  \"toAccountId\": 3,\n  \"reviewType\": \"USER_TO_LEADER\",\n  \"overallScore\": 4,\n  \"content\": \"更新后的评论内容\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "获取评论详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1",
+                  "description": "README 路径参数：id"
+                }
+              ]
+            },
+            "description": "获取单条评论及其标签分数\n\n来源：README.md 第 1870 行"
+          },
+          "response": []
+        },
+        {
+          "name": "获取全部评论",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews"
+              ]
+            },
+            "description": "获取全部评论列表\n\n来源：README.md 第 1902 行"
+          },
+          "response": []
+        },
+        {
+          "name": "按项目查询评论",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/project/:projectId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "project",
+                ":projectId"
+              ],
+              "variable": [
+                {
+                  "key": "projectId",
+                  "value": "1",
+                  "description": "README 路径参数：projectId"
+                }
+              ]
+            },
+            "description": "查询指定项目的评论\n\n来源：README.md 第 1958 行"
+          },
+          "response": []
+        },
+        {
+          "name": "按路线查询评论",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/route/:routeId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "route",
+                ":routeId"
+              ],
+              "variable": [
+                {
+                  "key": "routeId",
+                  "value": "2",
+                  "description": "README 路径参数：routeId"
+                }
+              ]
+            },
+            "description": "查询指定路线的评论\n\n来源：README.md 第 1972 行"
+          },
+          "response": []
+        },
+        {
+          "name": "查询领队收到的评论",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/leader/:accountId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "leader",
+                ":accountId"
+              ],
+              "variable": [
+                {
+                  "key": "accountId",
+                  "value": "1",
+                  "description": "README 路径参数：accountId"
+                }
+              ]
+            },
+            "description": "查询目标用户收到的评论列表\n\n来源：README.md 第 1986 行"
+          },
+          "response": []
+        },
+        {
+          "name": "查询某用户发出的评论",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/user/:accountId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "user",
+                ":accountId"
+              ],
+              "variable": [
+                {
+                  "key": "accountId",
+                  "value": "1",
+                  "description": "README 路径参数：accountId"
+                }
+              ]
+            },
+            "description": "查询指定用户发出的评论列表\n\n来源：README.md 第 2000 行"
+          },
+          "response": []
+        },
+        {
+          "name": "获取用户平均评分",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/average-score/:accountId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "average-score",
+                ":accountId"
+              ],
+              "variable": [
+                {
+                  "key": "accountId",
+                  "value": "1",
+                  "description": "README 路径参数：accountId"
+                }
+              ]
+            },
+            "description": "获取目标用户收到评论的平均分\n\n来源：README.md 第 2014 行"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4.5 聊天相关",
+      "item": [
+        {
+          "name": "创建或恢复项目群",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "groups"
+              ]
+            },
+            "description": "群组生命周期\n\n来源：README.md 第 2053 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": 39\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "加入项目群",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/chat/groups/:sessionId/join",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "groups",
+                ":sessionId",
+                "join"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "1",
+                  "description": "README 路径参数：sessionId"
+                }
+              ]
+            },
+            "description": "群组生命周期\n\n来源：README.md 第 2065 行"
+          },
+          "response": []
+        },
+        {
+          "name": "群组生命周期",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/chat/groups/:sessionId/members/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "groups",
+                ":sessionId",
+                "members",
+                "me"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "1",
+                  "description": "README 路径参数：sessionId"
+                }
+              ]
+            },
+            "description": "群组生命周期\n\n来源：README.md 第 2073 行"
+          },
+          "response": []
+        },
+        {
+          "name": "删除项目群",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/chat/groups/:sessionId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "groups",
+                ":sessionId"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "1",
+                  "description": "README 路径参数：sessionId"
+                }
+              ]
+            },
+            "description": "群组生命周期\n\n来源：README.md 第 2083 行"
+          },
+          "response": []
+        },
+        {
+          "name": "查询项目群列表（sessions 别名）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/chat/groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "groups"
+              ]
+            },
+            "description": "GET /chat/groups 是 GET /chat/sessions 的群组语义别名。\n\n来源：README.md 第 2087 行"
+          },
+          "response": []
+        },
+        {
+          "name": "查询群聊列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "sessions"
+              ]
+            },
+            "description": "查询当前登录用户已加入的活动项目群聊（账号从 JWT 自动识别）\n\n来源：README.md 第 2091 行"
+          },
+          "response": []
+        },
+        {
+          "name": "查询群成员及代表人数",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/chat/sessions/:sessionId/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "sessions",
+                ":sessionId",
+                "members"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "1",
+                  "description": "README 路径参数：sessionId"
+                }
+              ]
+            },
+            "description": "仅群成员可查询；参团账号返回实际代表人数，领队若不参团则返回 `0`\n\n来源：README.md 第 2129 行"
+          },
+          "response": []
+        },
+        {
+          "name": "发送群聊消息",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "messages"
+              ]
+            },
+            "description": "项目群成员发送消息（目前只支持文本）；群组停用后不能继续发送\n\n来源：README.md 第 2154 行",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": 1,\n  \"content\": \"你好，行程细节可以再确认一下吗？\",\n  \"msgType\": \"TEXT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "拉取群聊消息",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/chat/sessions/:sessionId/messages?pageNum=1&pageSize=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "sessions",
+                ":sessionId",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1",
+                  "description": "历史页码，默认 `1`；第 `1` 页是最近一页，数字越大消息越早"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "30",
+                  "description": "每页消息数，默认 `30`，最大 `100`"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "1",
+                  "description": "README 路径参数：sessionId"
+                }
+              ]
+            },
+            "description": "项目群成员分页拉取指定群聊的历史消息；群组停用后历史消息仍保留\n\n来源：README.md 第 2181 行"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4.6 数据相关（地区与景点）",
+      "item": [
+        {
+          "name": "获取省级地区",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/regions/provinces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "regions",
+                "provinces"
+              ]
+            },
+            "description": "获取省级行政区列表（注册时用，无港澳台）\n\n来源：README.md 第 2220 行",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "获取下级地区",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/regions/children?parentAdcode=110000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "regions",
+                "children"
+              ],
+              "query": [
+                {
+                  "key": "parentAdcode",
+                  "value": "110000",
+                  "description": "父级行政区编码（必填）"
+                }
+              ]
+            },
+            "description": "按父级行政区编码查询下级地区（注册时用，一共三级地区）\n\n来源：README.md 第 2522 行",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "获取景点列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attractions?regionCode=320100&pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attractions"
+              ],
+              "query": [
+                {
+                  "key": "regionCode",
+                  "value": "320100",
+                  "description": "地区编码（可选）"
+                },
+                {
+                  "key": "pageNum",
+                  "value": "1",
+                  "description": "页码（可选，默认 `1`）"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10",
+                  "description": "每页数量（可选，默认 `10`）"
+                }
+              ]
+            },
+            "description": "按地区分页查询景点，`regionCode` 为空时查全部\n\n来源：README.md 第 2723 行"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+﻿mode,scenario,scope,endpoint,concurrency,duration_s,total,ok,errors,error_rate_pct,avg_ms,p50_ms,p90_ms,p95_ms,p99_ms,min_ms,max_ms,throughput_req_s,bytes_avg
+smoke,mix,endpoint,projects,1,0.338,1,1,0,0,337.136,337.136,337.136,337.136,337.136,337.136,337.136,2.963,9604
+smoke,mix,endpoint,projects-filter,1,0.165,1,1,0,0,165.291,165.291,165.291,165.291,165.291,165.291,165.291,6.045,9565
+smoke,mix,endpoint,projects-explained,1,0.582,1,1,0,0,581.87,581.87,581.87,581.87,581.87,581.87,581.87,1.718,36731
+smoke,mix,endpoint,routes,1,0.134,1,1,0,0,133.673,133.673,133.673,133.673,133.673,133.673,133.673,7.467,1295
+smoke,mix,endpoint,attractions,1,0.076,1,1,0,0,75.514,75.514,75.514,75.514,75.514,75.514,75.514,13.227,5856
