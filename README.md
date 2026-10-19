@@ -2,6 +2,36 @@
 
 权限收尾与后续计划见 [BACKEND_TODO.md](BACKEND_TODO.md)。账号响应不返回 `passwordHash`；受保护接口使用 access token，refresh token 仅用于 `/login/refresh`。账号禁用或角色变更在下一次认证时生效。
 
+## 0. 测试与质量
+
+[![CI](https://github.com/Viyangle/study_tour/actions/workflows/ci.yml/badge.svg)](https://github.com/Viyangle/study_tour/actions/workflows/ci.yml)
+
+| 项目 | 现状 |
+|---|---|
+| 用例规模 | 30 个测试类 / 213 个用例，JUnit 5 + Mockito + MockMvc + AssertJ |
+| CI | GitHub Actions，`mvn -B -ntp -Pci verify`，push 与 PR 触发 |
+| 覆盖率 | JaCoCo 行 36.4% / 分支 28.4%，报告随构建产出并上传为 artifact |
+| 覆盖率门禁 | 行 ≥ 35%、分支 ≥ 27%，低于阈值直接构建失败（棘轮阈值，防止回退） |
+
+### 本地运行
+
+```bash
+mvn -B -ntp -Pci verify     # 与 CI 一致：排除需要外部服务的用例
+mvn -B -ntp test            # 本机已启动 MySQL / Redis 时执行全量
+```
+
+- 覆盖率报告：`target/site/jacoco/index.html`
+- 测试报告：`target/surefire-reports/`
+
+### 测试分层与约定
+
+- **单元测试**：Service、Agent、Mapper XML 解析等，用 `@Mock` 替身隔离 MySQL、Redis 与外部 HTTP 依赖，无需任何外部服务即可运行。
+- **接口与安全集成测试**：`controller` / `filter` / `security` 包下基于 MockMvc + Spring Security 过滤器链，同时校验状态码、响应体与响应头，覆盖鉴权、越权、账号禁用等失败流。
+- **上下文冒烟测试**：`StudyTourApplicationTests` 标记 `@Tag("requires-infra")`，需要本机 MySQL（3306）与 Redis（6379）；CI 通过 `-Pci` 排除该分组。
+- **性能基线**：`perf/` 保存压测脚本与多轮次结果 CSV，用于版本间性能回归对比。
+
+未覆盖的主要是 `utils/` 下的一次性数据批处理工具（高德数据导入、Excel 解析、SQL 生成等），它们以 `main()` 驱动、不参与请求链路，后续可按需补测。
+
 ## 1. 基础信息
 
 - 项目名称：`study_tour`
