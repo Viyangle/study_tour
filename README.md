@@ -8,7 +8,7 @@
 
 | 项目 | 现状 |
 |---|---|
-| 用例规模 | 30 个测试类 / 213 个用例，JUnit 5 + Mockito + MockMvc + AssertJ |
+| 用例规模 | 213 个用例、0 失败；分布于 29 个测试类（另 1 个需本地 MySQL/Redis 的冒烟测试），JUnit 5 + Mockito + MockMvc + AssertJ |
 | CI | GitHub Actions，`mvn -B -ntp -Pci verify`，push 与 PR 触发 |
 | 覆盖率 | JaCoCo 行 36.4% / 分支 28.4%，报告随构建产出并上传为 artifact |
 | 覆盖率门禁 | 行 ≥ 35%、分支 ≥ 27%，低于阈值直接构建失败（棘轮阈值，防止回退） |
