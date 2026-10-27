@@ -14,6 +14,16 @@ updates:
       - dependencies
     commit-message:
       prefix: "chore(deps)"
+    # 主版本升级需要人工评估：Spring Boot 4 / JJWT 0.x 跨版本都会改 API。
+    # LangChain4j 仍是 beta，版本号跳跃大，统一手动升级并跑全量回归。
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "dev.langchain4j:*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
     groups:
       # Spring 生态一起升级，避免版本错配
       spring:
@@ -37,3 +47,8 @@ updates:
       - ci
     commit-message:
       prefix: "chore(ci)"
+    # Actions 大版本升级涉及 runner 兼容性，手动评估
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
