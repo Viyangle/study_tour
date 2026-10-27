@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 架构与数据库设计
+    url: https://github.com/Viyangle/study_tour/blob/main/docs/architecture.md
+    about: 先看系统分层、核心链路与已知边界，再判断问题归属
+  - name: 接口文档
+    url: https://github.com/Viyangle/study_tour/blob/main/README.md
+    about: 接口字段、参数与错误码以 README 为准

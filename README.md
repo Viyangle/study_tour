@@ -1,32 +1,57 @@
-# Study Tour API 文档
+# Study Tour 后端
 
-权限收尾与后续计划见 [BACKEND_TODO.md](BACKEND_TODO.md)。账号响应不返回 `passwordHash`；受保护接口使用 access token，refresh token 仅用于 `/login/refresh`。账号禁用或角色变更在下一次认证时生效。
+> 研学路线规划与组队平台后端：知识图谱推荐、AI 路线规划 Agent、项目组队与群聊。本文档同时是完整的接口说明，设计文档见 [docs/](docs/README.md)。
+
+权限收尾与后续计划见 [docs/README.md](docs/README.md)（架构、数据库、接口与变更记录索引）。账号响应不返回 `passwordHash`；受保护接口使用 access token，refresh token 仅用于 `/login/refresh`。账号禁用或角色变更在下一次认证时生效。
 
 ## 0. 测试与质量
 
 [![CI](https://github.com/Viyangle/study_tour/actions/workflows/ci.yml/badge.svg)](https://github.com/Viyangle/study_tour/actions/workflows/ci.yml)
+![Java](https://img.shields.io/badge/Java-17-blue)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-brightgreen)
+![Tests](https://img.shields.io/badge/tests-270%20passed-success)
+![Coverage](https://img.shields.io/badge/coverage-40.7%25-yellow)
 
 | 项目 | 现状 |
 |---|---|
-| 用例规模 | 213 个用例、0 失败；分布于 29 个测试类（另 1 个需本地 MySQL/Redis 的冒烟测试），JUnit 5 + Mockito + MockMvc + AssertJ |
+| 用例规模 | 270 个用例、0 失败；分布于 33 个测试类（另 1 个需本地 MySQL/Redis 的冒烟测试），JUnit 5 + Mockito + MockMvc + AssertJ |
 | CI | GitHub Actions，`mvn -B -ntp -Pci verify`，push 与 PR 触发 |
-| 覆盖率 | JaCoCo 行 36.4% / 分支 28.4%，报告随构建产出并上传为 artifact |
-| 覆盖率门禁 | 行 ≥ 35%、分支 ≥ 27%，低于阈值直接构建失败（棘轮阈值，防止回退） |
+| 覆盖率 | JaCoCo 行 40.7% / 分支 33.1%，报告随构建产出并上传为 artifact |
+| 覆盖率门禁 | 行 ≥ 39%、分支 ≥ 31%，低于阈值直接构建失败（棘轮阈值，防止回退） |
+| 参数校验 | Jakarta Bean Validation + `@Valid`，覆盖注册、登录、改密、改角色、加入项目、建群、发消息；失败统一返回 400 + `{code:0,msg}` |
+| 数据库迁移 | Flyway：`db/migration` 下的 V1 基线 + 增量脚本，启动时自动执行；存量库自动 baseline，不重复建表 |
+| 可观测性 | `/actuator/health`、`/actuator/info`、`/actuator/metrics`；每个请求生成 `X-Request-Id` 并写入日志 MDC |
+| 接口契约 | springdoc 从代码生成 OpenAPI 3：`/v3/api-docs`、`/swagger-ui.html` |
+
+工程约定见 [CONTRIBUTING.md](CONTRIBUTING.md)，版本变更见 [CHANGELOG.md](CHANGELOG.md)，架构与数据库设计见 [docs/](docs/README.md)。配置项通过环境变量注入，清单见 [.env.example](.env.example)。
 
 ### 本地运行
 
 ```bash
 mvn -B -ntp -Pci verify     # 与 CI 一致：排除需要外部服务的用例
 mvn -B -ntp test            # 本机已启动 MySQL / Redis 时执行全量
+mvn -B -ntp test -Dtest=FlywayMigrationTest   # 只验证数据库迁移（需要本机 MySQL）
 ```
 
+- 接口文档：`https://localhost:8443/swagger-ui.html`（关闭 HTTPS 时用 `http://localhost:8080/swagger-ui.html`）
+- 健康检查：`/actuator/health`；指标：`/actuator/metrics`（需登录）
 - 覆盖率报告：`target/site/jacoco/index.html`
 - 测试报告：`target/surefire-reports/`
+
+### 数据库迁移
+
+应用启动时由 Flyway 执行 `src/main/resources/db/migration` 下的脚本：
+
+- 空库：`V1__baseline.sql` 建 20 张表，再执行后续增量（当前为 `V2__accounts_role_add_admin.sql`）。
+- 存量库：`baseline-on-migrate` 把 V1 记为已执行，只执行 V2 及之后的增量。
+- 已执行过的脚本不要修改（校验和不匹配会导致启动失败），新变更请新增 `V<版本>__<描述>.sql`。
 
 ### 测试分层与约定
 
 - **单元测试**：Service、Agent、Mapper XML 解析等，用 `@Mock` 替身隔离 MySQL、Redis 与外部 HTTP 依赖，无需任何外部服务即可运行。
 - **接口与安全集成测试**：`controller` / `filter` / `security` 包下基于 MockMvc + Spring Security 过滤器链，同时校验状态码、响应体与响应头，覆盖鉴权、越权、账号禁用等失败流。
+- **校验与链路测试**：`validation` 包校验 DTO 约束，`filter` 包校验 traceId 生成/透传/清理，`exception` 包锁定统一错误体。
+- **迁移集成测试**：`FlywayMigrationTest` 在真实 MySQL 上验证空库建表与存量库增量，标记 `@Tag("requires-infra")`，CI 排除。
 - **上下文冒烟测试**：`StudyTourApplicationTests` 标记 `@Tag("requires-infra")`，需要本机 MySQL（3306）与 Redis（6379）；CI 通过 `-Pci` 排除该分组。
 - **性能基线**：`perf/` 保存压测脚本与多轮次结果 CSV，用于版本间性能回归对比。
 
@@ -35,7 +60,7 @@ mvn -B -ntp test            # 本机已启动 MySQL / Redis 时执行全量
 ## 1. 基础信息
 
 - 项目名称：`study_tour`
-- 技术栈：`Spring Boot 3 + MyBatis + MySQL`
+- 技术栈：`Spring Boot 3 + MyBatis + MySQL + Redis`
 - 默认服务地址：`http://47.94.95.110:8080` (已重定向为https服务)
 - 连接测试：`GET /login/ping`
 - 数据格式：`application/json`

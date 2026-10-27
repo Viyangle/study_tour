@@ -30,6 +30,8 @@ Thumbs.db
 # Local env files
 .env
 .env.*
+# 环境变量示例需要纳入版本管理
+!.env.example
 
 # SSL certificates and keys (keep placeholder file)
 src/main/resources/ssl/*.p12
