@@ -44,6 +44,10 @@ public class SecurityConfig {
                 // 身份查询接口供 Agent 服务端校验用户 token，必须携带有效 access token。
                 .requestMatchers("/login/me").authenticated()
                 .requestMatchers("/login/**", "/register", "/register/**", "/regions/**", "/health").permitAll()
+                // 健康检查与接口文档对外；其余 Actuator 端点需要登录
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                .requestMatchers("/actuator/**").authenticated()
                 .anyRequest().authenticated()
             );
             http.exceptionHandling(ex -> ex

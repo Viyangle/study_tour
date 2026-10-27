@@ -14,6 +14,7 @@ import com.viyangle.study_tour.pojo.UpdatePasswordRequest;
 import com.viyangle.study_tour.service.AccountService;
 import com.viyangle.study_tour.utils.JwtUtil;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -81,7 +82,7 @@ public class AccountController {
     @PutMapping("/{id}/role")
     @OperationLog(value = "修改用户角色", type = "USER_UPDATE")
     @RequireRole({"USER", "LEADER", "ADMIN"})
-    public Result updateRole(@PathVariable Long id, @RequestBody UpdateAccountRoleRequest request) {
+    public Result updateRole(@PathVariable Long id, @Valid @RequestBody UpdateAccountRoleRequest request) {
         log.info("修改用户角色：{}", id);
         Account account = accountService.updateRole(id, request == null ? null : request.getRole());
         Map<String, Object> data = new HashMap<>();
@@ -96,7 +97,7 @@ public class AccountController {
     @PutMapping("/{id}/password")
     @OperationLog(value = "修改用户密码", type = "USER_UPDATE")
     @RequireRole({"USER", "LEADER", "ADMIN"})
-    public Result updatePassword(@PathVariable Long id, @RequestBody UpdatePasswordRequest request) {
+    public Result updatePassword(@PathVariable Long id, @Valid @RequestBody UpdatePasswordRequest request) {
         log.info("修改用户密码：{}", id);
         accountService.updatePassword(id, request);
         return Result.success();

@@ -20,7 +20,7 @@ import java.util.UUID;
 public class AliOSSUtils {
     @Value("${aliyun.oss.endpoint}")
     private String endpoint;
-    @Value("study-tour-image")
+    @Value("${aliyun.oss.bucketName}")
     private String bucketName;
     @Value("${aliyun.oss.region}")
     private String region;

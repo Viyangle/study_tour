@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.viyangle</groupId>
     <artifactId>study_tour</artifactId>
-    <version>0.0.3</version>
+    <version>0.0.4</version>
     <name>study_tour</name>
     <description>study_tour</description>
     <url/>
@@ -37,6 +37,22 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- 参数校验：@Valid + Jakarta Bean Validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!-- 可观测性：健康检查、指标与 info -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- 接口契约：从代码生成 OpenAPI，并提供 Swagger UI -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.8.13</version>
+        </dependency>
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>
@@ -47,6 +63,16 @@
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- 数据库版本管理：迁移脚本位于 classpath:db/migration -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
         </dependency>
 
         <dependency>
@@ -243,7 +269,7 @@
                             <goal>check</goal>
                         </goals>
                         <configuration>
-                            <!-- 棘轮阈值：略低于当前实测（行 36.4% / 分支 28.4%），只拦覆盖率回退 -->
+                            <!-- 棘轮阈值：略低于当前实测（行 40.7% / 分支 33.1%），只拦覆盖率回退 -->
                             <rules>
                                 <rule>
                                     <element>BUNDLE</element>
@@ -251,12 +277,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.35</minimum>
+                                            <minimum>0.39</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.27</minimum>
+                                            <minimum>0.31</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

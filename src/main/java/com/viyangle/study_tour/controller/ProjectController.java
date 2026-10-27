@@ -10,6 +10,7 @@ import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ProjectService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -150,7 +151,7 @@ public class ProjectController {
     @PostMapping("/{id}/join")
     @OperationLog(value = "加入项目", type = "PROJECT_JOIN")
     @RequireRole({"USER"})
-    public Result joinProject(@PathVariable Long id, @RequestBody JoinProjectRequest request) {
+    public Result joinProject(@PathVariable Long id, @Valid @RequestBody JoinProjectRequest request) {
         log.info("加入项目: {}, representedCount={}", id,
                 request == null ? null : request.getRepresentedCount());
         projectService.joinProject(

@@ -1,17 +1,27 @@
 spring:
   application:
     name: study_tour
+  # 数据库版本管理：V1 为现有结构的基线，V2 起为增量迁移
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    # 存量库第一次启动时标记为已执行 V1，不重复建表
+    baseline-on-migrate: true
+    baseline-version: "1"
+    baseline-description: "baseline from scripts/full_schema.sql"
+    validate-on-migrate: true
   # Spring Boot datasource
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/study_tour
-    username: root
-    password: "123456"
+    # 连接信息统一由环境变量注入，默认值仅供本机开发使用
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:study_tour}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
   # Redis
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   servlet:
     multipart:
       # File upload limits
@@ -28,7 +38,7 @@ mybatis:
 aliyun:
   oss:
     endpoint: https://oss-cn-beijing.aliyuncs.com
-    bucketName: springbootweb-mybatis-tlias
+    bucketName: ${OSS_BUCKET:study-tour-image}
     region: cn-beijing
 
 # Transaction and AI logs
@@ -36,6 +46,9 @@ logging:
   charset:
     console: UTF-8
     file: UTF-8
+  pattern:
+    # traceId 由 TraceIdFilter 写入 MDC，便于把一次请求的多行日志串起来
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
   level:
     org.springframework.jdbc.support.JdbcTransactionManager: debug
     dev.langchain4j: INFO
@@ -68,8 +81,8 @@ langchain4j:
 
   community:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
       # Use project-scoped vector index settings to avoid default-index collisions
       index-name: study-tour-embedding-index
       prefix: "study-tour:embedding:"
@@ -183,3 +196,36 @@ semantic:
     base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
     batch-size: 10
     sleep-millis: 500
+
+# 可观测性：健康检查与指标；health/info 对外，metrics 需登录
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    version: 0.0.4
+    description: 研学路线规划与组队平台后端
+
+# 接口契约：/v3/api-docs 产出 OpenAPI 3，/swagger-ui.html 提供在线调试
+springdoc:
+  api-docs:
+    enabled: ${OPENAPI_ENABLED:true}
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: ${OPENAPI_ENABLED:true}
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  show-actuator: false

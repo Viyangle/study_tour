@@ -4,6 +4,7 @@ import com.viyangle.study_tour.pojo.RegisterRequest;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.service.AccountService;
 import com.viyangle.study_tour.utils.PhoneValidator;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -23,7 +24,7 @@ public class RegisterController {
     private AccountService accountService;
 
     @PostMapping
-    public Result register(@RequestBody RegisterRequest registerRequest) {
+    public Result register(@Valid @RequestBody RegisterRequest registerRequest) {
         log.info("User register, phone: {}, username: {}, regionCode: {}",
                 registerRequest.getPhone(), registerRequest.getUsername(), registerRequest.getRegionCode());
 

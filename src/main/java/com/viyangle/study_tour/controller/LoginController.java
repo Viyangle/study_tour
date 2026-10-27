@@ -7,6 +7,7 @@ import com.viyangle.study_tour.service.AccountService;
 import com.viyangle.study_tour.utils.JwtUtil;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -105,7 +106,7 @@ public class LoginController {
      * - 目前没有生成 JWT token，未来应该返回 token 给前端
      */
     @PostMapping
-    public Result login(@RequestBody LoginRequest loginRequest) {
+    public Result login(@Valid @RequestBody LoginRequest loginRequest) {
         log.info("用户登录，手机号：{}", loginRequest.getPhone());
 
         Account account = accountService.login(loginRequest);

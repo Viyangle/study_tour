@@ -5,6 +5,7 @@ import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.pojo.SendChatMessageRequest;
 import com.viyangle.study_tour.service.ChatService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,7 +38,7 @@ public class ChatController {
     }
 
     @PostMapping("/groups")
-    public Result createGroup(@RequestBody CreateChatGroupRequest request) {
+    public Result createGroup(@Valid @RequestBody CreateChatGroupRequest request) {
         Long currentAccountId = SecurityContextUtil.currentAccountId();
         if (request == null) {
             throw new IllegalArgumentException("创建群组请求不能为空");
@@ -74,7 +75,7 @@ public class ChatController {
     }
 
     @PostMapping("/messages")
-    public Result sendMessage(@RequestBody SendChatMessageRequest request) {
+    public Result sendMessage(@Valid @RequestBody SendChatMessageRequest request) {
         Long currentAccountId = SecurityContextUtil.currentAccountId();
         log.info("发送消息: sessionId={}, senderAccountId={}", request.getSessionId(), currentAccountId);
         Long msgId = chatService.sendMessage(request, currentAccountId);
