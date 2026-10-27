@@ -356,32 +356,6 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
     // ==================== 内部打分方法 ====================
 
     /**
-     * 标签匹配得分：项目路线上的景点标签与用户偏好的重合度。
-     * 返回 0.0 ~ 1.0
-     */
-    private double calcTagMatchScore(Long projectId, List<String> userTags) {
-        if (userTags == null || userTags.isEmpty()) {
-            return 0.0;
-        }
-
-        Long routeId = graph.getProjectRoute(projectId);
-        if (routeId == null) return 0.0;
-
-        List<String> routeAttractions = graph.getRouteAttractions(routeId);
-        if (routeAttractions.isEmpty()) return 0.0;
-
-        // 收集路线上所有景点的标签
-        Set<String> routeTags = new LinkedHashSet<>();
-        for (String poiId : routeAttractions) {
-            routeTags.addAll(graph.getAttractionTags(poiId));
-        }
-
-        // 计算重合度
-        long matchCount = userTags.stream().filter(routeTags::contains).count();
-        return routeTags.isEmpty() ? 0.0 : (double) matchCount / userTags.size();
-    }
-
-    /**
      * 地区匹配得分：项目所在地区与用户所在地的匹配程度。
      * 返回 0.0 ~ 1.0
      */
