@@ -51,7 +51,7 @@ DROP TABLE IF EXISTS `accounts`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `accounts` (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `role` enum('USER','LEADER','BOTH') NOT NULL DEFAULT 'USER',
+  `role` enum('USER','LEADER','BOTH','ADMIN') NOT NULL DEFAULT 'USER',
   `username` varchar(50) NOT NULL,
   `phone` varchar(20) DEFAULT NULL,
   `password_hash` varchar(255) NOT NULL,
