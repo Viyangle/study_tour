@@ -1,5 +1,6 @@
 package com.viyangle.study_tour.pojo;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -30,4 +31,8 @@ public class Attraction {
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /** 详情接口返回；列表接口不填充，序列化时省略。 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private AttractionTagVector tagVector;
 }

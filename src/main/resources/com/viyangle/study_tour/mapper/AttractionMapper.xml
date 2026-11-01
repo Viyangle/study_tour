@@ -117,4 +117,18 @@
         order by updated_at desc, created_at desc
     </select>
 
+    <select id="selectPoiIdsWithoutTagVector" resultType="java.lang.String">
+        select a.poi_id
+        from attractions a
+        where <include refid="activeStatusCondition"/>
+          and not exists (
+              select 1
+              from attraction_tag at
+              where at.poi_id = a.poi_id
+                and at.source in ('LLM_V2', 'RULE')
+          )
+        order by a.updated_at desc, a.poi_id asc
+        limit #{limit}
+    </select>
+
 </mapper>

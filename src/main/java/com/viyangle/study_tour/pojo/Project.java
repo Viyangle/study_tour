@@ -47,6 +47,8 @@ public class Project {
     private String leaderAvatarUrl;
     private List<String> attractionNames;
     private List<RouteAttraction> routeAttractions;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private AttractionTagVector tagVector;
     private Integer estimatedDurationMinutes;
     private String availabilityStatus;
     private String viewerRole;

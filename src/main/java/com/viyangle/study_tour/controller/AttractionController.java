@@ -1,9 +1,13 @@
 package com.viyangle.study_tour.controller;
 
 import com.viyangle.study_tour.annotation.RequireRole;
+import com.viyangle.study_tour.exception.ResourceNotFoundException;
+import com.viyangle.study_tour.pojo.Attraction;
+import com.viyangle.study_tour.pojo.AttractionTagVector;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.service.AttractionService;
 import com.viyangle.study_tour.service.AttractionSyncService;
+import com.viyangle.study_tour.service.TagVectorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,12 +28,31 @@ public class AttractionController {
     @Autowired
     private AttractionSyncService attractionSyncService;
 
+    @Autowired
+    private TagVectorService tagVectorService;
+
     @GetMapping
     public Result getAllAttractions(@RequestParam(required = false) String regionCode,
                                     @RequestParam(defaultValue = "1") Integer pageNum,
                                     @RequestParam(defaultValue = "10") Integer pageSize) {
         log.info("按地区分页获取景点, regionCode={}, pageNum={}, pageSize={}", regionCode, pageNum, pageSize);
         return Result.success(attractionService.getPagedAttractionsByRegion(regionCode, pageNum, pageSize));
+    }
+
+    /**
+     * 景点详情：附 15 维标签向量（未启用/未迁移时省略 tagVector 字段）。
+     */
+    @GetMapping("/{poiId}")
+    public Result getAttractionById(@PathVariable String poiId) {
+        Attraction attraction = attractionService.getAttractionByPoiId(poiId);
+        if (attraction == null) {
+            throw new ResourceNotFoundException("景点不存在, poiId=" + poiId);
+        }
+        AttractionTagVector tagVector = tagVectorService.view(poiId);
+        if (tagVector != null) {
+            attraction.setTagVector(tagVector);
+        }
+        return Result.success(attraction);
     }
 
     /**

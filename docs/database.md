@@ -5,7 +5,7 @@
 ## 1. 概况
 
 - 数据库：MySQL 8，InnoDB，`utf8mb4` / `utf8mb4_0900_ai_ci`。
-- 规模：20 张表、47 个二级索引，主键以自增 `bigint` 为主，景点相关表用高德 `poi_id`（`varchar(32)`）作主键。
+- 规模：24 张表（V4 新增 `tag_dimension`、`tag_feedback_event`、`attraction_tag_vector_history`，V5 新增 `route_tag_weight`），主键以自增 `bigint` 为主，景点相关表用高德 `poi_id`（`varchar(32)`）作主键。
 - 设计取向：核心业务（账号、项目、路线、评价）保持强约束与级联；推荐与知识图谱相关的表（`attraction_tag`、`attraction_adjacency`、`reference_pairs`）以「可批量重建」为目标，允许由脚本重新灌入。
 - 完整的建库/示例数据脚本是 `scripts/full_schema.sql`（由 mysqldump 导出，包含演示数据）；存量库使用 `scripts/` 下的增量脚本，见第 5 节。
 
@@ -98,10 +98,11 @@ erDiagram
 | `account_tag_prefs` | 用户标签偏好 | 用户兴趣画像，推荐与 AI 规划的用户上下文 | 联合主键 `(account_id, tag_id)` |
 | `region` | 行政区划 | 省/市/区三级 `adcode`，支持虚拟节点 | 主键 `adcode`；`parent_adcode` 自关联 |
 | `attractions` | 景点 | 高德 POI 字段 + 业务字段（`status` 标记失效景点） | 主键 `poi_id`；`uk_attractions_poi_id` |
-| `attraction_tag` | 景点-标签 | 知识图谱「景点→标签」边，来源 `LLM/MANUAL` | 联合主键 `(poi_id, tag_id)` |
+| `attraction_tag` | 景点-标签 | 知识图谱「景点→标签」带权边：`prior_weight`/`prior_strength` 是先验，`pos_count`/`neg_count` 是反馈证据，`effective_weight` 是后验（0~1）；`source` 为 `MANUAL/LLM/LLM_V2/RULE` | 联合主键 `(poi_id, tag_id)`；`idx_attraction_tag_weight(tag_id, effective_weight)` |
 | `attraction_adjacency` | 景点相邻 | 地理邻近（`GEOGRAPHIC`）与语义相似（`THEMATIC`）两类边，带通勤时间与距离 | 联合主键 `(from_poi_id, to_poi_id, relation_type)` |
 | `reference_pairs` | 参考景点对 | 按标签/地区沉淀的「可串联景点对」及说明，供路线生成参考 | 主键 `id`；`poi_id` 不作强外键，可批量重建 |
-| `routes` | 路线 | 一条可发布的行程，记录地区、标签与是否含失效景点 | 外键指向 `region` |
+| `routes` | 路线 | 一条可发布的行程，记录地区、主标签（argmax）与是否含失效景点 | 外键指向 `region`；多标签见 `route_tag_weight` |
+| `route_tag_weight` | 路线-标签向量 | 路线 15 维向量，权重 = 站点景点向量按时长加权平均 | 联合主键 `(route_id, tag_id)`；`idx_route_tag_weight_tag(tag_id, weight)`；级联删除 |
 | `route_attractions` | 路线节点 | 路线与景点的有序关联，含游览时间、建议时长、交通说明 | 联合主键 `(route_id, visit_order)` |
 | `route_favorites` | 路线收藏 | 账号收藏路线 | 联合主键 `(account_id, route_id)`，级联删除 |
 | `projects` | 项目 | 由路线发布出的组队活动，含发布者、领队、出发信息与状态 | 外键指向 `routes`、`accounts`、`region` |
@@ -111,6 +112,9 @@ erDiagram
 | `chat_sessions` | 项目群会话 | 一个项目对应一个群，记录发布者与领队 | 唯一键 `uk_project_chat(project_id, user_account_id, leader_account_id)` |
 | `chat_group_members` | 群成员 | 群内角色 `USER/LEADER/SYSTEM`，记录加入/离开时间 | 联合主键 `(session_id, account_id)` |
 | `chat_messages` | 群消息 | 文本/图片/系统消息 | 外键指向 `chat_sessions`、`accounts` |
+| `tag_dimension` | 标签向量维度 | 15 个 `INTEREST` 标签的稳定编码、顺序与版本 | 联合主键 `(dim_version, ordinal)`；`code` 唯一；外键指向 `tags` |
+| `tag_feedback_event` | 标签反馈事件 | 收藏/发布/加入/退出/评价等行为事件，append-only | 主键 `id`；`idempotency_key` 唯一；外键指向 `accounts`（`SET NULL`） |
+| `attraction_tag_vector_history` | 标签向量快照 | 重建/人工覆盖/回滚时的 15 维快照 | 主键 `id`；按 `poi_id` 查询 |
 
 ## 4. 关键约束与索引
 
@@ -129,10 +133,14 @@ erDiagram
 |---|---|---|
 | V1 | `V1__baseline.sql` | 现有 20 张表的基线：由 `full_schema.sql` 提取结构、去除演示数据，改用 `CREATE TABLE IF NOT EXISTS`，不会删表 |
 | V2 | `V2__accounts_role_add_admin.sql` | `accounts.role` 枚举补 `ADMIN`，与代码中的管理员角色对齐 |
+| V3 | `V3__create_project_abandon_records.sql` | 幂等补建 `project_abandon_records`：该表只写进 V1，存量库 baseline 时跳过 V1 会缺表，导致放弃带队 500 |
+| V4 | `V4__attraction_tag_vector.sql` | 景点标签向量化：`tag_dimension`、`attraction_tag` 权重与 `effective_weight` 生成列、反馈事件表、向量快照表 |
+| V5 | `V5__route_tag_vector.sql` | 路线标签向量化：`route_tag_weight(route_id, tag_id, weight)`，支持一条路线同时属于多个主题 |
 
 启动行为（`spring.flyway.*`）：
 
-- `baseline-on-migrate=true`、`baseline-version=1`：**已有结构的库**首次启动时把 V1 记为已执行，只执行 V2 及之后的增量；**空库**会执行 V1 建表，再执行 V2。
+- `baseline-on-migrate=true`、`baseline-version=1`：**已有结构的库**首次启动时把 V1 记为已执行，只执行 V2 及之后的增量；**空库**会执行 V1 建表，再执行 V2–V5。
+- ⚠️ 由此产生一个陷阱：**只在 V1 里新增的表/字段不会出现在存量库**（V1 被跳过）；表在 `scripts/full_schema.sql` 里有、但存量库没有时，必须再补一条幂等增量（见 V3）。
 - `validate-on-migrate=true`：已执行脚本被修改会导致启动失败，因此不要改历史脚本，变更一律新增版本。
 - `FLYWAY_ENABLED=false` 可临时关闭迁移，仅用于排查问题，不建议在生产使用。
 
@@ -158,7 +166,7 @@ erDiagram
 | 10 | `create_route_favorites.sql` | 新建路线收藏表 |
 | 11 | `create_knowledge_graph_tables.sql` | 新建景点-标签、景点相邻表 |
 | 12 | `alter_attraction_adjacency_add_semantic_edges.sql` | 相邻表补 `THEMATIC` 语义边与相似度 |
-| 13 | `create_project_abandon_records.sql` | 新建放弃带队审计表 |
+| 13 | `create_project_abandon_records.sql` | 新建放弃带队审计表（等价于 Flyway V3） |
 | 14 | `alter_accounts_role_add_admin.sql` | 等价于 Flyway V2 |
 
 数据类脚本（不属于结构迁移，按需执行）：`seed_nanjing_projects.sql`、`seed_route_favorites.sql`、`seed_reference_pairs_from_amap.generated.sql`、`update_reference_pair_notes_cn.sql`。
@@ -166,7 +174,8 @@ erDiagram
 ## 6. 已知问题与维护约定
 
 - **两套建库入口**：`V1__baseline.sql` 与 `scripts/full_schema.sql` 内容同源但用途不同——前者用于版本管理，后者保留演示数据供本地导入。V1 已冻结，新结构变更只新增 `V*.sql`，不要再改 `full_schema.sql`，否则两边会漂移。
-- **`routes.tag` 是 ENUM**：只包含 15 个 `INTEREST` 标签，而 `tags` 表有 45 个；如果路线标签要支持 `ROUTE_STYLE/CROWD/SCENIC` 类标签，需要改成 `varchar` 或外键到 `tags`。
+- **`routes.tag` 是 ENUM**：只包含 15 个 `INTEREST` 标签，现在作为 `route_tag_weight` 的 argmax 主标签保留；多标签以 `route_tag_weight` 为准，如果要支持 `ROUTE_STYLE/CROWD/SCENIC` 类标签，仍需要改成 `varchar` 或外键到 `tags`。
+- **`attraction_tag` 自 V4 起是带权边**：`effective_weight` 是生成列（`(κ·p + pos)/(κ + pos + neg)`，0~1），改先验/证据列会自动更新；软筛可以走 `tag_id + effective_weight` 索引，精确排序仍以 Java 端有效值为准。
 - **`full_schema.sql` 含演示数据**：导入后账号、项目、评价都是示例数据，生产环境不要直接使用。
 - **向量索引不在 MySQL**：`Redis Stack` 中的景点向量与 `attractions` 表非强一致，需通过重建索引或增量同步修复，见 README「定期同步与向量索引重建」。
 - 新增/修改表结构时：新增 `db/migrations/V*.sql`，不要修改已执行的版本；本地跑 `FlywayMigrationTest` 验证后，同步本文件的表清单（约定见 [CONTRIBUTING.md](../CONTRIBUTING.md)）。

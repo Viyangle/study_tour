@@ -19,7 +19,7 @@
 | 语言与运行时 | Java 17 | CI 固定 Temurin 17 |
 | 框架 | Spring Boot 3.5、Spring Security、Spring WebFlux | WebFlux 仅用于模型流式调用，其余仍为 MVC |
 | 持久层 | MyBatis 3 + PageHelper + Druid | SQL 以 XML 为主，便于手写复杂查询 |
-| 数据库 | MySQL 8 | InnoDB、utf8mb4；20 张表 |
+| 数据库 | MySQL 8 | InnoDB、utf8mb4；24 张表（V4 新增 3 张标签向量表，V5 新增路线标签向量表） |
 | 缓存 | Redis | 会话上下文、路线缓存、交通矩阵缓存、限流计数 |
 | 向量检索 | Redis Stack（RediSearch）+ LangChain4j | 1536 维，索引名 `study-tour-embedding-index` |
 | 模型 | LangChain4j OpenAI 兼容接口 | 对话模型可切 DeepSeek / Ollama；向量模型默认 DashScope |
@@ -169,6 +169,8 @@ sequenceDiagram
 候选多于 `limit` 时用 MMR（λ=0.7）按路线标签的 Jaccard 相似度做多样性控制；用户没有任何标签偏好时走冷启动，按参与人数与评分排序，未评分的新项目给基础分保证曝光。推荐理由由标签命中、相似用户、评分、同省、相邻景点五类模板生成，无命中时回落到通用文案。
 
 AI 路线候选召回复用同一张图：标签匹配得到种子景点 → 地区优先 → 沿相邻边扩展 2 跳 → 按「同地区 + 标签命中数」排序，缺少经纬度的景点会被剔除。
+
+0.0.5 起景点标签可切换为 15 维向量：`app.tag-vector.enabled=true` 时，AI 候选排序改为 `+50·Σ q_i s_i`，种子集合改为全量景点，PPR 的种子与同标签边、MMR 的项目相似度都改用向量；新景点由 `TagVectorLabelService` 在同步落库后自动打分（LLM 优先、超时/失败回退规则），历史数据由启动补标分批处理。关闭开关时保持上述旧逻辑。详见 [attraction-tag-vector-design.md](./attraction-tag-vector-design.md)。
 
 ## 8. 核心链路 C：项目生命周期与并发控制
 

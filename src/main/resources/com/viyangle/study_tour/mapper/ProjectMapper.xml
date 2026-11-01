@@ -151,6 +151,120 @@
         created_at desc
     </select>
 
+    <select id="selectByPreferenceSoft" resultType="com.viyangle.study_tour.pojo.Project">
+        select <include refid="projectColumns"/>
+        from projects p
+        order by
+        (
+            case
+                when #{regionCode} is null or #{regionCode} = '' then 0
+                when p.region_adcode = #{regionCode} then 100
+                when left(p.region_adcode, 4) = left(#{regionCode}, 4) then 50
+                else 0
+            end
+            <if test="preferredTags != null and preferredTags.size() > 0">
+                + coalesce((
+                    select sum(rtw.weight)
+                    from route_tag_weight rtw
+                    join tags t on t.id = rtw.tag_id
+                    where rtw.route_id = p.route_id
+                      and t.name in
+                      <foreach collection="preferredTags" item="tag" open="(" separator="," close=")">
+                          #{tag}
+                      </foreach>
+                ), 0) * 80
+            </if>
+        ) desc,
+        p.created_at desc
+    </select>
+
+    <select id="selectByCompositeFilterSoft" resultType="com.viyangle.study_tour.pojo.Project">
+        select <include refid="projectColumns"/>
+        from projects p
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    lower(p.title) like lower(concat('%', #{keyword}, '%'))
+                    or lower(p.tag) like lower(concat('%', #{keyword}, '%'))
+                    or lower(p.status) like lower(concat('%', #{keyword}, '%'))
+                    or lower(p.start_point) like lower(concat('%', #{keyword}, '%'))
+                    or lower(p.leader_requirements) like lower(concat('%', #{keyword}, '%'))
+                    or lower(p.participant_requirements) like lower(concat('%', #{keyword}, '%'))
+                )
+            </if>
+            <if test="filterRegionCode != null and filterRegionCode != ''">
+                and (
+                    p.region_adcode = #{filterRegionCode}
+                    or left(p.region_adcode, 4) = left(#{filterRegionCode}, 4)
+                )
+            </if>
+            <if test="filterTags != null and filterTags.size() > 0">
+                and exists (
+                    select 1
+                    from route_tag_weight rtw
+                    join tags t on t.id = rtw.tag_id
+                    where rtw.route_id = p.route_id
+                      and rtw.weight &gt;= #{minTagWeight}
+                      and t.name in
+                      <foreach collection="filterTags" item="tag" open="(" separator="," close=")">
+                          #{tag}
+                      </foreach>
+                )
+            </if>
+            <if test="status != null and status != ''">
+                and p.status = #{status}
+            </if>
+            <if test="departureDateFrom != null">
+                and p.departure_date &gt;= #{departureDateFrom}
+            </if>
+            <if test="departureDateTo != null">
+                and p.departure_date &lt;= #{departureDateTo}
+            </if>
+            <if test="ownerAccountId != null">
+                and p.owner_account_id = #{ownerAccountId}
+            </if>
+            <if test="leaderAccountId != null">
+                and p.leader_account_id = #{leaderAccountId}
+            </if>
+            <if test="hasLeader != null">
+                <choose>
+                    <when test="hasLeader">
+                        and p.leader_account_id is not null
+                    </when>
+                    <otherwise>
+                        and p.leader_account_id is null
+                    </otherwise>
+                </choose>
+            </if>
+            <if test="onlyAvailable != null and onlyAvailable">
+                and p.status in ('OPEN', 'MATCHING')
+                and (p.max_members is null or p.current_members is null or p.current_members &lt; p.max_members)
+            </if>
+        </where>
+        order by
+        (
+            case
+                when #{sortRegionCode} is null or #{sortRegionCode} = '' then 0
+                when p.region_adcode = #{sortRegionCode} then 100
+                when left(p.region_adcode, 4) = left(#{sortRegionCode}, 4) then 50
+                else 0
+            end
+            <if test="preferredTags != null and preferredTags.size() > 0">
+                + coalesce((
+                    select sum(rtw.weight)
+                    from route_tag_weight rtw
+                    join tags t on t.id = rtw.tag_id
+                    where rtw.route_id = p.route_id
+                      and t.name in
+                      <foreach collection="preferredTags" item="tag" open="(" separator="," close=")">
+                          #{tag}
+                      </foreach>
+                ), 0) * 80
+            </if>
+        ) desc,
+        p.created_at desc
+    </select>
+
     <select id="selectAvailableForLeader" resultType="com.viyangle.study_tour.pojo.Project">
         select <include refid="projectColumns"/>
         from projects

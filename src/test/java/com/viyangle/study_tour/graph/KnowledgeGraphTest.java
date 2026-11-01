@@ -33,6 +33,7 @@ class KnowledgeGraphTest {
     @Mock private AccountTagPrefMapper accountTagPrefMapper;
     @Mock private ReviewMapper reviewMapper;
     @Mock private AccountMapper accountMapper;
+    @Mock private com.viyangle.study_tour.service.TagVectorService tagVectorService;
 
     @InjectMocks
     private KnowledgeGraph graph;
@@ -163,7 +164,39 @@ class KnowledgeGraphTest {
         when(accountMapper.selectAll()).thenReturn(List.of());
     }
 
-    // ==================== 装配正确性 ====================
+    @Test
+    @DisplayName("向量 PPR 按相似度给同标签邻居分配概率")
+    void vectorPprWeightsSameTagEdgesBySimilarity() {
+        when(attractionMapper.selectAll()).thenReturn(List.of(
+                attraction("P1", "320102"),
+                attraction("P2", "320102"),
+                attraction("P3", "320102")));
+        when(tagMapper.selectAll()).thenReturn(List.of(tag(1L, "历史人文")));
+        when(attractionTagMapper.selectAll()).thenReturn(List.of(
+                attractionTag("P1", 1L),
+                attractionTag("P2", 1L),
+                attractionTag("P3", 1L)));
+        when(adjacencyMapper.selectAll()).thenReturn(List.of());
+        when(routeAttractionMapper.selectAll()).thenReturn(List.of());
+        when(projectMapper.selectAll()).thenReturn(List.of());
+        when(accountTagPrefMapper.selectAll()).thenReturn(List.of());
+        when(projectMemberMapper.selectAll()).thenReturn(List.of());
+        when(reviewMapper.selectAll()).thenReturn(List.of());
+        when(accountMapper.selectAll()).thenReturn(List.of());
+        graph.reload();
+
+        when(tagVectorService.isReady()).thenReturn(true);
+        when(tagVectorService.similarity(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString())).thenReturn(0.0);
+        when(tagVectorService.similarity("P1", "P2")).thenReturn(0.9);
+        when(tagVectorService.similarity("P1", "P3")).thenReturn(0.1);
+
+        Map<String, Double> scores = graph.personalizedPageRank(Map.of("P1", 1.0), 10, 0.85, true);
+
+        assertTrue(scores.get("P2") > scores.get("P3"),
+                "相似度高的 P2 应获得比 P3 更高的 PPR 分数");
+    }
+
 
     @Test
     @DisplayName("reload 从各数据源装配节点、边与派生指标")

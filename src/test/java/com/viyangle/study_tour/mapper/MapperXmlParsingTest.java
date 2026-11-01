@@ -57,6 +57,53 @@ class MapperXmlParsingTest {
                 "com.viyangle.study_tour.mapper.ProjectAbandonRecordMapper.selectByProjectId")).isTrue();
         assertThat(configuration.hasStatement(
                 "com.viyangle.study_tour.mapper.ChatSessionMapper.removeProjectLeader")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.TagDimensionMapper.selectAll")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.AttractionTagMapper.deleteAutoWeightsByPoiIdAndTagIds")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.AttractionTagMapper.deleteWeightsByPoiIdAndTagIds")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.AttractionTagMapper.insertWithWeight")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.AttractionMapper.selectPoiIdsWithoutTagVector")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.AttractionTagMapper.upsertEvidence")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.AttractionTagMapper.insertWithWeight")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.TagFeedbackEventMapper.insertIgnore")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.TagFeedbackEventMapper.selectPending")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.TagFeedbackEventMapper.markApplied")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.RouteTagWeightMapper.batchInsert")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.RouteTagWeightMapper.selectByRouteId")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.RouteMapper.updateTag")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.ProjectMapper.selectByPreferenceSoft")).isTrue();
+        assertThat(configuration.hasStatement(
+                "com.viyangle.study_tour.mapper.ProjectMapper.selectByCompositeFilterSoft")).isTrue();
+    }
+
+    @Test
+    void attractionTagSelectIncludesVectorColumns() throws Exception {
+        Configuration configuration = parseAllMappers();
+        String statementId = "com.viyangle.study_tour.mapper.AttractionTagMapper.selectAll";
+
+        BoundSql boundSql = configuration.getMappedStatement(statementId)
+                .getBoundSql(new java.util.HashMap<>());
+
+        assertThat(boundSql.getSql())
+                .contains("prior_weight")
+                .contains("prior_strength")
+                .contains("pos_count")
+                .contains("neg_count")
+                .contains("effective_weight")
+                .contains("vector_version");
     }
 
     @Test

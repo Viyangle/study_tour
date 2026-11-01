@@ -84,6 +84,44 @@ class ProjectServiceImplTest {
     }
 
     @Test
+    void softFilterUsesRouteVectorMapper() {
+        projectService.filterProjects(
+                6L, 1, 10, null, null, "历史人文", null,
+                null, null, null, null, null, null,
+                java.util.List.of("历史人文"), "soft", 0.4);
+
+        verify(projectMapper).selectByCompositeFilterSoft(
+                eq(java.util.List.of("历史人文")),
+                eq(java.util.List.of("历史人文")),
+                isNull(),
+                eq(0.4),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull()
+        );
+    }
+
+    @Test
+    void explicitTagsSoftListSkipsKgAndUsesSoftMapper() {
+        projectService.getPagedProjectsByPreference(
+                6L, 1, 10, null,
+                java.util.List.of("历史人文", "科技探索"), "soft", 0.3);
+
+        verify(projectMapper).selectByPreferenceSoft(
+                eq(java.util.List.of("历史人文", "科技探索")),
+                isNull(),
+                eq(0.3)
+        );
+        verify(knowledgeGraphRecommendService, never()).recommendProjects(6L, 10);
+    }
+
+    @Test
     void acceptingProjectCreatesItsGroupChat() {
         Project project = project(5L, "OPEN");
         project.setLeaderAccountId(null);

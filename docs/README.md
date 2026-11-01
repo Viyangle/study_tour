@@ -5,6 +5,7 @@
 | 文档 | 内容 | 适合谁看 | 时效 |
 |---|---|---|---|
 | [architecture.md](./architecture.md) | 系统分层、部署拓扑、AI 规划与推荐链路、关键设计权衡、已知边界 | 新成员、评审、答辩 | 随架构变更维护 |
+| [attraction-tag-vector-design.md](./attraction-tag-vector-design.md) | 景点标签从 15 选 1 升级为 15 维向量、反馈采集与在线校准的完整方案 | 后端、前端、评审 | 方案定稿；向量、自动打分、匹配打分、查询接口、离线评估、反馈闭环、PPR/MMR、多标签路线与项目软筛已实现 |
 | [database.md](./database.md) | ER 图、20 张表的职责、索引与约束、迁移脚本清单 | 后端、需要造数据的同学 | 随表结构变更维护 |
 | [API.md](./API.md) | 路线规划 Agent 接口契约（异步任务、事件、错误体） | 前端、Agent 接入方 | 对应 `openapi.json` |
 | [openapi.json](./openapi.json) | Agent 接口的机器可读契约，可导入 Apifox / Postman / Swagger Editor | 前端、测试 | 同上 |

@@ -83,6 +83,34 @@ public class StudyTourTagClassifier {
         return new ArrayList<>(tags);
     }
 
+    /**
+     * 规则打分：按关键词命中个数给出 0~1 的强度，供 LLM 不可用时的自动打标兜底。
+     *
+     * <p>1 个命中约 0.5，3 个命中到 1.0；完全没有命中时给默认标签 0.3，
+     * 保证新景点不会得到全零向量。</p>
+     */
+    public Map<String, Double> score(String... fields) {
+        String haystack = joinFields(fields).toLowerCase(Locale.ROOT);
+        Map<String, Double> scores = new LinkedHashMap<>();
+        if (haystack == null || haystack.isBlank()) {
+            scores.put(DEFAULT_TAG, 0.3);
+            return scores;
+        }
+
+        for (Map.Entry<String, List<String>> entry : TAG_KEYWORDS.entrySet()) {
+            int hits = countKeywords(haystack, entry.getValue());
+            if (hits > 0) {
+                double score = Math.min(1.0, Math.log1p(hits) / Math.log(4.0));
+                scores.put(entry.getKey(), Math.round(score * 100.0) / 100.0);
+            }
+        }
+
+        if (scores.isEmpty()) {
+            scores.put(DEFAULT_TAG, 0.3);
+        }
+        return scores;
+    }
+
     public String primaryTag(List<String> tags) {
         if (tags == null || tags.isEmpty()) {
             return DEFAULT_TAG;
@@ -101,6 +129,20 @@ public class StudyTourTagClassifier {
             }
         }
         return false;
+    }
+
+    private int countKeywords(String haystack, List<String> keywords) {
+        if (haystack == null || haystack.isBlank() || keywords == null || keywords.isEmpty()) {
+            return 0;
+        }
+        int hits = 0;
+        for (String keyword : keywords) {
+            if (keyword != null && !keyword.isBlank()
+                    && haystack.contains(keyword.toLowerCase(Locale.ROOT))) {
+                hits++;
+            }
+        }
+        return hits;
     }
 
     private String joinFields(String... fields) {

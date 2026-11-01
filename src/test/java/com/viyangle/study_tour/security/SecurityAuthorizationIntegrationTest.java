@@ -16,6 +16,7 @@ import com.viyangle.study_tour.pojo.Account;
 import com.viyangle.study_tour.pojo.Result;
 import com.viyangle.study_tour.service.AttractionService;
 import com.viyangle.study_tour.service.AttractionSyncService;
+import com.viyangle.study_tour.service.TagVectorService;
 import com.viyangle.study_tour.utils.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -322,6 +323,11 @@ class SecurityAuthorizationIntegrationTest {
         @Bean
         AttractionSyncService attractionSyncService() {
             return mock(AttractionSyncService.class);
+        }
+
+        @Bean
+        TagVectorService tagVectorService() {
+            return mock(TagVectorService.class);
         }
 
         @Bean

@@ -47,14 +47,18 @@ public class ProjectController {
                                  @RequestParam(defaultValue = "10") Integer pageSize,
                                  @RequestParam Long accountId,
                                  @RequestParam(required = false) String keyword,
+                                 @RequestParam(required = false) List<String> tags,
+                                 @RequestParam(defaultValue = "soft") String tagMatch,
+                                 @RequestParam(required = false) Double minTagWeight,
                                  @RequestParam(defaultValue = "false") Boolean withExplanation) {
-        log.info("分页获取项目, accountId={}, keyword={}, pageNum={}, pageSize={}, withExplanation={}",
-                accountId, keyword, pageNum, pageSize, withExplanation);
+        log.info("分页获取项目, accountId={}, keyword={}, tags={}, tagMatch={}, pageNum={}, pageSize={}, withExplanation={}",
+                accountId, keyword, tags, tagMatch, pageNum, pageSize, withExplanation);
         if (Boolean.TRUE.equals(withExplanation)) {
             int limit = pageNum * pageSize;
             return Result.success(recommendService.recommendWithExplanation(accountId, keyword, limit));
         }
-        return Result.success(projectService.getPagedProjectsByPreference(accountId, pageNum, pageSize, keyword));
+        return Result.success(projectService.getPagedProjectsByPreference(
+                accountId, pageNum, pageSize, keyword, tags, tagMatch, minTagWeight));
     }
 
     @GetMapping("/filter")
@@ -65,6 +69,9 @@ public class ProjectController {
                                  @RequestParam(required = false) String keyword,
                                  @RequestParam(required = false) String regionCode,
                                  @RequestParam(required = false) String tag,
+                                 @RequestParam(required = false) List<String> tags,
+                                 @RequestParam(defaultValue = "exact") String tagMatch,
+                                 @RequestParam(required = false) Double minTagWeight,
                                  @RequestParam(required = false) String status,
                                  @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate departureDateFrom,
                                  @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate departureDateTo,
@@ -72,8 +79,8 @@ public class ProjectController {
                                  @RequestParam(required = false) Long leaderAccountId,
                                  @RequestParam(required = false) Boolean hasLeader,
                                  @RequestParam(required = false) Boolean onlyAvailable) {
-        log.info("复合筛选项目, accountId={}, keyword={}, regionCode={}, tag={}, status={}, pageNum={}, pageSize={}",
-                accountId, keyword, regionCode, tag, status, pageNum, pageSize);
+        log.info("复合筛选项目, accountId={}, keyword={}, regionCode={}, tag={}, tags={}, tagMatch={}, status={}, pageNum={}, pageSize={}",
+                accountId, keyword, regionCode, tag, tags, tagMatch, status, pageNum, pageSize);
         return Result.success(projectService.filterProjects(
                 accountId,
                 pageNum,
@@ -87,7 +94,10 @@ public class ProjectController {
                 ownerAccountId,
                 leaderAccountId,
                 hasLeader,
-                onlyAvailable
+                onlyAvailable,
+                tags,
+                tagMatch,
+                minTagWeight
         ));
     }
 

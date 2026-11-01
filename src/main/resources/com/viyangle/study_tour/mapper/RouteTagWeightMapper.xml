@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.RouteTagWeightMapper">
+
+    <delete id="deleteByRouteId" parameterType="java.lang.Long">
+        delete from route_tag_weight where route_id = #{routeId}
+    </delete>
+
+    <insert id="batchInsert">
+        insert into route_tag_weight(route_id, tag_id, weight, source, vector_version, updated_at)
+        values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.routeId}, #{item.tagId}, #{item.weight}, #{item.source}, #{item.vectorVersion}, now())
+        </foreach>
+    </insert>
+
+    <select id="selectByRouteId" parameterType="java.lang.Long"
+            resultType="com.viyangle.study_tour.pojo.RouteTagWeight">
+        select route_id, tag_id, weight, source, vector_version, updated_at
+        from route_tag_weight
+        where route_id = #{routeId}
+        order by weight desc, tag_id asc
+    </select>
+
+</mapper>

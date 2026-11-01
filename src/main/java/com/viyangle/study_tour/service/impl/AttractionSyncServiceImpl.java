@@ -4,6 +4,7 @@ import com.viyangle.study_tour.mapper.AttractionMapper;
 import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.rag.AmapAttractionRagDocumentLoader;
 import com.viyangle.study_tour.service.AttractionSyncService;
+import com.viyangle.study_tour.service.TagVectorLabelService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import com.viyangle.study_tour.exception.ForbiddenException;
@@ -41,6 +42,10 @@ public class AttractionSyncServiceImpl implements AttractionSyncService {
     @Autowired
     private EmbeddingModel embeddingModel;
 
+    /** 新景点落库后自动打 15 维标签；标签服务不可用时跳过，不阻断同步。 */
+    @Autowired(required = false)
+    private TagVectorLabelService tagVectorLabelService;
+
     @Value("${app.rag.embedding.sync-vector-enabled:true}")
     private boolean syncVectorEnabled;
 
@@ -69,6 +74,16 @@ public class AttractionSyncServiceImpl implements AttractionSyncService {
         attraction.setStatus("ACTIVE");
         attractionMapper.upsert(attraction);
         log.info("Attraction synced to MySQL, poiId={}, name={}", normalizedPoiId, attraction.getName());
+
+        // 新景点落库后立即打分：LLM 优先，失败回退规则；打分失败不阻断同步
+        try {
+            if (tagVectorLabelService != null) {
+                int dims = tagVectorLabelService.autoLabel(attraction);
+                log.info("Attraction tag vector auto-labeled, poiId={}, dims={}", normalizedPoiId, dims);
+            }
+        } catch (Exception e) {
+            log.warn("Attraction tag vector auto-label failed, poiId={}, {}", normalizedPoiId, e.getMessage());
+        }
 
         indexAttraction(attraction);
         return attraction;

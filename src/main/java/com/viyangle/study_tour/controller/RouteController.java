@@ -11,8 +11,10 @@ import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.service.RouteService;
 import com.viyangle.study_tour.service.ProjectService;
+import com.viyangle.study_tour.service.impl.RouteIterationFeedbackService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
 import com.viyangle.study_tour.utils.AiConversationScope;
+import com.viyangle.study_tour.utils.AiRoutePlanTags;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +24,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -39,6 +42,9 @@ public class RouteController {
 
     @Autowired
     private ProjectService projectService;
+
+    @Autowired(required = false)
+    private RouteIterationFeedbackService routeIterationFeedbackService;
 
     @Autowired
     private AiRoutePlanningService aiRoutePlanningService;
@@ -117,8 +123,22 @@ public class RouteController {
                     memoryId, accountId, routeAttractions.size());
             optimizedPlan = aiRoutePlanningService.optimizeSubmittedRoute(routeAttractions, message);
         }
-        Result result = Result.success(routeService.saveOrUpdateAIConversationRoute(
-                memoryId, optimizedPlan.getTag(), toRouteAttractions(optimizedPlan.getItems())));
+        if (routeAttractions != null && routeIterationFeedbackService != null) {
+            List<String> submittedPois = routeAttractions.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(RouteAttraction::getPoiId)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            routeIterationFeedbackService.recordSubmission(
+                    accountId, memoryId, submittedPois,
+                    optimizedPlan.getTagVector(), optimizedPlan.getTag());
+        }
+        Map<String, Double> tagVector = optimizedPlan.getTagVector();
+        Result result = (tagVector == null || tagVector.isEmpty())
+                ? Result.success(routeService.saveOrUpdateAIConversationRoute(
+                        memoryId, optimizedPlan.getTag(), toRouteAttractions(optimizedPlan.getItems())))
+                : Result.success(routeService.saveOrUpdateAIConversationRoute(
+                        memoryId, optimizedPlan.getTag(), toRouteAttractions(optimizedPlan.getItems()), tagVector));
         long costMs = System.currentTimeMillis() - startMs;
         log.info("Generate and optimize route by AI v2 done, memoryId={}, accountId={}, costMs={}", memoryId, accountId, costMs);
         return result;
@@ -172,15 +192,7 @@ public class RouteController {
     }
 
     private void validateAiPlan(AIRoutePlan plan) {
-        if (plan == null) {
-            throw new IllegalArgumentException("AI route plan is empty");
-        }
-        if (plan.getTag() == null || plan.getTag().isBlank()) {
-            throw new IllegalArgumentException("AI route plan tag is empty");
-        }
-        if (!ALLOWED_TAGS.contains(plan.getTag())) {
-            throw new IllegalArgumentException("AI route plan tag is invalid: " + plan.getTag());
-        }
+        AiRoutePlanTags.normalize(plan, ALLOWED_TAGS);
         validateAiItems(plan.getItems());
     }
 

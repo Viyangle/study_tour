@@ -13,6 +13,9 @@ public interface RouteMapper {
 
     int updateById(Route route);
 
+    /** 路由向量重算后，把 routes.tag 更新为 argmax 主标签（兼容旧字段）。 */
+    int updateTag(@Param("id") Long id, @Param("tag") String tag);
+
     int refreshOutdatedAttractionFlagById(@Param("id") Long id);
 
     int deleteById(@Param("id") Long id);

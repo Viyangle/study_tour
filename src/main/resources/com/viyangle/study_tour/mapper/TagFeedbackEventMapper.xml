@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.TagFeedbackEventMapper">
+
+    <sql id="feedbackColumns">
+        id, account_id, session_key, event_type, poi_id, route_id, project_id, tag_id,
+        event_value, intent_vector, context, occurred_at, received_at,
+        idempotency_key, status, attempts, applied_at, apply_note
+    </sql>
+
+    <insert id="insertIgnore" parameterType="com.viyangle.study_tour.pojo.TagFeedbackEvent">
+        insert ignore into tag_feedback_event
+        (account_id, session_key, event_type, poi_id, route_id, project_id, tag_id,
+         event_value, intent_vector, context, occurred_at, received_at,
+         idempotency_key, status, attempts)
+        values
+        (#{accountId}, #{sessionKey}, #{eventType}, #{poiId}, #{routeId}, #{projectId}, #{tagId},
+         #{eventValue}, #{intentVector}, #{context}, #{occurredAt}, now(),
+         #{idempotencyKey}, 'PENDING', 0)
+    </insert>
+
+    <select id="selectPending" resultType="com.viyangle.study_tour.pojo.TagFeedbackEvent">
+        select <include refid="feedbackColumns"/>
+        from tag_feedback_event
+        where status = 'PENDING'
+        order by id asc
+        limit #{limit}
+    </select>
+
+    <update id="markApplied">
+        update tag_feedback_event
+        set status = 'APPLIED', applied_at = now(), attempts = attempts + 1
+        where id = #{id}
+    </update>
+
+    <update id="markIgnored">
+        update tag_feedback_event
+        set status = 'IGNORED', applied_at = now(), attempts = attempts + 1, apply_note = #{note}
+        where id = #{id}
+    </update>
+
+    <update id="incrementAttempts">
+        update tag_feedback_event
+        set attempts = attempts + 1
+        where id = #{id}
+    </update>
+
+    <select id="sumAppliedWeightByAccountAndPoiSince" resultType="double">
+        select coalesce(sum(abs(event_value)), 0)
+        from tag_feedback_event
+        where account_id = #{accountId}
+          and poi_id = #{poiId}
+          and status = 'APPLIED'
+          and occurred_at &gt;= #{since}
+    </select>
+
+</mapper>

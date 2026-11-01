@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.TagDimensionMapper">
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.TagDimension">
+        select d.dim_version,
+               d.ordinal,
+               d.tag_id,
+               d.code,
+               t.name as name,
+               d.description,
+               d.enabled
+        from tag_dimension d
+        inner join tags t on t.id = d.tag_id
+        order by d.dim_version asc, d.ordinal asc
+    </select>
+
+</mapper>

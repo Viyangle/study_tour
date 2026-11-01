@@ -28,4 +28,9 @@ public interface AttractionMapper {
     List<Attraction> selectAllActive();
 
     List<Attraction> selectByRegionCode(@Param("regionCode") String regionCode);
+
+    /**
+     * 找出还没有 LLM/规则自动权重（LLM_V2/RULE）的有效景点，供启动或后台补标。
+     */
+    List<String> selectPoiIdsWithoutTagVector(@Param("limit") int limit);
 }

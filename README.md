@@ -9,14 +9,14 @@
 [![CI](https://github.com/Viyangle/study_tour/actions/workflows/ci.yml/badge.svg)](https://github.com/Viyangle/study_tour/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-17-blue)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-brightgreen)
-![Tests](https://img.shields.io/badge/tests-270%20passed-success)
-![Coverage](https://img.shields.io/badge/coverage-40.7%25-yellow)
+![Tests](https://img.shields.io/badge/tests-343%20passed-success)
+![Coverage](https://img.shields.io/badge/coverage-46.9%25-yellow)
 
 | 项目 | 现状 |
 |---|---|
-| 用例规模 | 270 个用例、0 失败；分布于 33 个测试类（另 1 个需本地 MySQL/Redis 的冒烟测试），JUnit 5 + Mockito + MockMvc + AssertJ |
+| 用例规模 | 343 个用例、0 失败；分布于 43 个测试类（另 1 个需本地 MySQL/Redis 的冒烟测试），JUnit 5 + Mockito + MockMvc + AssertJ |
 | CI | GitHub Actions，`mvn -B -ntp -Pci verify`，push 与 PR 触发 |
-| 覆盖率 | JaCoCo 行 40.7% / 分支 33.1%，报告随构建产出并上传为 artifact |
+| 覆盖率 | JaCoCo 行 46.9% / 分支 39.1%，报告随构建产出并上传为 artifact |
 | 覆盖率门禁 | 行 ≥ 39%、分支 ≥ 31%，低于阈值直接构建失败（棘轮阈值，防止回退） |
 | 参数校验 | Jakarta Bean Validation + `@Valid`，覆盖注册、登录、改密、改角色、加入项目、建群、发消息；失败统一返回 400 + `{code:0,msg}` |
 | 数据库迁移 | Flyway：`db/migration` 下的 V1 基线 + 增量脚本，启动时自动执行；存量库自动 baseline，不重复建表 |
@@ -42,8 +42,8 @@ mvn -B -ntp test -Dtest=FlywayMigrationTest   # 只验证数据库迁移（需�
 
 应用启动时由 Flyway 执行 `src/main/resources/db/migration` 下的脚本：
 
-- 空库：`V1__baseline.sql` 建 20 张表，再执行后续增量（当前为 `V2__accounts_role_add_admin.sql`）。
-- 存量库：`baseline-on-migrate` 把 V1 记为已执行，只执行 V2 及之后的增量。
+- 空库：`V1__baseline.sql` 建 20 张表，再执行后续增量（`V2__accounts_role_add_admin.sql`、`V3__create_project_abandon_records.sql`）。
+- 存量库：`baseline-on-migrate` 把 V1 记为已执行，只执行 V2 及之后的增量；因此只在 V1 里新增的表不会自动补建，需要一条幂等增量兜底（`project_abandon_records` 即由 V3 补建）。
 - 已执行过的脚本不要修改（校验和不匹配会导致启动失败），新变更请新增 `V<版本>__<描述>.sql`。
 
 ### 测试分层与约定
@@ -2980,4 +2980,259 @@ GET /attractions?regionCode=320100&pageNum=1&pageSize=10
         }
     ]
 }
+```
+
+### 4.7 标签向量（0.0.5）
+
+景点标签从「标签名集合」升级为 15 维向量：15 个维度对应 `tags.type = 'INTEREST'` 的 15 个研学兴趣标签，每维取值 `0~1`。设计说明见 [docs/attraction-tag-vector-design.md](docs/attraction-tag-vector-design.md)。
+
+> 配置 `app.tag-vector.enabled=false` 时，推荐/候选召回仍走旧的「标签名精确命中」逻辑；改为 `true` 后按向量匹配度打分。向量查询接口不受该开关影响。
+
+`app.tag-vector.enabled=true` 时，除了候选打分，PPR 的种子权重与同标签边、MMR 的项目相似度也会改用 15 维向量；关闭时这三处全部回退旧逻辑（PPR 均匀边 + MMR Jaccard）。
+
+#### 4.7.1 获取标签维度
+
+- 方法：`GET`
+- 路径：`/tags/interests`
+- 描述：返回当前 `dimVersion` 下的 15 个维度，前端按 `ordinal` 解释 `tagVector.weights` 的下标，不要硬编码顺序。
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": [
+    {"dimVersion": 1, "ordinal": 1, "tagId": 1, "code": "HISTORY_HUMANITIES", "name": "历史人文", "description": null, "enabled": true}
+  ]
+}
+```
+
+#### 4.7.2 获取景点详情（含 15 维标签向量）
+
+- 方法：`GET`
+- 路径：`/attractions/{poiId}`
+- 描述：返回景点字段，并附带 `tagVector`；列表接口不返回该字段，避免列表响应膨胀。
+
+```http
+GET /attractions/B00190513A
+```
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": {
+    "poiId": "B00190513A",
+    "name": "南京国防园",
+    "tagVector": {
+      "dimVersion": 1,
+      "vectorVersion": 1,
+      "primary": "HISTORY_HUMANITIES",
+      "primaryName": "历史人文",
+      "weights": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "share": [0.3333, 0.0, 0.0, 0.0, 0.3333, 0.0, 0.0, 0.0, 0.0, 0.3333, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "dims": [
+        {"code": "HISTORY_HUMANITIES", "name": "历史人文", "weight": 1.0, "prior": 1.0, "support": 0.0}
+      ]
+    }
+  }
+}
+```
+
+字段说明：
+
+- `weights`：15 个有效值，按 `dimVersion` 的 `ordinal` 排序，0~1；
+- `share`：`weights / Σweights`，用于展示主题构成；
+- `dims`：只包含 `weight ≥ 0.05` 的维度，按权重降序；
+- `prior` / `support`：初始先验与已积累的反馈证据量，当前反馈未接入时 `support` 为 0。
+
+#### 4.7.3 自动打分
+
+新景点通过 `POST /attractions/sync/{poiId}` 从高德写入后，会自动调用 `TagVectorLabelService`：
+
+1. 有模型 Key 时调用 LLM，按 15 维输出 0~1 分（`source=LLM_V2`，先验强度 3）；
+2. LLM 不可用、超时或返回不合法时回退关键词规则（`source=RULE`，先验强度 1.5）；
+3. 只覆盖 `LLM/LLM_V2/RULE` 旧行，`MANUAL` 人工权重不会被覆盖。
+
+历史数据或脚本导入的景点，启动后由 `KnowledgeGraphAutoInitializer` 在后台补标（默认每批 50 个）。也可以手动触发：
+
+```http
+POST /admin/tag-vectors/backfill?limit=50
+POST /admin/tag-vectors/B00190513A/relabel
+Authorization: Bearer <admin-token>
+```
+
+配置项：
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `app.tag-vector.enabled` | `true`（application.yaml；代码回退 `false`） | 推荐/召回/PPR/MMR 是否走向量 |
+| `app.tag-vector.auto-label-enabled` | `true` | 是否允许自动打分 |
+| `app.tag-vector.label-timeout-seconds` | `25` | 单次 LLM 等待上限，超时回退规则 |
+| `app.tag-vector.min-prior-weight` | `0.4` | 低于该分数的维度不落库，过滤 LLM 弱相关噪声 |
+| `app.tag-vector.route-model-weight` | `0.3` | 模型 `tagVector` 在路线最终向量中的融合权重 |
+| `app.tag-vector.auto-backfill-enabled` | `true` | 启动时是否补标历史景点 |
+| `app.tag-vector.backfill-batch-size` | `50` | 每次补标上限 |
+
+离线评估（用 `routes`/`route_attractions` 的站点作为 relevance，对比精确标签与向量排序）：
+
+```bash
+mvn -DskipTests exec:java -Dexec.mainClass="com.viyangle.study_tour.utils.TagVectorEvalTool"
+```
+
+结果输出到控制台与 `eval_out/tag-vector-eval-<时间戳>.csv`。本机实测（50 个 ACTIVE 景点、297 条路线，K=10）：
+
+| 标签来源 | 精确标签基线 Recall / NDCG | 15 维向量 Recall / NDCG |
+|---|---:|---:|
+| 原始二元 MANUAL | 0.2332 / 0.1515 | — |
+| LLM 全量维度（≥0.05） | 0.2265 / 0.1492 | 0.2090 / 0.1380 |
+| LLM ≥0.3 | 0.2394 / 0.1531 | 0.2230 / 0.1434 |
+| LLM ≥0.4（当前入库阈值） | 0.2424 / 0.1586 | 0.2292 / 0.1472 |
+
+LLM 分级后的向量在当前「路线站点」评估口径下仍低于精确标签基线；语义抽检是合理的（国防园红色 0.85、美术馆艺术 0.95、朝天宫历史 0.95、玄武湖自然 0.75），说明差距更多来自评估口径偏严格/数据规模小，而不是标签完全不可用。代码回退默认仍是 `false`，当前 `application.yaml` 已设为 `true`；建议先做在线小流量对比或补一套标签一致性评估。
+
+#### 4.7.4 反馈事件
+
+- 方法：`POST`
+- 路径：`/feedback/events`
+- 描述：批量提交用户行为，服务端异步折算成 `tag_feedback_event`。**反馈分两类**：
+  - 属性证据：显式 `TAG_CORRECTION`、路线反复生成时的保留/新增/删除、路线保存/发布；只有这些会更新景点 tag 的 `pos/neg`；
+  - 偏好信号：`THUMBS_UP` / `THUMBS_DOWN`、收藏、加入/退出项目、评价等只记录用户偏好，**不再修改景点 tag**。
+
+```json
+{
+  "sessionKey": "s-7c1e9d",
+  "events": [
+    {"type": "THUMBS_UP", "poiId": "B00190513A", "idempotencyKey": "e-001"},
+    {"type": "TAG_CORRECTION", "poiId": "B00190513A", "tagCode": "RED_EDUCATION", "value": -1, "idempotencyKey": "e-002"},
+    {"type": "ROUTE_STOP_CONFIRM", "poiId": "B00190513A", "scene": "AI_PLAN", "idempotencyKey": "e-003"}
+  ]
+}
+```
+
+响应：
+
+```json
+{"code":1,"msg":"success","data":{"accepted":3,"duplicates":0,"ignored":0}}
+```
+
+规则：
+
+- 单次最多 50 条；`idempotencyKey` 相同按重复处理；
+- 未知类型、`TAG_CORRECTION` 缺 `tagCode`/维度不存在时计入 `ignored`；
+- `THUMBS_UP` / `THUMBS_DOWN` / 收藏 / 加入项目 / 评价只保留为偏好事件，处理结果记为 `preference-only`，不产生 `pos/neg`；
+- 事件由 `TagFeedbackProcessor` 每 30 秒处理一批：`s_i = clamp((κ·p_i + pos_i)/(κ + pos_i + neg_i), 0, 1)`，正/负证据按 90/180 天半衰期衰减；
+- **默认 `apply-enabled=false`：只采集事件，不自动改权重**；设 `true` 后才应用，便于先验证效果；
+- 单用户单景点 30 天最多贡献 ±0.8（超出部分按剩余额度截断）；显式纠正只作用于指定维度；
+- 处理成功后刷新 `TagVectorService`，下一次推荐/召回立即使用新权重。
+
+> 本地评估：旧版「每轮 ADD 立即计分」在 59 条留出路线 NDCG@3 从 0.0521 降到 0.0365；改成「最终结算」后 5 折交叉验证出现分化：最终站点 vs 过程淘汰站点的 pairwise accuracy 从 0.090 提升到 0.313（+0.223，5/5 折正向），但整体 NDCG@5 仍从 0.0980 降到 0.0881（95% CI 跨 0），graded NDCG 和常见度也没有提升。因此 `apply-enabled` 默认 `false`，只采集不应用。完整数据见 `eval_feedback/CV_REPORT.md` 与 `eval_feedback/feedback_evaluation.xlsx`。
+
+**路线会话结算**：同一账号、同一 `memoryId` 的连续生成只记录「哪些景点出现过、对应什么 tag」，**中间轮次不直接加减分**；用户最终发布项目/路线时才结算：
+
+| 最终结果 | 事件 | 权重 |
+|---|---|---:|
+| 进入最终路线 | `ROUTE_STOP_CONFIRM` | **+0.80** |
+| 过程出现过、但未进最终路线 | `ROUTE_STOP_REJECT` | **-0.20** |
+| 候选列表展示过、但从未被选进任何路线 | `ROUTE_STOP_NOT_SELECTED` | **-0.02** |
+
+降低幅度只有提高的 1/4 以下，符合「只有最终确定的才提高」；最终路线上的景点即使中间被删过，也只按最终结果正向计算。用户手动提交/编辑路线时，`RouteIterationFeedbackService.recordSubmission` 也会把手动增删纳入同一会话。候选曝光在生成路线后由 `recordExposure` 记录，只对当前 tag 得分 >0 的候选生效，避免把零分候选也重罚。
+
+**单用户影响边界**（当前 225 条权重，κ=3）：
+
+| 证据 | 单事件最大权重 | 单用户 30 天总上限 | 对 `effective_weight` 的最大绝对变化 |
+|---|---:|---:|---:|
+| `ROUTE_STOP_CONFIRM` | +0.80 | 0.80 | 约 +0.13 |
+| `ROUTE_STOP_REJECT` | -0.20 | 0.80 | 约 -0.06 |
+| `ROUTE_STOP_NOT_SELECTED` | -0.02 | 0.80 | 约 -0.006 |
+| `TAG_CORRECTION` | ±2.0（按剩余额度截断） | 0.80 | 约 +0.13 / -0.21 |
+
+一个人最多只能影响自己路线里出现过的景点，每个景点 30 天内最多 ±0.8 证据；不会改全库，也不会把一个景点从 0.4 直接推到 1.0。当前真实反馈数据仍是 0，所以「现在的影响」实际为 0。
+
+配置：
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `app.tag-vector.feedback-enabled` | `true` | 是否接收/记录反馈事件 |
+| `app.tag-vector.apply-enabled` | `false` | 是否把事件应用到景点权重；默认只采集 |
+| `app.tag-vector.apply-interval-ms` | `30000` | 处理周期 |
+| `app.tag-vector.apply-batch-size` | `100` | 每批事件数 |
+| `app.tag-vector.pos-half-life-days` | `90` | 正向证据半衰期 |
+| `app.tag-vector.neg-half-life-days` | `180` | 负向证据半衰期 |
+| `app.tag-vector.user-cap-30d` | `0.8` | 单用户单景点 30 天证据上限 |
+
+#### 4.7.5 多标签路线
+
+路线不再被强制压成「15 选 1」：
+
+- `routes.tag` 保留，但只作为 `argmax` 主标签，兼容旧筛选和旧接口；
+- 多标签存在 `route_tag_weight(route_id, tag_id, weight)`，权重 = 站点景点向量按时长加权平均；
+- `GET /routes/{id}/tags` 返回路线的 15 维向量；
+- `GET /routes` 列表项和 `GET /projects/{id}` 详情新增 `tagVector` 字段；
+- AI 生成/优化路线保存时自动重算，`routes.tag` 同步更新为主标签；历史路线已回填 `route_tag_weight`（298 条有站点的路线），没有站点的路线读取时仍可实时聚合。
+
+```http
+GET /routes/581/tags
+```
+
+```json
+{
+  "code": 1,
+  "data": {
+    "primary": "MUSEUM_STUDY",
+    "primaryName": "博物馆研学",
+    "weights": [0.509, 0.599, 0, 0, 0, 0, 0, 0, 0.292, 0.459, 0, 0, 0, 0.155, 0.138],
+    "dims": [
+      {"code": "MUSEUM_STUDY", "name": "博物馆研学", "weight": 0.599},
+      {"code": "HISTORY_HUMANITIES", "name": "历史人文", "weight": 0.509},
+      {"code": "RED_EDUCATION", "name": "红色教育", "weight": 0.459}
+    ]
+  }
+}
+```
+
+模型输出片段：
+
+```json
+{
+  "tag": "历史人文",
+  "tagVector": {
+    "历史人文": 0.8,
+    "科技探索": 0.6
+  },
+  "items": [
+    {"poiId": "B00190513A", "visitOrder": 1, "visitTime": "2026-11-10T09:00:00", "recommendedDuration": 90, "notes": "路线结束"}
+  ]
+}
+```
+
+`system-route-compose.txt` 现在要求模型输出主标签 `tag` 和可选的 `tagVector`（1~3 个主题 + 0~1 权重）；`tag` 仍是兼容旧字段，必须等于 `tagVector` 中权重最高的项。路线保存时按 `app.tag-vector.route-model-weight`（默认 0.3）把模型向量与站点聚合向量融合，空 `tagVector` 时自动回退纯站点聚合。
+
+#### 4.7.6 项目列表多标签软筛 / 软排序
+
+项目列表不再只看 `projects.tag` 主标签，可以按路线向量命中多个主题：
+
+```http
+GET /projects?accountId=118&tags=历史人文,科技探索&tagMatch=soft&pageNum=1&pageSize=10
+GET /projects/filter?tags=历史人文,科技探索&tagMatch=soft&minTagWeight=0.3&pageNum=1&pageSize=10
+```
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `tags` | 账号偏好 | 逗号分隔或重复参数，最多 15 个 |
+| `tagMatch` | `/projects` 为 `soft`；`/filter` 为 `exact` | `soft` 走路线向量，`exact` 走 `projects.tag` 主标签 |
+| `minTagWeight` | `0.3` | 软筛阈值：路线向量在任一 `tags` 上 ≥ 该值即命中 |
+
+- 软筛：`exists(route_tag_weight ... weight >= minTagWeight)`，所以「主标签是非遗、但路线里历史人文 0.6」的项目也能被筛出来；
+- 软排序：`sum(route_tag_weight.weight for tags) * 80 + 地区分`，多标签命中会累加；
+- `/projects` 不传 `tags` 时保持原 KG 推荐路径；显式传 `tags` 才走 SQL 软排序；
+- `withExplanation=true` 仍走 KG 解释推荐，暂不叠加 `tags` 过滤。
+
+本机实测：
+
+```text
+GET /projects/filter?tag=历史人文&tagMatch=soft&minTagWeight=0.3
+-> 返回主标签为非遗/航天/亲子等、但路线向量历史人文 ≥0.3 的项目
+
+GET /projects/filter?tag=历史人文 (exact)
+-> 只返回 projects.tag = 历史人文 的项目
 ```

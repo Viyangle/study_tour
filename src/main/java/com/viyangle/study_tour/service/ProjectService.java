@@ -20,6 +20,18 @@ public interface ProjectService {
                                                Integer pageSize,
                                                String keyword);
 
+    /**
+     * 显式标签的项目列表：{@code tagMatch=soft} 时按路线向量权重和排序；
+     * 不传 {@code tags} 时保持原有的 KG/SQL 偏好列表。
+     */
+    List<Project> getPagedProjectsByPreference(Long accountId,
+                                               Integer pageNum,
+                                               Integer pageSize,
+                                               String keyword,
+                                               List<String> tags,
+                                               String tagMatch,
+                                               Double minTagWeight);
+
     PageResponse<Project> getAvailableProjectPage(Long accountId, Integer pageNum, Integer pageSize);
 
     /**
@@ -50,6 +62,29 @@ public interface ProjectService {
                                  Long leaderAccountId,
                                  Boolean hasLeader,
                                  Boolean onlyAvailable);
+
+    /**
+     * 多标签软筛/软排序：{@code tags} 优先于单个 {@code tag}；
+     * {@code tagMatch=soft} 时只要路线向量任一标签权重 ≥ {@code minTagWeight} 即命中，
+     * 排序按路线向量在 {@code tags} 上的权重和计算。
+     */
+    List<Project> filterProjects(Long accountId,
+                                 Integer pageNum,
+                                 Integer pageSize,
+                                 String keyword,
+                                 String regionCode,
+                                 String tag,
+                                 String status,
+                                 LocalDate departureDateFrom,
+                                 LocalDate departureDateTo,
+                                 Long ownerAccountId,
+                                 Long leaderAccountId,
+                                 Boolean hasLeader,
+                                 Boolean onlyAvailable,
+                                 List<String> tags,
+                                 String tagMatch,
+                                 Double minTagWeight);
+
 
     void joinProject(Long id, Long accountId, Integer representedCount);
 

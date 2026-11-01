@@ -3,6 +3,7 @@ package com.viyangle.study_tour.graph;
 import com.viyangle.study_tour.utils.AttractionAdjacencyCalculator;
 import com.viyangle.study_tour.utils.AttractionTagBatchLabeler;
 import com.viyangle.study_tour.utils.SemanticEdgeCalculator;
+import com.viyangle.study_tour.service.TagVectorLabelService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,6 +35,15 @@ public class KnowledgeGraphAutoInitializer {
 
     @Autowired
     private KnowledgeGraph knowledgeGraph;
+
+    @Autowired(required = false)
+    private TagVectorLabelService tagVectorLabelService;
+
+    @Value("${app.tag-vector.auto-backfill-enabled:true}")
+    private boolean autoBackfillEnabled;
+
+    @Value("${app.tag-vector.backfill-batch-size:50}")
+    private int backfillBatchSize;
 
     @Value("${langchain4j.open-ai.chat-model.api-key:}")
     private String openaiApiKey;
@@ -134,8 +144,22 @@ public class KnowledgeGraphAutoInitializer {
                     log.error("知识图谱自动检测: 语义边计算失败: {}", e.getMessage(), e);
                 }
 
+                // 最后补齐 15 维标签向量：LLM 可能较慢，放在相邻/语义边之后，避免阻塞其它自动任务
+                boolean vectorLabeled = false;
+                try {
+                    if (autoBackfillEnabled && tagVectorLabelService != null && tagVectorLabelService.isEnabled()) {
+                        int labeled = tagVectorLabelService.backfillMissing(backfillBatchSize);
+                        vectorLabeled = labeled > 0;
+                        if (vectorLabeled) {
+                            log.info("知识图谱自动检测: 已为 {} 个景点补齐标签向量", labeled);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("知识图谱自动检测: 标签向量补标失败: {}", e.getMessage(), e);
+                }
+
                 // 如果有数据更新，重新加载知识图谱
-                if (tagProcessed || adjacencyProcessed || semanticProcessed) {
+                if (tagProcessed || adjacencyProcessed || semanticProcessed || vectorLabeled) {
                     log.info("知识图谱自动检测: 数据已更新，重新加载知识图谱...");
                     knowledgeGraph.reload();
                     log.info("知识图谱自动检测: 知识图谱重新加载完成");

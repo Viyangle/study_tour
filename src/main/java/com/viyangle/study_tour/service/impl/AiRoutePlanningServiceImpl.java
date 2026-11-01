@@ -20,9 +20,11 @@ import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.service.AttractionSyncService;
 import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ReferencePairService;
+import com.viyangle.study_tour.service.TagVectorService;
 import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import com.viyangle.study_tour.utils.AiConversationScope;
+import com.viyangle.study_tour.utils.AiRoutePlanTags;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -99,11 +101,20 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     @Autowired
     private TagMapper tagMapper;
 
+    @Autowired(required = false)
+    private TagVectorService tagVectorService;
+
+    @Value("${app.tag-vector.enabled:false}")
+    private boolean tagVectorEnabled;
+
     @Autowired
     private StringRedisTemplate redisTemplate;
 
     @Autowired
     private ReferencePairService referencePairService;
+
+    @Autowired(required = false)
+    private RouteIterationFeedbackService routeIterationFeedbackService;
 
     /**
      * 是否使用 Ollama 模式。Ollama 模式下不使用 tools（function calling），
@@ -203,6 +214,12 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         stageStartedAt = System.nanoTime();
         AIRoutePlan plan = parseAiPlan(finalText);
         validateFinalItems(plan.getItems(), candidates, state, message);
+        if (routeIterationFeedbackService != null) {
+            routeIterationFeedbackService.recordPlan(accountId, memoryId, plan);
+            routeIterationFeedbackService.recordExposure(accountId, memoryId,
+                    candidates.stream().map(Attraction::getPoiId).toList(),
+                    plan.getTagVector(), plan.getTag());
+        }
 
         updateStateAfterPlan(state, message, plan);
         saveState(memoryId, state);
@@ -740,15 +757,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     }
 
     private void validateAiPlan(AIRoutePlan plan) {
-        if (plan == null) {
-            throw new IllegalArgumentException("AI route plan is empty");
-        }
-        if (plan.getTag() == null || plan.getTag().isBlank()) {
-            throw new IllegalArgumentException("AI route plan tag is empty");
-        }
-        if (!ALLOWED_TAGS.contains(plan.getTag())) {
-            throw new IllegalArgumentException("AI route plan tag is invalid: " + plan.getTag());
-        }
+        AiRoutePlanTags.normalize(plan, ALLOWED_TAGS);
         validateAiItems(plan.getItems());
     }
 
@@ -1043,7 +1052,16 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             return state;
         }
 
-        String raw = redisTemplate.opsForValue().get(CONSTRAINT_KEY_PREFIX + AiConversationScope.storageId(memoryId));
+        String raw;
+        try {
+            raw = redisTemplate.opsForValue().get(CONSTRAINT_KEY_PREFIX + AiConversationScope.storageId(memoryId));
+        } catch (Exception e) {
+            log.warn("读取路线约束状态失败（Redis 不可用？），按空状态继续: memoryId={}, {}",
+                    memoryId, e.getMessage());
+            RouteConstraintState state = new RouteConstraintState();
+            state.setLastUserMessage(message);
+            return state;
+        }
         if (raw == null || raw.isBlank()) {
             RouteConstraintState state = new RouteConstraintState();
             state.setLastUserMessage(message);
@@ -1268,15 +1286,17 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         try {
             // 1. 确定个人节点集合（本次意图 + 长期偏好）
             Set<String> personalNodes = new HashSet<>();
-            
+            Set<String> intentTags = new LinkedHashSet<>();
+
             // 本次意图匹配的景点
             for (String tag : ALLOWED_TAGS) {
                 if (message != null && message.contains(tag)) {
+                    intentTags.add(tag);
                     Set<String> tagAttractions = knowledgeGraph.getAttractionsByTags(List.of(tag));
                     personalNodes.addAll(tagAttractions);
                 }
             }
-            
+
             // 长期偏好匹配的景点
             if (accountId != null) {
                 List<AccountTagPref> userPrefs = accountTagPrefMapper.selectByAccountId(accountId);
@@ -1284,21 +1304,44 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                     for (AccountTagPref pref : userPrefs) {
                         Tag tag = tagMapper.selectById(pref.getTagId());
                         if (tag != null && ALLOWED_TAGS.contains(tag.getName())) {
+                            intentTags.add(tag.getName());
                             Set<String> tagAttractions = knowledgeGraph.getAttractionsByTags(List.of(tag.getName()));
                             personalNodes.addAll(tagAttractions);
                         }
                     }
                 }
             }
-            
+
             if (personalNodes.isEmpty()) {
                 log.info("PPR: 无个人节点，跳过计算");
                 return Map.of();
             }
-            
-            // 2. 跑 PPR
-            log.info("PPR: 从{}个个人节点出发计算", personalNodes.size());
-            Map<String, Double> pprScores = knowledgeGraph.personalizedPageRank(personalNodes, 30, 0.85);
+
+            // 2. 跑 PPR：向量开启时按意图匹配度给种子加权，同标签边按相似度分配
+            boolean vectorReady = tagVectorEnabled
+                    && tagVectorService != null
+                    && tagVectorService.isReady();
+            Map<String, Double> pprScores;
+            if (vectorReady) {
+                double[] intent = tagVectorService.intentVector(intentTags);
+                Map<String, Double> seeds = new LinkedHashMap<>();
+                for (String poiId : personalNodes) {
+                    double weight = tagVectorService.match(poiId, intent);
+                    if (weight > 0) {
+                        seeds.put(poiId, weight);
+                    }
+                }
+                if (seeds.isEmpty()) {
+                    for (String poiId : personalNodes) {
+                        seeds.put(poiId, 1.0);
+                    }
+                }
+                log.info("PPR: 从{}个个人节点出发计算（向量加权）", seeds.size());
+                pprScores = knowledgeGraph.personalizedPageRank(seeds, 30, 0.85, true);
+            } else {
+                log.info("PPR: 从{}个个人节点出发计算", personalNodes.size());
+                pprScores = knowledgeGraph.personalizedPageRank(personalNodes, 30, 0.85);
+            }
             
             // 3. 过滤掉分数太低的（噪音）
             double threshold = 0.001;

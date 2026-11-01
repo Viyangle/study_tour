@@ -17,8 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Flyway 迁移的集成测试，需要本机 MySQL。
  *
- * <p>验证两条路径：空库从 V1 建表并执行到 V2；已有结构的库通过
- * baseline-on-migrate 跳过 V1，只执行 V2。CI 通过 {@code -Pci} 排除本类。</p>
+ * <p>验证两条路径：空库从 V1 建表并执行到最新版本；已有结构的库通过
+ * baseline-on-migrate 跳过 V1，只执行 V2 及之后的增量。两条路径都必须能拿到
+ * {@code project_abandon_records}（V1 建表、V3 幂等补建），否则放弃带队会 500。
+ * CI 通过 {@code -Pci} 排除本类。</p>
  */
 @Tag("requires-infra")
 class FlywayMigrationTest {
@@ -62,7 +64,7 @@ class FlywayMigrationTest {
     }
 
     @Test
-    @DisplayName("空库：执行 V1 建表与 V2 增量，角色枚举包含 ADMIN")
+    @DisplayName("空库：执行 V1–V5，角色枚举、放弃记录、标签向量与路线向量表存在")
     void migratesEmptySchemaToLatest() throws Exception {
         recreateSchema();
         try {
@@ -75,26 +77,56 @@ class FlywayMigrationTest {
 
             MigrateResult result = flyway.migrate();
 
-            assertEquals(2, result.migrationsExecuted, "空库应执行 V1 与 V2");
-            assertEquals(20, countTables(), "基线应创建 20 张业务表");
+            assertEquals(5, result.migrationsExecuted, "空库应执行 V1–V5");
+            assertEquals(24, countTables(), "基线 20 张业务表 + V4 的 3 张 + V5 的 1 张");
             assertTrue(roleColumnType().contains("ADMIN"), roleColumnType());
+            assertTrue(tableExists("project_abandon_records"), "放弃带队审计表应存在");
+            assertTrue(tableExists("tag_dimension"), "标签维度表应存在");
+            assertTrue(tableExists("tag_feedback_event"), "反馈事件表应存在");
+            assertTrue(tableExists("route_tag_weight"), "路线标签向量表应存在");
+            assertTrue(hasColumn("attraction_tag", "effective_weight"),
+                    "attraction_tag 应有生成列 effective_weight");
         } finally {
             dropSchema();
         }
     }
 
     @Test
-    @DisplayName("存量库：baseline-on-migrate 跳过 V1，仅执行 V2")
+    @DisplayName("存量库：baseline-on-migrate 跳过 V1，仅执行 V2–V5，并补出向量表")
     void baselinesExistingSchemaAndAppliesIncrement() throws Exception {
         recreateSchema();
         try {
-            // 模拟线上已有结构：只有 accounts 表，role 仍是旧枚举
+            // 模拟线上已有结构：核心表已存在，accounts.role 仍是旧枚举，且没有放弃记录表/向量表
             try (Connection connection = DriverManager.getConnection(schemaUrl(), USER, PASSWORD);
                  Statement statement = connection.createStatement()) {
                 statement.execute("CREATE TABLE accounts ("
                         + "id BIGINT NOT NULL AUTO_INCREMENT,"
                         + "role ENUM('USER','LEADER','BOTH') NOT NULL DEFAULT 'USER',"
                         + "PRIMARY KEY (id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                statement.execute("CREATE TABLE projects ("
+                        + "id BIGINT NOT NULL AUTO_INCREMENT,"
+                        + "PRIMARY KEY (id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                statement.execute("CREATE TABLE routes ("
+                        + "id BIGINT NOT NULL AUTO_INCREMENT,"
+                        + "tag VARCHAR(64) DEFAULT NULL,"
+                        + "PRIMARY KEY (id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                statement.execute("CREATE TABLE tags ("
+                        + "id BIGINT NOT NULL AUTO_INCREMENT,"
+                        + "name VARCHAR(50) NOT NULL,"
+                        + "type ENUM('INTEREST','ROUTE_STYLE','CROWD','SCENIC') NOT NULL DEFAULT 'INTEREST',"
+                        + "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                        + "PRIMARY KEY (id),"
+                        + "UNIQUE KEY name (name)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                statement.execute("CREATE TABLE attraction_tag ("
+                        + "poi_id VARCHAR(32) NOT NULL,"
+                        + "tag_id BIGINT NOT NULL,"
+                        + "source VARCHAR(16) NOT NULL DEFAULT 'LLM',"
+                        + "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                        + "PRIMARY KEY (poi_id, tag_id)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             }
 
@@ -107,8 +139,16 @@ class FlywayMigrationTest {
 
             MigrateResult result = flyway.migrate();
 
-            assertEquals(1, result.migrationsExecuted, "存量库只应执行 V2");
+            assertEquals(4, result.migrationsExecuted, "存量库只应执行 V2–V5");
             assertTrue(roleColumnType().contains("ADMIN"), roleColumnType());
+            assertTrue(tableExists("project_abandon_records"),
+                    "存量库跳过 V1 后，V3 必须补出放弃带队审计表");
+            assertTrue(tableExists("tag_dimension"),
+                    "存量库跳过 V1 后，V4 必须补出标签维度表");
+            assertTrue(tableExists("route_tag_weight"),
+                    "存量库跳过 V1 后，V5 必须补出路线标签向量表");
+            assertTrue(hasColumn("attraction_tag", "effective_weight"),
+                    "存量库的 attraction_tag 应补上 effective_weight");
         } finally {
             dropSchema();
         }
@@ -122,6 +162,29 @@ class FlywayMigrationTest {
                              + " AND TABLE_NAME <> 'flyway_schema_history'")) {
             assertTrue(resultSet.next());
             return resultSet.getInt(1);
+        }
+    }
+
+    private static boolean tableExists(String tableName) throws Exception {
+        try (Connection connection = DriverManager.getConnection(schemaUrl(), USER, PASSWORD);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                     "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '" + SCHEMA + "'"
+                             + " AND TABLE_NAME = '" + tableName + "'")) {
+            assertTrue(resultSet.next());
+            return resultSet.getInt(1) == 1;
+        }
+    }
+
+    private static boolean hasColumn(String tableName, String columnName) throws Exception {
+        try (Connection connection = DriverManager.getConnection(schemaUrl(), USER, PASSWORD);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                     "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '" + SCHEMA + "'"
+                             + " AND TABLE_NAME = '" + tableName + "'"
+                             + " AND COLUMN_NAME = '" + columnName + "'")) {
+            assertTrue(resultSet.next());
+            return resultSet.getInt(1) == 1;
         }
     }
 

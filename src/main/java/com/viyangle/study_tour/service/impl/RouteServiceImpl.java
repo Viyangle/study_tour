@@ -18,6 +18,10 @@ import com.viyangle.study_tour.pojo.Route;
 import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.pojo.Tag;
 import com.viyangle.study_tour.service.RouteService;
+import com.viyangle.study_tour.service.RouteTagVectorService;
+import com.viyangle.study_tour.service.TagFeedbackService;
+import com.viyangle.study_tour.utils.SecurityContextUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -36,6 +40,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class RouteServiceImpl implements RouteService {
     private static final String AI_ROUTE_MAPPING_KEY_PREFIX = "ai:route:v2:memory:";
@@ -61,6 +66,15 @@ public class RouteServiceImpl implements RouteService {
 
     @Autowired
     private TagMapper tagMapper;
+
+    @Autowired(required = false)
+    private TagFeedbackService tagFeedbackService;
+
+    @Autowired(required = false)
+    private RouteTagVectorService routeTagVectorService;
+
+    @Autowired(required = false)
+    private RouteIterationFeedbackService routeIterationFeedbackService;
 
     @Autowired
     private StringRedisTemplate redisTemplate;
@@ -88,14 +102,30 @@ public class RouteServiceImpl implements RouteService {
         routeMapper.insert(route);
         upsertRouteAttractions(route.getId(), normalized);
         routeMapper.refreshOutdatedAttractionFlagById(route.getId());
+        rebuildRouteVector(route.getId(), normalized);
         return route.getId();
     }
 
     @Transactional
     @Override
     public Long saveOrUpdateAIConversationRoute(String memoryId, String tag, List<RouteAttraction> routeAttractions) {
+        return saveOrUpdateAIConversationRoute(memoryId, tag, routeAttractions, null);
+    }
+
+    @Transactional
+    @Override
+    public Long saveOrUpdateAIConversationRoute(String memoryId,
+                                                String tag,
+                                                List<RouteAttraction> routeAttractions,
+                                                Map<String, Double> tagVector) {
         String mappingKey = AI_ROUTE_MAPPING_KEY_PREFIX + AiConversationScope.storageId(memoryId);
-        String routeIdText = redisTemplate.opsForValue().get(mappingKey);
+        String routeIdText;
+        try {
+            routeIdText = redisTemplate.opsForValue().get(mappingKey);
+        } catch (Exception e) {
+            log.warn("读取 AI 路线映射失败（Redis 不可用？），按新建路线处理: memoryId={}, {}", memoryId, e.getMessage());
+            routeIdText = null;
+        }
         String regionAdcode = resolveRegionAdcode(routeAttractions);
 
         Long routeId = null;
@@ -125,7 +155,16 @@ public class RouteServiceImpl implements RouteService {
         routeAttractionMapper.deleteByRouteId(routeId);
         upsertRouteAttractions(routeId, routeAttractions);
         routeMapper.refreshOutdatedAttractionFlagById(routeId);
-        redisTemplate.opsForValue().set(mappingKey, String.valueOf(routeId), Duration.ofDays(1));
+        rebuildRouteVector(routeId, routeAttractions, tagVector);
+        try {
+            redisTemplate.opsForValue().set(mappingKey, String.valueOf(routeId), Duration.ofDays(1));
+        } catch (Exception e) {
+            log.warn("保存 AI 路线映射失败（Redis 不可用？），不影响路线落库: memoryId={}, {}", memoryId, e.getMessage());
+        }
+        if (routeIterationFeedbackService != null) {
+            routeIterationFeedbackService.bindRoute(
+                    routeId, SecurityContextUtil.currentAccountId(), memoryId);
+        }
         return routeId;
     }
 
@@ -254,7 +293,15 @@ public class RouteServiceImpl implements RouteService {
         }
 
         PageHelper.startPage(page, size);
-        return routeMapper.selectByPreference(preferredTagNames, regionCode);
+        List<Route> routes = routeMapper.selectByPreference(preferredTagNames, regionCode);
+        if (routeTagVectorService != null && routes != null) {
+            for (Route route : routes) {
+                if (route != null && route.getId() != null) {
+                    route.setTagVector(routeTagVectorService.view(route.getId()));
+                }
+            }
+        }
+        return routes;
     }
 
     @Override
@@ -269,6 +316,7 @@ public class RouteServiceImpl implements RouteService {
         requireExistingRoute(routeId);
         // 由联合主键兜底，重复收藏按成功处理。
         routeFavoriteMapper.insertIfAbsent(accountId, routeId);
+        recordFeedback("ROUTE_FAVORITE", routeId, accountId);
     }
 
     @Override
@@ -280,6 +328,36 @@ public class RouteServiceImpl implements RouteService {
         }
         // 未收藏时删除影响 0 行，仍按成功处理，方便前端重试。
         routeFavoriteMapper.deleteByAccountIdAndRouteId(accountId, routeId);
+        recordFeedback("ROUTE_UNFAVORITE", routeId, accountId);
+    }
+
+    private void recordFeedback(String type, Long routeId, Long accountId) {
+        if (tagFeedbackService == null) {
+            return;
+        }
+        try {
+            tagFeedbackService.recordRouteAction(type, routeId, accountId);
+        } catch (Exception e) {
+            // 反馈失败不能影响收藏主流程
+            log.warn("记录路线反馈失败: type={}, routeId={}, accountId={}, {}",
+                    type, routeId, accountId, e.getMessage());
+        }
+    }
+
+    private void rebuildRouteVector(Long routeId, List<RouteAttraction> stops) {
+        rebuildRouteVector(routeId, stops, null);
+    }
+
+    private void rebuildRouteVector(Long routeId, List<RouteAttraction> stops, Map<String, Double> tagVector) {
+        if (routeTagVectorService == null) {
+            return;
+        }
+        try {
+            routeTagVectorService.rebuild(routeId, stops, tagVector);
+        } catch (Exception e) {
+            // 向量重算失败不能影响路线落库
+            log.warn("路线标签向量重算失败: routeId={}, {}", routeId, e.getMessage());
+        }
     }
 
     private void requireAuthenticatedAccount(Long accountId) {

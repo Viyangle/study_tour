@@ -4,6 +4,7 @@ import com.viyangle.study_tour.graph.KnowledgeGraph;
 import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.RecommendedProject;
+import com.viyangle.study_tour.service.TagVectorService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -47,6 +49,9 @@ class KnowledgeGraphRecommendServiceImplTest {
 
     @Mock
     private KnowledgeGraph graph;
+
+    @Mock
+    private TagVectorService tagVectorService;
 
     @InjectMocks
     private KnowledgeGraphRecommendServiceImpl service;
@@ -311,6 +316,35 @@ class KnowledgeGraphRecommendServiceImplTest {
             List<Project> result = service.recommendProjects(1L, 2);
 
             // 先选 p1；p2 与 p1 标签完全相同被 MMR 惩罚，p3 虽分子更低但更互补
+            assertEquals(List.of(1L, 3L), idsOf(result));
+        }
+
+        @Test
+        @DisplayName("向量 MMR 用项目站点向量的余弦相似度做多样性控制")
+        void vectorMmrUsesProjectVectorSimilarity() {
+            graphLoaded();
+            projectIds(1L, 2L, 3L);
+            registerProject(openProject(1), 5.0);
+            registerProject(openProject(2), 4.9);
+            registerProject(openProject(3), 4.0);
+            routeOf(1L, 11L, "a1");
+            routeOf(2L, 12L, "a2");
+            routeOf(3L, 13L, "a3");
+            projectPrefs(1L, null, "A");
+            when(graph.getAttractionsByTags(anyCollection())).thenReturn(Set.of("a1", "a2", "a3"));
+            when(graph.personalizedPageRank(org.mockito.ArgumentMatchers.anyMap(), anyInt(), anyDouble(), eq(true)))
+                    .thenReturn(Map.of());
+            when(tagVectorService.isReady()).thenReturn(true);
+            when(tagVectorService.intentVector(anyCollection())).thenReturn(new double[]{1.0, 0.0});
+            when(tagVectorService.match(anyString(), any())).thenReturn(1.0);
+            when(tagVectorService.vector("a1")).thenReturn(new double[]{1.0, 0.0});
+            when(tagVectorService.vector("a2")).thenReturn(new double[]{1.0, 0.0});
+            when(tagVectorService.vector("a3")).thenReturn(new double[]{0.0, 1.0});
+            ReflectionTestUtils.setField(service, "tagVectorEnabled", true);
+
+            List<Project> result = service.recommendProjects(1L, 2);
+
+            // p1 与 p2 向量完全一样，p3 虽然分数低但更互补
             assertEquals(List.of(1L, 3L), idsOf(result));
         }
 
@@ -663,6 +697,55 @@ class KnowledgeGraphRecommendServiceImplTest {
             List<Attraction> result = service.retrieveCandidatesByGraph(List.of("A", "B"), null, 10);
 
             assertEquals("p1", result.get(0).getPoiId());
+        }
+
+        @Test
+        @DisplayName("开启向量打分后按匹配度排序，而不是按标签个数")
+        void vectorScoringUsesMatchInsteadOfExactTagCount() {
+            graphLoaded();
+            when(graph.getAllAttractionPoiIds()).thenReturn(new LinkedHashSet<>(List.of("p1", "p2")));
+            when(graph.expandNeighbors(anyCollection(), eq(2)))
+                    .thenReturn(new LinkedHashSet<>(List.of("p2", "p1")));
+            stubAttractionsByPoi();
+
+            double[] intent = new double[15];
+            intent[0] = 1.0;
+            when(tagVectorService.isReady()).thenReturn(true);
+            when(tagVectorService.intentVector(anyCollection())).thenReturn(intent);
+            when(tagVectorService.score("p1", intent)).thenReturn(1.0);
+            when(tagVectorService.score("p2", intent)).thenReturn(0.4);
+            ReflectionTestUtils.setField(service, "tagVectorEnabled", true);
+
+            List<Attraction> result = service.retrieveCandidatesByGraph(List.of("历史人文"), null, 10);
+
+            assertEquals("p1", result.get(0).getPoiId());
+            assertEquals("p2", result.get(1).getPoiId());
+            verify(graph, never()).getAttractionTags(anyString());
+        }
+
+        @Test
+        @DisplayName("向量模式下 0 分候选不进入候选池，避免无关景点被推荐")
+        void zeroScoreCandidatesAreExcluded() {
+            graphLoaded();
+            when(graph.getAllAttractionPoiIds())
+                    .thenReturn(new LinkedHashSet<>(List.of("p1", "p2", "p3")));
+            when(graph.expandNeighbors(anyCollection(), eq(2)))
+                    .thenReturn(new LinkedHashSet<>(List.of("p1", "p2", "p3")));
+            stubAttractionsByPoi();
+
+            double[] intent = new double[15];
+            intent[0] = 1.0;
+            when(tagVectorService.isReady()).thenReturn(true);
+            when(tagVectorService.intentVector(anyCollection())).thenReturn(intent);
+            when(tagVectorService.score("p1", intent)).thenReturn(1.0);
+            when(tagVectorService.score("p2", intent)).thenReturn(0.4);
+            when(tagVectorService.score("p3", intent)).thenReturn(0.0);
+            ReflectionTestUtils.setField(service, "tagVectorEnabled", true);
+
+            List<Attraction> result = service.retrieveCandidatesByGraph(List.of("科技探索"), null, 10);
+
+            assertEquals(2, result.size());
+            assertTrue(result.stream().noneMatch(a -> "p3".equals(a.getPoiId())));
         }
 
         @Test

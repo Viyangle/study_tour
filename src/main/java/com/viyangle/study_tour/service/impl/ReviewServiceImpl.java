@@ -6,7 +6,9 @@ import com.viyangle.study_tour.exception.UnauthorizedException;
 import com.viyangle.study_tour.mapper.ReviewMapper;
 import com.viyangle.study_tour.pojo.Review;
 import com.viyangle.study_tour.service.ReviewService;
+import com.viyangle.study_tour.service.TagFeedbackService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 
+@Slf4j
 @Service
 public class ReviewServiceImpl implements ReviewService {
 
@@ -22,6 +25,9 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Autowired
     private ReviewMapper reviewMapper;
+
+    @Autowired(required = false)
+    private TagFeedbackService tagFeedbackService;
 
     @Override
     @Transactional
@@ -35,7 +41,22 @@ public class ReviewServiceImpl implements ReviewService {
         review.setFromAccountId(requireCurrentAccountId());
         review.setCreatedAt(LocalDateTime.now());
         reviewMapper.insert(review);
+        recordFeedback(review);
         return review.getId();
+    }
+
+    private void recordFeedback(Review review) {
+        if (tagFeedbackService == null) {
+            return;
+        }
+        try {
+            tagFeedbackService.recordReview(review.getId(), review.getProjectId(), review.getRouteId(),
+                    review.getOverallScore(), review.getFromAccountId());
+        } catch (Exception e) {
+            // 反馈失败不能影响评价主流程
+            log.warn("记录评价反馈失败: reviewId={}, projectId={}, {}",
+                    review.getId(), review.getProjectId(), e.getMessage());
+        }
     }
 
     @Override

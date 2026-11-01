@@ -21,6 +21,10 @@
         where id = #{id}
     </update>
 
+    <update id="updateTag">
+        update routes set tag = #{tag} where id = #{id}
+    </update>
+
     <update id="refreshOutdatedAttractionFlagById" parameterType="java.lang.Long">
         update routes r
         set contains_outdated_attractions = exists(

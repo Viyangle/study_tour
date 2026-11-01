@@ -2,6 +2,7 @@ package com.viyangle.study_tour.graph;
 
 import com.viyangle.study_tour.mapper.*;
 import com.viyangle.study_tour.pojo.*;
+import com.viyangle.study_tour.service.TagVectorService;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,6 +62,14 @@ public class KnowledgeGraph {
 
     @Autowired
     private AccountMapper accountMapper;
+
+    /** 可选：向量就绪时，PPR 的同标签边按向量相似度分配，而不是平均分。 */
+    @Autowired(required = false)
+    private TagVectorService tagVectorService;
+
+    /** 向量 PPR：同标签边的最低相似度与每个节点的邻居上限。 */
+    private static final double MIN_VECTOR_EDGE_SIMILARITY = 0.2;
+    private static final int VECTOR_NEIGHBOR_LIMIT = 8;
 
     // ========== 节点存储 ==========
     private final Map<String, Attraction> attractions = new ConcurrentHashMap<>();           // poiId → Attraction
@@ -351,18 +360,66 @@ public class KnowledgeGraph {
      * @return poiId → PPR 分数
      */
     public Map<String, Double> personalizedPageRank(Collection<String> personalNodes, int maxIterations, double dampingFactor) {
+        Map<String, Double> seeds = new HashMap<>();
+        if (personalNodes != null) {
+            for (String poiId : personalNodes) {
+                if (poiId != null) {
+                    seeds.put(poiId, 1.0);
+                }
+            }
+        }
+        return personalizedPageRank(seeds, maxIterations, dampingFactor, false);
+    }
+
+    /**
+     * 带种子权重、可选向量边的 PPR。
+     *
+     * @param personalNodes poiId → 种子权重；内部会归一化
+     * @param vectorEdges   是否用 15 维向量相似度给同标签边加权（需要 TagVectorService 就绪）
+     */
+    public Map<String, Double> personalizedPageRank(Map<String, Double> personalNodes,
+                                                    int maxIterations,
+                                                    double dampingFactor,
+                                                    boolean vectorEdges) {
         Map<String, Double> scores = new HashMap<>();
         if (personalNodes == null || personalNodes.isEmpty()) {
             return scores;
         }
 
         Set<String> allPoiIds = getAllAttractionPoiIds();
-        if (allPoiIds.isEmpty()) return scores;
+        if (allPoiIds.isEmpty()) {
+            return scores;
+        }
 
-        // 初始化：个人化节点均匀分布
-        double initVal = 1.0 / personalNodes.size();
+        double totalSeedWeight = personalNodes.values().stream()
+                .filter(value -> value != null && value > 0)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+        Map<String, Double> seeds = new HashMap<>();
+        if (totalSeedWeight <= 0) {
+            double uniform = 1.0 / personalNodes.size();
+            for (String poiId : personalNodes.keySet()) {
+                if (poiId != null) {
+                    seeds.put(poiId, uniform);
+                }
+            }
+            totalSeedWeight = seeds.size();
+        } else {
+            for (Map.Entry<String, Double> entry : personalNodes.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null && entry.getValue() > 0) {
+                    seeds.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        if (seeds.isEmpty() || totalSeedWeight <= 0) {
+            return scores;
+        }
+
+        boolean useVectorEdges = vectorEdges && tagVectorService != null && tagVectorService.isReady();
+
+        // 初始化：种子按权重分布
         for (String poiId : allPoiIds) {
-            scores.put(poiId, personalNodes.contains(poiId) ? initVal : 0.0);
+            scores.put(poiId, seeds.getOrDefault(poiId, 0.0) / totalSeedWeight);
         }
 
         // 预构建每个节点的出边和权重
@@ -382,7 +439,7 @@ public class KnowledgeGraph {
                 }
             }
 
-            // 同标签景点（权重 0.2）
+            // 同标签景点（权重 0.2）：向量模式下按 similarity 分配，且只保留 top-N
             List<String> myTags = getAttractionTags(poiId);
             Set<String> sameTagPois = new LinkedHashSet<>();
             for (String tag : myTags) {
@@ -390,9 +447,30 @@ public class KnowledgeGraph {
             }
             sameTagPois.remove(poiId);
             if (!sameTagPois.isEmpty()) {
-                neighbors.addAll(sameTagPois);
-                for (int i = 0; i < sameTagPois.size(); i++) {
-                    weights.add(0.2 / sameTagPois.size());
+                if (useVectorEdges) {
+                    List<Map.Entry<String, Double>> similar = new ArrayList<>();
+                    for (String other : sameTagPois) {
+                        double similarity = tagVectorService.similarity(poiId, other);
+                        if (similarity >= MIN_VECTOR_EDGE_SIMILARITY) {
+                            similar.add(Map.entry(other, similarity));
+                        }
+                    }
+                    similar.sort((left, right) -> Double.compare(right.getValue(), left.getValue()));
+                    if (similar.size() > VECTOR_NEIGHBOR_LIMIT) {
+                        similar = similar.subList(0, VECTOR_NEIGHBOR_LIMIT);
+                    }
+                    double totalSimilarity = similar.stream().mapToDouble(Map.Entry::getValue).sum();
+                    if (totalSimilarity > 0) {
+                        for (Map.Entry<String, Double> entry : similar) {
+                            neighbors.add(entry.getKey());
+                            weights.add(0.2 * entry.getValue() / totalSimilarity);
+                        }
+                    }
+                } else {
+                    neighbors.addAll(sameTagPois);
+                    for (int i = 0; i < sameTagPois.size(); i++) {
+                        weights.add(0.2 / sameTagPois.size());
+                    }
                 }
             }
 
@@ -426,12 +504,15 @@ public class KnowledgeGraph {
             outWeights.put(poiId, weights);
         }
 
-        // 迭代计算
-        double teleport = (1 - dampingFactor) / personalNodes.size();
+        // 迭代计算：teleport 也按种子权重分布
+        Map<String, Double> teleport = new HashMap<>();
+        for (Map.Entry<String, Double> entry : seeds.entrySet()) {
+            teleport.put(entry.getKey(), (1 - dampingFactor) * entry.getValue() / totalSeedWeight);
+        }
         for (int iter = 0; iter < maxIterations; iter++) {
             Map<String, Double> newScores = new HashMap<>();
             for (String poiId : allPoiIds) {
-                newScores.put(poiId, personalNodes.contains(poiId) ? teleport : 0.0);
+                newScores.put(poiId, teleport.getOrDefault(poiId, 0.0));
             }
 
             for (String fromPoi : allPoiIds) {

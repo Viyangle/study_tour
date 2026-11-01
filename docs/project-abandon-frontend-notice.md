@@ -110,9 +110,12 @@ Authorization: Bearer <token>
 
 ## 五、部署依赖（需要运维/后端先做）
 
-- 本次新增表 `project_abandon_records`，脚本：`scripts/create_project_abandon_records.sql`（可重复执行）；
-- **顺序：先执行脚本，再换 jar**。表不存在时放弃带队会在写审计记录时报错并整体回滚——项目数据不会被改坏，
-  但接口会返回 500「系统繁忙，请稍后再试」。
+- 本次新增表 `project_abandon_records`。自 Flyway `V3__create_project_abandon_records.sql` 起由迁移自动补建（幂等，
+  `CREATE TABLE IF NOT EXISTS`）：**存量库首次启动即补表**，空库由 V1 建表，不需要再手工执行脚本；
+- 如果线上暂时不能升级后端，可先执行 `scripts/create_project_abandon_records.sql`（可重复执行）再复测；
+- 表不存在时放弃带队会在写审计记录时报错并整体回滚——项目数据不会被改坏，但接口会返回
+  500「系统繁忙，请稍后再试」。**判断方法**：看后端日志有没有
+  `Table 'xxx.project_abandon_records' doesn't exist`，或直接 `show tables like 'project_abandon%'`。
 
 ## 六、复测建议
 

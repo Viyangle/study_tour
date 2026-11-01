@@ -59,7 +59,7 @@ langchain4j:
     chat-model:
       base-url: https://api.deepseek.com # http://localhost:11434/v1
       api-key: ${CHAT_MODEL_KEY} # ollama
-      model-name: deepseek-v4-flash # qwen3.6:35b
+      model-name: deepseek-flash # qwen3.6:35b
       temperature: 0
       max-tokens: 2048
       response-format: json_object
@@ -130,6 +130,30 @@ app:
     ollama-disable-thinking: true
   security:
     enabled: true
+  # 景点 15 维标签向量；enabled=false 时推荐/召回仍走旧的标签名精确匹配
+  tag-vector:
+    enabled: true
+    # 新景点/历史景点自动打分：LLM 优先，失败回退关键词规则
+    auto-label-enabled: true
+    # 单次 LLM 打分等待上限，超时后回退规则
+    label-timeout-seconds: 25
+    # 低于该分数的维度不落库，过滤 LLM 的弱相关噪声
+    min-prior-weight: 0.4
+    # 模型 tagVector 在路线最终向量中的权重，其余来自站点聚合
+    route-model-weight: 0.3
+    # 启动时是否补标没有 LLM_V2/RULE 权重的景点
+    auto-backfill-enabled: true
+    # 每次补标最多处理多少个景点，避免首次启动长时间占用后台线程
+    backfill-batch-size: 50
+    # 反馈闭环：服务端动作/前端事件 → tag_feedback_event → 定时更新 pos/neg
+    feedback-enabled: true
+    # 默认只采集事件，不自动应用；验证有效后再打开
+    apply-enabled: false
+    apply-interval-ms: 30000
+    apply-batch-size: 100
+    pos-half-life-days: 90
+    neg-half-life-days: 180
+    user-cap-30d: 0.8
   # 路线规划 Agent 接口（/routes/agent/runs）运行限制，详见 docs/API.md 第 8 节
   agent:
     # 单轮整体执行时间上限

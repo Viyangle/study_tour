@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- **景点标签 15 维向量（第一版）**：新增 `V4__attraction_tag_vector.sql`（`tag_dimension`、`attraction_tag` 的先验/证据列与 `effective_weight` 生成列、反馈事件表、向量快照表）；新增 `TagVectorService` 统一加载 0~1 权重；`KnowledgeGraphRecommendServiceImpl` 在 `app.tag-vector.enabled=true` 时用 `+50·Σq_i s_i` 对候选打分并放开种子集合，关闭时保持旧逻辑；新增 `GET /tags/interests` 与 `GET /attractions/{poiId}`（详情带 `tagVector`）。
+- **景点标签自动打分**：高德同步落库后由 `TagVectorLabelService` 立即打分，LLM（`AttractionTagScorerAi`）优先、超时/失败回退 `StudyTourTagClassifier.score` 规则；历史/脚本数据由启动补标（每批 50）或 ADMIN 接口 `POST /admin/tag-vectors/backfill`、`/{poiId}/relabel` 处理；默认只保留 ≥0.4 的维度（`app.tag-vector.min-prior-weight`），过滤弱相关噪声。
+- **离线评估**：`TagVectorEvalTool` + `TagVectorMetrics`，用历史路线站点做 relevance，输出 Recall@10/NDCG@10 与 `eval_out/*.csv`。
+- **标签反馈闭环**：新增 `TagFeedbackService`/`TagFeedbackProcessor`/`FeedbackController`；`POST /feedback/events` 接收前端批量事件；处理器每 30 秒按热度公式更新 `pos/neg`，正/负证据按 90/180 天衰减，单用户单景点 30 天上限 ±2.0，显式纠正只作用于指定维度。
+- **反馈语义调整**：点赞/点踩、收藏、加入/退出项目、评价改为 `preference-only`，只记录用户偏好，不再修改景点 tag；属性证据只保留显式纠正、路线保存/发布和路线迭代。
+- **反馈应用保护**：新增 `app.tag-vector.apply-enabled`，默认 `false`，只采集事件不自动改权重；留出路线实验显示当前正向迭代反馈会让 NDCG@3 从 0.0521 降到 0.0365，验证前不自动应用。
+- **路线会话结算**：`RouteIterationFeedbackService` 记录同一 `accountId + memoryId` 过程中出现过的景点，中间轮次不加减分；项目发布时最终路线景点 `ROUTE_STOP_CONFIRM +0.8`，过程出现但未进最终路线 `ROUTE_STOP_REJECT -0.2`。降低幅度为正向的 1/4，符合「只有最终确定的才提高」。
+- **候选曝光轻降**：新增 `ROUTE_STOP_NOT_SELECTED -0.02`，记录候选列表展示过、但从未进入任何路线的景点；只对当前 tag 得分 >0 的候选生效。同时排除向量候选池中 0 分景点，避免科技意图把没有科技维度的景点带进 LLM。
+- **PPR/MMR 向量化**：`KnowledgeGraph.personalizedPageRank` 支持种子权重与按向量相似度分配同标签边；首页推荐 PPR 按用户偏好向量给种子加权，MMR 用项目站点平均向量的余弦相似度；AI 规划的 PPR 同样按意图匹配度加权。全部由 `app.tag-vector.enabled` 控制，关闭时回退旧的均匀 PPR 与 Jaccard MMR。
+- **多标签路线（V5）**：新增 `route_tag_weight(route_id, tag_id, weight)`；路线向量 = 站点景点向量按时长加权平均，保存 AI/手动路线时自动重算，`routes.tag` 回写为 argmax 主标签兼容旧字段；新增 `GET /routes/{id}/tags`，`GET /routes` 列表和 `GET /projects/{id}` 详情返回 `tagVector`。
+- **AI 输出 tagVector**：`system-route-compose.txt` 要求模型可选输出 1~3 个主题的 `tagVector`；`AIRoutePlan` 增加 `tagVector`，保存路线时按 `app.tag-vector.route-model-weight`（默认 0.3）与站点聚合向量融合，非法/空向量自动回退单标签。
+- **项目列表多标签软筛/软排序**：`GET /projects` 和 `GET /projects/filter` 支持 `tags`、`tagMatch=soft`、`minTagWeight`；软筛按路线向量任一维度达到阈值命中，软排序按所选标签权重和 + 地区分计算，`tagMatch=exact` 仍走原 `projects.tag` 逻辑。
+
+### Fixed
+
+- **领队放弃带队固定返回 500**：`project_abandon_records` 只在 `V1__baseline.sql` 里创建，存量库被 `baseline-on-migrate` 直接标记到 V1 后不会执行 V1，表因此缺失；`POST /projects/{id}/abandon` 写审计记录时抛 SQL 异常、事务整体回滚，接口返回 500「系统繁忙，请稍后再试」。新增幂等迁移 `V3__create_project_abandon_records.sql` 自动补表，`FlywayMigrationTest` 同时校验空库与存量库两条路径都能拿到该表。
+
 ## [0.0.4] - 2026-10-27
 
 ### Added

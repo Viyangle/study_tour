@@ -5,8 +5,10 @@ import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.RecommendedProject;
 import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
+import com.viyangle.study_tour.service.TagVectorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -52,6 +54,13 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
     @Autowired
     private KnowledgeGraph graph;
 
+    @Autowired
+    private TagVectorService tagVectorService;
+
+    /** 关闭时保持旧的「标签名精确命中 +50」逻辑，便于灰度和回滚。 */
+    @Value("${app.tag-vector.enabled:false}")
+    private boolean tagVectorEnabled = false;
+
     @Override
     public List<Project> recommendProjects(Long accountId, int limit) {
         if (!graph.isLoaded()) {
@@ -79,8 +88,27 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
         }
 
         // 预计算 Personalized PageRank
-        Set<String> personalNodes = graph.getAttractionsByTags(userTags);
-        Map<String, Double> pprScores = graph.personalizedPageRank(personalNodes, 30, 0.85);
+        boolean vectorReady = tagVectorEnabled
+                && tagVectorService != null
+                && tagVectorService.isReady();
+        Map<String, Double> pprSeeds = new LinkedHashMap<>();
+        if (vectorReady) {
+            double[] intent = tagVectorService.intentVector(userTags);
+            for (String poiId : graph.getAttractionsByTags(userTags)) {
+                double weight = tagVectorService.match(poiId, intent);
+                if (weight > 0) {
+                    pprSeeds.put(poiId, weight);
+                }
+            }
+        }
+        if (pprSeeds.isEmpty()) {
+            for (String poiId : graph.getAttractionsByTags(userTags)) {
+                pprSeeds.put(poiId, 1.0);
+            }
+        }
+        Map<String, Double> pprScores = vectorReady
+                ? graph.personalizedPageRank(pprSeeds, 30, 0.85, true)
+                : graph.personalizedPageRank(pprSeeds.keySet(), 30, 0.85);
 
         // 对所有可推荐项目打分
         Map<Long, Double> scores = new LinkedHashMap<>();
@@ -123,7 +151,7 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
         }
 
         // MMR 多样性排序
-        List<Long> sortedProjectIds = mmrSelect(scores, maxLimit);
+        List<Long> sortedProjectIds = mmrSelect(scores, maxLimit, vectorReady);
 
         List<Project> result = new ArrayList<>();
         for (Long pid : sortedProjectIds) {
@@ -198,8 +226,9 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
     /**
      * MMR（Maximal Marginal Relevance）多样性选择。
      * 每次选取得分最高的项目，然后惩罚与已选项目相似度过高的候选。
+     * 向量模式用项目站点平均向量做余弦相似度，旧模式保留标签集合 Jaccard。
      */
-    private List<Long> mmrSelect(Map<Long, Double> scores, int limit) {
+    private List<Long> mmrSelect(Map<Long, Double> scores, int limit, boolean vectorMmr) {
         if (scores.size() <= limit) {
             return scores.entrySet().stream()
                     .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
@@ -207,14 +236,44 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
                     .collect(Collectors.toList());
         }
 
+        Set<Long> selected = new LinkedHashSet<>();
+        Set<Long> remaining = new LinkedHashSet<>(scores.keySet());
+
+        if (vectorMmr) {
+            double maxRelevance = scores.values().stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+            Map<Long, double[]> projectVectors = new HashMap<>();
+            for (Long projectId : scores.keySet()) {
+                projectVectors.put(projectId, getProjectTagVector(projectId));
+            }
+
+            while (selected.size() < limit && !remaining.isEmpty()) {
+                double bestMMR = Double.NEGATIVE_INFINITY;
+                Long bestId = null;
+                for (Long candidate : remaining) {
+                    double relevance = maxRelevance > 0 ? scores.get(candidate) / maxRelevance : 0.0;
+                    double maxSimilarity = 0.0;
+                    for (Long selectedId : selected) {
+                        maxSimilarity = Math.max(maxSimilarity,
+                                cosineSimilarity(projectVectors.get(candidate), projectVectors.get(selectedId)));
+                    }
+                    double mmr = MMR_LAMBDA * relevance - (1 - MMR_LAMBDA) * maxSimilarity;
+                    if (mmr > bestMMR) {
+                        bestMMR = mmr;
+                        bestId = candidate;
+                    }
+                }
+                if (bestId == null) break;
+                selected.add(bestId);
+                remaining.remove(bestId);
+            }
+            return new ArrayList<>(selected);
+        }
+
         // 预计算每个项目的标签集合（用于相似度计算）
         Map<Long, Set<String>> projectTagSets = new HashMap<>();
         for (Long pid : scores.keySet()) {
             projectTagSets.put(pid, getProjectRouteTagSet(pid));
         }
-
-        Set<Long> selected = new LinkedHashSet<>();
-        Set<Long> remaining = new LinkedHashSet<>(scores.keySet());
 
         while (selected.size() < limit && !remaining.isEmpty()) {
             double bestMMR = Double.NEGATIVE_INFINITY;
@@ -241,6 +300,60 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
         }
 
         return new ArrayList<>(selected);
+    }
+
+    /** 项目路线站点的平均 15 维向量；没有站点/向量时返回 null。 */
+    private double[] getProjectTagVector(Long projectId) {
+        Long routeId = graph.getProjectRoute(projectId);
+        if (routeId == null) {
+            return null;
+        }
+        List<String> pois = graph.getRouteAttractions(routeId);
+        if (pois == null || pois.isEmpty()) {
+            return null;
+        }
+        double[] sum = null;
+        int count = 0;
+        for (String poiId : pois) {
+            double[] vector = tagVectorService.vector(poiId);
+            if (vector == null || vector.length == 0) {
+                continue;
+            }
+            if (sum == null) {
+                sum = new double[vector.length];
+            }
+            int size = Math.min(sum.length, vector.length);
+            for (int i = 0; i < size; i++) {
+                sum[i] += vector[i];
+            }
+            count++;
+        }
+        if (sum == null || count == 0) {
+            return null;
+        }
+        for (int i = 0; i < sum.length; i++) {
+            sum[i] /= count;
+        }
+        return sum;
+    }
+
+    private double cosineSimilarity(double[] a, double[] b) {
+        if (a == null || b == null) {
+            return 0.0;
+        }
+        int size = Math.min(a.length, b.length);
+        double dot = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
+        for (int i = 0; i < size; i++) {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        if (normA <= 0 || normB <= 0) {
+            return 0.0;
+        }
+        return Math.max(0.0, Math.min(1.0, dot / (Math.sqrt(normA) * Math.sqrt(normB))));
     }
 
     /**
@@ -298,9 +411,21 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
 
         int maxLimit = limit <= 0 ? 20 : limit;
 
-        // 第1步：按标签找到种子景点
+        // 向量打分开关：关闭或未加载时回退到旧的「标签名精确命中」逻辑
+        double[] intent = null;
+        boolean vectorScoring = tagVectorEnabled
+                && tagVectorService != null
+                && tagVectorService.isReady();
+        if (vectorScoring) {
+            intent = tagVectorService.intentVector(tagNames);
+            vectorScoring = sum(intent) > 0.0;
+        }
+
+        // 第1步：向量开启时用全量景点做种子（让部分匹配也能进候选），否则按标签取种子
         Set<String> seedPoiIds;
-        if (tagNames != null && !tagNames.isEmpty()) {
+        if (vectorScoring) {
+            seedPoiIds = new LinkedHashSet<>(graph.getAllAttractionPoiIds());
+        } else if (tagNames != null && !tagNames.isEmpty()) {
             seedPoiIds = graph.getAttractionsByTags(tagNames);
         } else {
             seedPoiIds = new LinkedHashSet<>(graph.getAllAttractionPoiIds());
@@ -333,18 +458,25 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
             expanded = seedPoiIds;
         }
 
-        // 第4步：排序——同地区优先，标签匹配多优先
+        // 第4步：排序——同地区优先，标签匹配度高的优先
         List<String> sortedPoiIds = new ArrayList<>(expanded);
+        final double[] finalIntent = intent;
+        final boolean useVector = vectorScoring;
         sortedPoiIds.sort((a, b) -> {
-            int scoreA = calcCandidateScore(a, tagNames, regionCode);
-            int scoreB = calcCandidateScore(b, tagNames, regionCode);
-            return Integer.compare(scoreB, scoreA); // 降序
+            double scoreA = calcCandidateScore(a, tagNames, regionCode, finalIntent, useVector);
+            double scoreB = calcCandidateScore(b, tagNames, regionCode, finalIntent, useVector);
+            return Double.compare(scoreB, scoreA); // 降序
         });
 
         // 第5步：截取并加载景点详情
         List<Attraction> result = new ArrayList<>();
         for (String poiId : sortedPoiIds) {
             if (result.size() >= maxLimit) break;
+            // 向量模式下，0 分候选不能仅因为 TopN 名额空缺就进入 LLM 候选池；
+            // 否则「科技」意图会把没有科技维度的景点也推荐出来。
+            if (useVector && tagVectorService.score(poiId, finalIntent) <= 0.0) {
+                continue;
+            }
             Attraction a = graph.getAttraction(poiId);
             if (a != null && a.getLocation() != null && !a.getLocation().isBlank()) {
                 result.add(a);
@@ -454,10 +586,14 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
 
     /**
      * 候选景点打分（用于排序）。
-     * 同地区 +100，标签匹配每个 +50，有相邻关系 +10
+     * 同地区 +100，标签匹配度按 0~1 折算成 +50，旧逻辑下每个精确命中的标签 +50。
      */
-    private int calcCandidateScore(String poiId, List<String> tagNames, String regionCode) {
-        int score = 0;
+    private double calcCandidateScore(String poiId,
+                                      List<String> tagNames,
+                                      String regionCode,
+                                      double[] intent,
+                                      boolean vectorScoring) {
+        double score = 0.0;
 
         // 地区匹配
         if (regionCode != null && !regionCode.isBlank()) {
@@ -465,25 +601,39 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
             if (region != null) {
                 String prefix = regionCode.length() >= 4 ? regionCode.substring(0, 4) : regionCode;
                 if (region.startsWith(prefix)) {
-                    score += 100;
+                    score += 100.0;
                 } else if (region.length() >= 2 && regionCode.length() >= 2
                         && region.substring(0, 2).equals(regionCode.substring(0, 2))) {
-                    score += 30;
+                    score += 30.0;
                 }
             }
         }
 
-        // 标签匹配
+        // 标签匹配：向量开启时用加权匹配度，关闭时保持旧的精确命中
         if (tagNames != null && !tagNames.isEmpty()) {
-            List<String> attractionTags = graph.getAttractionTags(poiId);
-            for (String tag : tagNames) {
-                if (attractionTags.contains(tag)) {
-                    score += 50;
+            if (vectorScoring && intent != null) {
+                score += 50.0 * tagVectorService.score(poiId, intent);
+            } else {
+                List<String> attractionTags = graph.getAttractionTags(poiId);
+                for (String tag : tagNames) {
+                    if (attractionTags.contains(tag)) {
+                        score += 50.0;
+                    }
                 }
             }
         }
 
         return score;
+    }
+
+    private static double sum(double[] values) {
+        double total = 0.0;
+        if (values != null) {
+            for (double value : values) {
+                total += value;
+            }
+        }
+        return total;
     }
 
     @Override

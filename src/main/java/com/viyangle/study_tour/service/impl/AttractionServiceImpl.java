@@ -26,4 +26,12 @@ public class AttractionServiceImpl implements AttractionService {
         PageHelper.startPage(page, size);
         return attractionMapper.selectByRegionCode(regionCode);
     }
+
+    @Override
+    public Attraction getAttractionByPoiId(String poiId) {
+        if (poiId == null || poiId.isBlank()) {
+            return null;
+        }
+        return attractionMapper.selectByPoiId(poiId);
+    }
 }

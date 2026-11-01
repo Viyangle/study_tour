@@ -29,7 +29,10 @@ import com.viyangle.study_tour.service.ChatService;
 import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ProjectService;
 import com.viyangle.study_tour.service.RouteService;
+import com.viyangle.study_tour.service.RouteTagVectorService;
+import com.viyangle.study_tour.service.TagFeedbackService;
 import com.viyangle.study_tour.utils.SecurityContextUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +43,7 @@ import java.time.LocalTime;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -47,6 +51,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class ProjectServiceImpl implements ProjectService {
 
@@ -102,6 +107,15 @@ public class ProjectServiceImpl implements ProjectService {
     @Autowired
     private KnowledgeGraphRecommendService kgRecommendService;
 
+    @Autowired(required = false)
+    private TagFeedbackService tagFeedbackService;
+
+    @Autowired(required = false)
+    private RouteTagVectorService routeTagVectorService;
+
+    @Autowired(required = false)
+    private RouteIterationFeedbackService routeIterationFeedbackService;
+
     @Transactional
     @Override
     public Long createProject(Project project) {
@@ -134,6 +148,10 @@ public class ProjectServiceImpl implements ProjectService {
         ));
         projectMapper.refreshCurrentMembersById(project.getId());
         syncProjectGroupChat(project, ProjectStatus.from(project.getStatus()));
+        recordFeedback("PROJECT_PUBLISH", project.getId(), currentAccountId);
+        if (routeIterationFeedbackService != null) {
+            routeIterationFeedbackService.finalizeByRouteId(project.getRouteId());
+        }
         return project.getId();
     }
 
@@ -152,12 +170,27 @@ public class ProjectServiceImpl implements ProjectService {
                                                       Integer pageNum,
                                                       Integer pageSize,
                                                       String keyword) {
-        if (trimToNull(keyword) != null) {
+        return getPagedProjectsByPreference(accountId, pageNum, pageSize, keyword, null, null, null);
+    }
+
+    @Override
+    public List<Project> getPagedProjectsByPreference(Long accountId,
+                                                      Integer pageNum,
+                                                      Integer pageSize,
+                                                      String keyword,
+                                                      List<String> tags,
+                                                      String tagMatch,
+                                                      Double minTagWeight) {
+        String normalizedKeyword = trimToNull(keyword);
+        List<String> requestedTags = normalizeTags(tags);
+        String normalizedMatch = normalizeTagMatch(tagMatch, requestedTags.isEmpty() ? "exact" : "soft");
+
+        if (normalizedKeyword != null) {
             return filterProjects(
                     accountId,
                     pageNum,
                     pageSize,
-                    keyword,
+                    normalizedKeyword,
                     null,
                     null,
                     null,
@@ -166,12 +199,28 @@ public class ProjectServiceImpl implements ProjectService {
                     null,
                     null,
                     null,
-                    null
+                    null,
+                    requestedTags,
+                    normalizedMatch,
+                    minTagWeight
             );
         }
 
         int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
         int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
+        ProjectPreference preference = resolveProjectPreference(accountId);
+
+        // 显式标签：直接走 SQL 软排序/精确排序，不受 KG 推荐路径影响
+        if (!requestedTags.isEmpty()) {
+            PageHelper.startPage(page, size);
+            if ("soft".equals(normalizedMatch)) {
+                return projectMapper.selectByPreferenceSoft(
+                        requestedTags,
+                        preference.regionCode(),
+                        normalizeMinTagWeight(minTagWeight));
+            }
+            return projectMapper.selectByPreference(requestedTags, preference.regionCode());
+        }
 
         // 优先使用知识图谱推荐
         if (kgRecommendService != null) {
@@ -191,9 +240,14 @@ public class ProjectServiceImpl implements ProjectService {
             }
         }
 
-        // 降级：原有 SQL 加权排序
-        ProjectPreference preference = resolveProjectPreference(accountId);
+        // 降级：原有 SQL 加权排序；soft 时按路线向量权重和排序
         PageHelper.startPage(page, size);
+        if ("soft".equals(normalizedMatch)) {
+            return projectMapper.selectByPreferenceSoft(
+                    preference.preferredTagNames(),
+                    preference.regionCode(),
+                    normalizeMinTagWeight(minTagWeight));
+        }
         return projectMapper.selectByPreference(preference.preferredTagNames(), preference.regionCode());
     }
 
@@ -296,14 +350,49 @@ public class ProjectServiceImpl implements ProjectService {
                                         Long leaderAccountId,
                                         Boolean hasLeader,
                                         Boolean onlyAvailable) {
+        return filterProjects(
+                accountId, pageNum, pageSize, keyword, regionCode, tag, status,
+                departureDateFrom, departureDateTo, ownerAccountId, leaderAccountId,
+                hasLeader, onlyAvailable, null, "exact", null);
+    }
+
+    @Override
+    public List<Project> filterProjects(Long accountId,
+                                        Integer pageNum,
+                                        Integer pageSize,
+                                        String keyword,
+                                        String regionCode,
+                                        String tag,
+                                        String status,
+                                        LocalDate departureDateFrom,
+                                        LocalDate departureDateTo,
+                                        Long ownerAccountId,
+                                        Long leaderAccountId,
+                                        Boolean hasLeader,
+                                        Boolean onlyAvailable,
+                                        List<String> tags,
+                                        String tagMatch,
+                                        Double minTagWeight) {
         int page = (pageNum == null || pageNum < 1) ? 1 : pageNum;
         int size = (pageSize == null || pageSize < 1) ? 10 : pageSize;
 
         ProjectPreference preference = resolveProjectPreference(accountId);
         String filterRegionCode = trimToNull(regionCode);
         String filterTag = trimToNull(tag);
+        List<String> selectedTags = normalizeTags(tags);
+        if (selectedTags.isEmpty() && filterTag != null) {
+            selectedTags = List.of(filterTag);
+        }
+        String normalizedMatch = normalizeTagMatch(tagMatch, "exact");
+        boolean soft = "soft".equals(normalizedMatch) && !selectedTags.isEmpty();
+        // 精确模式只支持单个标签；显式 tags 只有一个时也作为精确筛选条件
+        String exactFilterTag = filterTag != null
+                ? filterTag
+                : (selectedTags.size() == 1 ? selectedTags.get(0) : null);
         String sortRegionCode = filterRegionCode == null ? preference.regionCode() : filterRegionCode;
-        List<String> preferredTags = filterTag == null ? preference.preferredTagNames() : List.of(filterTag);
+        List<String> preferredTags = selectedTags.isEmpty()
+                ? preference.preferredTagNames()
+                : selectedTags;
         String normalizedStatus = normalizeStatus(status);
 
         if (departureDateFrom != null && departureDateTo != null && departureDateFrom.isAfter(departureDateTo)) {
@@ -311,12 +400,29 @@ public class ProjectServiceImpl implements ProjectService {
         }
 
         PageHelper.startPage(page, size);
+        if (soft) {
+            return projectMapper.selectByCompositeFilterSoft(
+                    preferredTags,
+                    selectedTags,
+                    sortRegionCode,
+                    normalizeMinTagWeight(minTagWeight),
+                    trimToNull(keyword),
+                    filterRegionCode,
+                    normalizedStatus,
+                    departureDateFrom,
+                    departureDateTo,
+                    ownerAccountId,
+                    leaderAccountId,
+                    hasLeader,
+                    onlyAvailable
+            );
+        }
         return projectMapper.selectByCompositeFilter(
                 preferredTags,
                 sortRegionCode,
                 trimToNull(keyword),
                 filterRegionCode,
-                filterTag,
+                exactFilterTag,
                 normalizedStatus,
                 departureDateFrom,
                 departureDateTo,
@@ -369,6 +475,7 @@ public class ProjectServiceImpl implements ProjectService {
                 LocalDateTime.now()
         ));
         chatService.joinProjectGroup(id, accountId);
+        recordFeedback("PROJECT_JOIN", id, accountId);
     }
 
     @Transactional
@@ -418,6 +525,7 @@ public class ProjectServiceImpl implements ProjectService {
         }
         projectMapper.refreshCurrentMembersById(id);
         chatService.leaveProjectGroup(id, accountId);
+        recordFeedback("PROJECT_QUIT", id, accountId);
     }
 
     @Override
@@ -825,6 +933,9 @@ public class ProjectServiceImpl implements ProjectService {
                 .filter(name -> !name.isBlank())
                 .toList());
         project.setRouteAttractions(routeAttractions);
+        if (routeTagVectorService != null && project.getRouteId() != null) {
+            project.setTagVector(routeTagVectorService.view(project.getRouteId()));
+        }
         project.setEstimatedDurationMinutes(routeAttractions.stream()
                 .map(RouteAttraction::getRecommendedDuration)
                 .filter(Objects::nonNull)
@@ -980,12 +1091,57 @@ public class ProjectServiceImpl implements ProjectService {
         return ProjectStatus.from(normalized).name();
     }
 
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String tag : tags) {
+            String value = trimToNull(tag);
+            if (value != null) {
+                normalized.add(value);
+            }
+            if (normalized.size() >= 15) {
+                break;
+            }
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    private String normalizeTagMatch(String tagMatch, String fallback) {
+        String value = trimToNull(tagMatch);
+        if (value == null) {
+            return fallback;
+        }
+        return "soft".equalsIgnoreCase(value) ? "soft" : "exact";
+    }
+
+    private Double normalizeMinTagWeight(Double minTagWeight) {
+        if (minTagWeight == null || minTagWeight.isNaN()) {
+            return 0.3;
+        }
+        return Math.max(0.0, Math.min(1.0, minTagWeight));
+    }
+
     private String trimToNull(String value) {
         if (value == null) {
             return null;
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void recordFeedback(String type, Long projectId, Long accountId) {
+        if (tagFeedbackService == null) {
+            return;
+        }
+        try {
+            tagFeedbackService.recordProjectAction(type, projectId, accountId);
+        } catch (Exception e) {
+            // 反馈失败不能影响发布/加入/退出主流程
+            log.warn("记录项目反馈失败: type={}, projectId={}, accountId={}, {}",
+                    type, projectId, accountId, e.getMessage());
+        }
     }
 
     private record ProjectPreference(String regionCode, List<String> preferredTagNames) {
