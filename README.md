@@ -1718,6 +1718,8 @@ Authorization: Bearer <token>
 
 #### 4.3.8 路线规划 Agent 接口（异步任务）
 
+Agent 现采用模型驱动的工具循环：模型编辑路线、交通和时间，后端仅校验数据合法性；缺少必要信息时通过 `ask_user` 追问并停止本轮。详见 [Agent 工具循环](docs/agent-tool-loop.md)。
+
 按前端 `docs/API.md`、`docs/openapi.json` 实现的异步规划接口。完整字段与取值范围以 `docs/openapi.json`
 为准，本节只说明后端接入方式与实现边界。
 
@@ -1804,6 +1806,8 @@ HTTP 200 不等于任务成功：`completed` 时再看 `result.kind`，`plan` �
 | `app.agent.create-window` / `max-creates-per-window` | 60s / 6 | 单账号新建频率 |
 | `app.agent.max-events` | 110 | 每次查询返回的事件条数上限 |
 | `app.agent.worker-threads` | 4 | 后台执行线程数 |
+| `app.agent.max-model-turns` | 16 | 单轮最多模型交互次数 |
+| `app.agent.max-tool-calls` | 48 | 单轮最多工具调用次数 |
 | `app.agent.max-direction-requests` | 90 | 单轮最多发起的高德路径规划请求数 |
 
 交通段的高德路径规划由 `AmapDirectionClient` 完成，相关配置同样可覆盖：
@@ -1811,23 +1815,18 @@ HTTP 200 不等于任务成功：`completed` 时再看 `result.kind`，`plan` �
 （默认分别为高德 v5 的 walking / driving / transit/integrated 地址）、
 `app.amap.direction-timeout-seconds`（10）、`app.amap.direction-qps`（8）、
 `app.amap.direction-cache-ttl-minutes`（10，同一路径短时间内重复读直接复用，不再发起请求）。
-未配置 `app.amap.key`、端点不可用或高德返回错误时，交通段退化为直线估算并写入 `warnings`。
+未配置 `app.amap.key`、端点不可用或高德返回错误时，查询工具向模型返回错误，由模型决定调整、说明未知或追问；后端不自动估算交通。
 
-与 `docs/API.md` 的已知差异（联调前请确认）：
+Agent 执行边界（详见 [工具循环](docs/agent-tool-loop.md)）：
 
-- 任务存储为进程内存，单 worker 部署；多 worker 随机分发时不能依赖内存任务与限流，与文档第 8 节说明一致
-- 规划主体复用 `POST /routes/ai/{memoryId}` 的既有链路（向量/图谱召回 + 模型），
-  事件是“理解需求 / 检索候选地点 / 核实地点详情 / 计算交通段 / 校验行程与约束 / 方案已完成”这几个真实步骤，
-  不是文档示例里的模型内部工具调用流水；当前没有接入天气工具，因此不会出现 `get_weather` 事件
-- 结构化 `constraints` 会拼成一段约束摘要随 `message` 传给既有规划链路，属于适配而非形式化约束求解
-- 景点库没有票价字段，因此 `estimatedCost` 目前只统计高德返回的已知交通费用（通常为 0），
-  `unknownCosts` 会把每个未核价的地点和交通段都算进去，并写入 `warnings`
-- 高德路径规划不可用（未配置 key、鉴权失败、限流）时，交通段退化为直线距离 + 经验速度估算，
-  `source=直线估算`，`walkingMeters=null`，并写入 `warnings`，不会当成已知值
-- 硬约束（必去地点、每天时长、最晚结束时间、步行上限）冲突时返回 `result.kind=clarification` 追问，
-  不会返回 `feasible=false` 的方案（契约中 `feasible` 恒为 `true`、`issues` 恒为空数组）
-- `memoryId` 沿用后端既有会话键上限 128 个字符（文档放宽到 160），超过 128 直接返回 422，
-  不会等到后台执行时才失败
+- 模型先读取用户原文、分角色历史和客户端上下文，自主决定是否调用以及调用哪些工具。
+- RAG、图谱、详情、参考组合和地图查询均由工具提供；模型通过 `edit_route`、`edit_transport`、`edit_schedule` 编辑本轮草稿。
+- tag/兴趣、预算等必要信息缺失时调用终止型 `ask_user`，返回追问并结束本轮，不继续工具调用；服务端保留缺失字段，不自动填默认值。
+- 后端只检查数据格式、数值范围、时间顺序与 POI/日期引用，不重排日程、不切换交通方式、不判断预算等业务约束。
+- `feasible` 和 `issues` 是模型判断，允许不可行方案；费用和汇总也由模型提供，未知值可为 null。
+- `result.kind` 支持 `plan`、`clarification`、`answer`；普通回答只展示 message，不应用路线。
+- 任务存储为进程内存，单 worker 部署；重启丢失任务，多 worker 随机分发不适用。
+- `memoryId` 最多 128 字符，超出直接返回 422。
 
 外部身份校验接口：`GET /login/me` 供需要单独部署 Agent 服务的场景核验 token
 （本后端内联实现 Agent 时用不到，JWT 过滤器已直接校验同一批 token），

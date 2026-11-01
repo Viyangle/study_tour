@@ -122,21 +122,32 @@ sequenceDiagram
     participant AC as AgentRunController
     participant ST as AgentRunStore
     participant EX as AgentRunExecutor
-    participant AI as AiRoutePlanningService
-    participant AS as AgentPlanAssembler
-    participant AM as AmapDirectionClient
+    participant AL as AgentLoop
+    participant M as ChatModel
+    participant T as RouteAgentTools
 
     C->>AC: POST /routes/agent/runs
     AC->>ST: 幂等检查 / 会话互斥 / 限流
     ST-->>AC: runId
     AC-->>C: 202 + RunView
-    EX->>AI: 消息 + 结构化约束 + 历史
-    AI->>AI: 向量检索 + 图谱召回 + 模型生成
-    AI-->>EX: 路线节点
-    EX->>AS: 计算交通段与游览时间
-    AS->>AM: 步行/公交/驾车路径
-    AM-->>AS: 耗时与距离（失败降级为直线估算）
-    AS-->>EX: 方案或追问
+    EX->>AL: 用户原文 + 上下文 + 工具定义
+    loop 模型按需选择下一步
+        AL->>M: 消息与工具结果
+        M-->>AL: 阶段说明 / 工具调用 / 最终回答
+        opt 新阶段开始
+            AL->>ST: 写入阶段说明，阶段内不重复
+        end
+        alt 调用 ask_user
+            AL->>T: 生成追问
+            T-->>AL: clarification，立即退出循环
+        else 调用查询或编辑工具
+            AL->>T: 参数合法性检查后执行
+            T-->>AL: 查询事实 / 编辑草稿 / 数据错误
+        else 最终回答
+            AL->>AL: 校验最终数据合法性并退出循环
+        end
+    end
+    AL-->>EX: 方案 / 追问 / 普通回答
     EX->>ST: 写入事件与终态
     loop 每 1.8～2 秒
         C->>AC: GET /routes/agent/runs/{runId}
@@ -149,7 +160,9 @@ sequenceDiagram
 
 - 创建任务立即返回 `202`，模型与地图查询在 `app.agent.worker-threads` 个后台线程执行，单轮超时 `240s`。
 - 同账号 + 同 `requestId` 幂等，同账号 + 同 `memoryId` 会话互斥，单账号 60 秒 6 次、全局 8 个活跃任务的限流都在 `AgentRunStore` 内完成。
-- 任务与事件保存在进程内存，30 分钟 TTL；`completed` 只代表执行结束，`result.kind` 才区分「方案」与「追问」。
+- 任务与事件保存在进程内存，30 分钟 TTL；`completed` 只代表执行结束，`result.kind` 区分 `plan`、`clarification` 与 `answer`。
+- 模型决定路线、交通、时间及业务可行性；后端只校验数据格式、数值与引用，不预设检索/规划顺序。详见 [Agent 工具循环](agent-tool-loop.md)。
+- 必要上下文缺失时模型调用 `ask_user`，立即结束本轮并跳过同批其他工具；阶段说明通过 `tool=null` 的进度事件传给客户端。
 - 方案不落库，客户端确认后走 `POST /routes/manual` 与发布接口，避免把未确认的 AI 结果写进业务数据。
 
 ## 7. 核心链路 B：知识图谱推荐

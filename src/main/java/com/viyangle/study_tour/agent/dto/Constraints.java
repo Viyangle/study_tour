@@ -5,7 +5,7 @@ import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
-/** 规划约束；缺省字段由服务端按文档默认值补齐。 */
+/** 规划约束；Agent 保留缺失字段，由模型判断是否需要追问，不由后端补齐语义要求。 */
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class Constraints extends StrictPayload {

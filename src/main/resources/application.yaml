@@ -171,6 +171,9 @@ app:
     max-events: 110
     # 后台执行线程数
     worker-threads: 4
+    # 模型自主选择工具；交互轮数与工具调用总数按整轮累计
+    max-model-turns: ${AGENT_MAX_MODEL_TURNS:16}
+    max-tool-calls: ${AGENT_MAX_TOOL_CALLS:48}
     # 单轮最多发起的高德路径规划请求数
     max-direction-requests: 90
     sweep-interval: 1m

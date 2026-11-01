@@ -46,6 +46,7 @@
 - 必须轮询 `GET`（建议 1.8～2 秒一次，`status` 进入终态后停止），事件列表是**当前快照**，不是增量流；
 - `status`：`queued` / `running` / `completed` / `failed` / `cancelled`；
 - `completed` 后再看 `result.kind`：
+  - `answer`：普通文本回答，只展示 `message`，不修改路线；
   - `plan`：方案。`requiresAcceptance` 恒为 `true`，确认后再应用，**不要自动覆盖**客户端当前路线；
   - `clarification`：追问（≤3 个问题）。这是「成功完成的一轮」，不是失败；
     用户回答后用**同一个 `memoryId`、新的 `requestId`** 再建一轮，把历史对话和本轮回答带上，
@@ -73,14 +74,12 @@
    调用 `POST /routes/manual` 时请转成 ISO `"2026-10-11T09:00:00"`，该接口仍只接受 ISO，后端未放宽。
 3. **先同步 POI 再应用**。`POST /routes/manual` 按 `poiId` 查 `attractions` 表，库里没有会 400；
    方案里出现库里没有的高德 POI 时，先调 `POST /attractions/sync/{poiId}`。
-4. **不要按原型文档的工具名判断**。实际事件只有：
-   无 `tool` 的「理解需求」、`search_places`、`get_place_details`、`calculate_leg`、`build_itinerary`、`finish_plan`、`ask_user`；
-   不会出现 `get_weather`、`use_current_location`、`search_nearby`、`set_constraints`、`optimize_order`。
-5. **费用字段按估算展示**。`estimatedCost` 目前只统计高德能给出的已知交通费用（通常为 0），
-   `unknownCosts` 会把每个未核价的地点和交通段计入；`warnings` 会出现「有 N 项费用未核实」
-   「某段为直线估算」等提示，必须展示，不能当零费用承诺。
-   硬约束（必去地点、每天时长、最晚结束时间、步行上限）无法满足时返回 `result.kind=clarification` 追问，
-   不会返回 `feasible=false` 的方案（契约中 `feasible` 恒为 `true`、`issues` 恒为空数组）。
+4. **不要把工具名或顺序写死**。工具由模型按需选择，实际集合见 [工具循环](agent-tool-loop.md)。
+   `ask_user` 为终止型工具，调用成功后立即结束本轮；普通回答可以没有工具事件。
+5. **业务可行性与费用由模型判断**。后端只检查数据合法性，不计算或修正模型的日程和费用。
+   `estimatedCost`、`unknownCosts` 及其他未知数值可能为 null，不能当作 0。
+   必要 tag/兴趣、预算等缺失时，模型应调用 `ask_user` 追问；`feasible` 不再恒为 true，`issues` 也不再恒为空。
+   前端展示模型给出的判断、问题与 warnings，确认后再应用。
 
 ## 六、不要做的事
 
@@ -120,3 +119,14 @@
 - `application.yaml` 已解析校验；
 - 未执行真实模型/高德/线上库调用，全部测试为 mock 或本地桩；
 - `StudyTourApplicationTests.contextLoads` 需要本机 MySQL + Redis，沿用仓库原有的排除方式。
+
+## 模型工具循环更新（2026-11-01）
+
+- 创建/轮询/取消接口不变，新增 `result.kind=answer`，客户端应支持普通回答。
+- `ask_user` 为终止型工具：成功后直接以 `completed + clarification` 返回，停止本轮，不等待用户输入、不继续模型调用；用户补充后另建一轮。
+- 保留缺失约束，不自动补齐预算、兴趣、天数等；下一轮继续传入历史、当前路线、最新约束及本轮回答。
+- 路线、交通和时间全部由模型通过编辑工具提供，后端只检查数据合法性；`feasible` 是模型判断，可为 false。存在问题时应展示 `issues`，不要自动应用。
+- 费用、距离及汇总未知时可能为 null，不能展示为 0。工具事件来自实际执行，名称与顺序不固定。
+- 模型在工作阶段开始时提供简短说明，通过 `events` 中 `tool=null`、`label=说明文本` 展示；同阶段连续工具调用不重复播报，这些临时说明不加入后续 `history`。
+- 旧路线生成接口不变；本次替换的是 `/routes/agent/runs` 的后台执行流程。
+- 详细工具与运行边界见 [Agent 工具循环](agent-tool-loop.md)。

@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** 工具事件；最早的“理解需求”事件可能没有 tool，运行中事件可能没有 elapsedMs。 */
+/** 进度事件；理解需求与模型阶段说明的 tool 为 null，运行中事件可能没有 elapsedMs。 */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

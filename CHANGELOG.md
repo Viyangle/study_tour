@@ -6,6 +6,8 @@
 
 ### Added
 
+- **模型驱动的路线 Agent**：`AgentRunExecutor` 接入 `AgentLoop`，由模型自主选择 RAG、图谱、地点详情、参考组合、交通查询与路线/交通/时间编辑工具；后端只校验数据合法性，业务可行性由模型判断。新增普通回答 `result.kind=answer`，草稿按任务隔离，不自动写入正式路线。
+- **终止型追问与阶段通知**：必要 tag/兴趣、预算等缺失时通过 `ask_user` 追问并立即结束本轮；阶段开始时返回说明文本，同阶段连续调用不重复播报。模型交互及工具调用额度可通过 `AGENT_MAX_MODEL_TURNS`、`AGENT_MAX_TOOL_CALLS` 配置。
 - **景点标签 15 维向量（第一版）**：新增 `V4__attraction_tag_vector.sql`（`tag_dimension`、`attraction_tag` 的先验/证据列与 `effective_weight` 生成列、反馈事件表、向量快照表）；新增 `TagVectorService` 统一加载 0~1 权重；`KnowledgeGraphRecommendServiceImpl` 在 `app.tag-vector.enabled=true` 时用 `+50·Σq_i s_i` 对候选打分并放开种子集合，关闭时保持旧逻辑；新增 `GET /tags/interests` 与 `GET /attractions/{poiId}`（详情带 `tagVector`）。
 - **景点标签自动打分**：高德同步落库后由 `TagVectorLabelService` 立即打分，LLM（`AttractionTagScorerAi`）优先、超时/失败回退 `StudyTourTagClassifier.score` 规则；历史/脚本数据由启动补标（每批 50）或 ADMIN 接口 `POST /admin/tag-vectors/backfill`、`/{poiId}/relabel` 处理；默认只保留 ≥0.4 的维度（`app.tag-vector.min-prior-weight`），过滤弱相关噪声。
 - **离线评估**：`TagVectorEvalTool` + `TagVectorMetrics`，用历史路线站点做 relevance，输出 Recall@10/NDCG@10 与 `eval_out/*.csv`。

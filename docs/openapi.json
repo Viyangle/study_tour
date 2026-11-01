@@ -198,7 +198,7 @@
             "BearerAuth": []
           }
         ],
-        "description": "HTTP 200 不等于任务成功：检查 status，再区分 result.kind=plan 或 clarification。events 是最近事件列表，不是增量流。"
+        "description": "HTTP 200 不等于任务成功：检查 status，再区分 result.kind=plan、clarification 或 answer。events 是最近事件列表，不是增量流。"
       },
       "delete": {
         "summary": "取消一轮规划",
@@ -276,7 +276,7 @@
             "type": "string",
             "maxLength": 80,
             "title": "City",
-            "default": ""
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "date": {
             "anyOf": [
@@ -288,27 +288,28 @@
                 "type": "null"
               }
             ],
-            "title": "Date"
+            "title": "Date",
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "days": {
             "type": "integer",
             "maximum": 7,
             "minimum": 1,
             "title": "Days",
-            "default": 1
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "dailyMinutes": {
             "type": "integer",
             "maximum": 960,
             "minimum": 30,
             "title": "Dailyminutes",
-            "default": 480
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "startTime": {
             "type": "string",
             "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
             "title": "Starttime",
-            "default": "09:00"
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "finishByTime": {
             "anyOf": [
@@ -320,7 +321,8 @@
                 "type": "null"
               }
             ],
-            "title": "Finishbytime"
+            "title": "Finishbytime",
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "budget": {
             "anyOf": [
@@ -333,7 +335,8 @@
                 "type": "null"
               }
             ],
-            "title": "Budget"
+            "title": "Budget",
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "maxWalkingMeters": {
             "anyOf": [
@@ -346,7 +349,8 @@
                 "type": "null"
               }
             ],
-            "title": "Maxwalkingmeters"
+            "title": "Maxwalkingmeters",
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "modes": {
             "items": {
@@ -360,7 +364,8 @@
             "type": "array",
             "maxItems": 3,
             "minItems": 1,
-            "title": "Modes"
+            "title": "Modes",
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "mustVisit": {
             "items": {
@@ -370,7 +375,8 @@
             },
             "type": "array",
             "maxItems": 20,
-            "title": "Mustvisit"
+            "title": "Mustvisit",
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "avoid": {
             "items": {
@@ -380,7 +386,8 @@
             },
             "type": "array",
             "maxItems": 20,
-            "title": "Avoid"
+            "title": "Avoid",
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "interests": {
             "items": {
@@ -390,19 +397,20 @@
             },
             "type": "array",
             "maxItems": 12,
-            "title": "Interests"
+            "title": "Interests",
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "group": {
             "type": "string",
             "maxLength": 300,
             "title": "Group",
-            "default": ""
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "accessibility": {
             "type": "string",
             "maxLength": 300,
             "title": "Accessibility",
-            "default": ""
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "pace": {
             "type": "string",
@@ -412,12 +420,12 @@
               "intensive"
             ],
             "title": "Pace",
-            "default": "balanced"
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           },
           "returnToStart": {
             "type": "boolean",
             "title": "Returntostart",
-            "default": false
+            "description": "；缺失时保留缺失，由模型判断是否调用 ask_user"
           }
         },
         "additionalProperties": false,
@@ -631,21 +639,15 @@
         "type": "object",
         "properties": {
           "tool": {
-            "type": "string",
-            "enum": [
-              "set_constraints",
-              "search_places",
-              "get_place_details",
-              "search_nearby",
-              "use_current_location",
-              "get_weather",
-              "calculate_leg",
-              "optimize_order",
-              "build_itinerary",
-              "finish_plan",
-              "ask_user",
-              "unknown"
-            ]
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "实际模型工具调用名，工具集合可扩展；非工具的理解需求及模型阶段说明事件为 null"
           },
           "label": {
             "type": "string"
@@ -720,8 +722,8 @@
           },
           "recommendedDuration": {
             "type": "integer",
-            "minimum": 10,
-            "maximum": 480
+            "minimum": 1,
+            "maximum": 1440
           },
           "notes": {
             "type": "string"
@@ -763,8 +765,7 @@
           },
           "minutes": {
             "type": "integer",
-            "minimum": 10,
-            "maximum": 480
+            "minimum": 0
           },
           "learningGoal": {
             "type": "string"
@@ -772,11 +773,9 @@
         },
         "required": [
           "poiId",
-          "name",
           "arrival",
           "departure",
-          "minutes",
-          "learningGoal"
+          "minutes"
         ]
       },
       "BreakSchedule": {
@@ -794,8 +793,7 @@
           },
           "minutes": {
             "type": "integer",
-            "minimum": 0,
-            "maximum": 240
+            "minimum": 0
           }
         },
         "required": [
@@ -837,26 +835,61 @@
             }
           },
           "totalMinutes": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "包含已规划通勤/休息/缓冲/等待"
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "包含已规划通勤/休息/缓冲/等待"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "walkingMeters": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "当日地点间通勤步行，不含场馆内部"
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "当日地点间通勤步行，不含场馆内部"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "estimatedCost": {
-            "type": "number",
-            "minimum": 0,
-            "description": "每人当日已统计费用估算"
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "description": "每人当日已统计费用估算"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "legCount": {
-            "type": "integer",
-            "minimum": 0
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "finishTime": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -885,10 +918,24 @@
             "type": "string"
           },
           "originName": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "destinationName": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "mode": {
             "type": "string",
@@ -899,12 +946,26 @@
             ]
           },
           "minutes": {
-            "type": "integer",
-            "minimum": 0
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "distanceMeters": {
-            "type": "integer",
-            "minimum": 0
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "walkingMeters": {
             "anyOf": [
@@ -930,28 +991,56 @@
             ]
           },
           "polyline": {
-            "type": "array",
-            "items": {
-              "type": "array",
-              "items": {
-                "type": "number"
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "description": "[经度,纬度]；各段独立绘制"
               },
-              "minItems": 2,
-              "maxItems": 2
-            },
-            "description": "[经度,纬度]；各段独立绘制"
+              {
+                "type": "null"
+              }
+            ]
           },
           "instructions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "note": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -995,7 +1084,7 @@
           },
           "feasible": {
             "type": "boolean",
-            "const": true
+            "description": "模型给出的业务可行性判断；后端只校验数据合法性，不判定业务约束是否满足"
           },
           "issues": {
             "type": "array",
@@ -1033,13 +1122,27 @@
             }
           },
           "estimatedCost": {
-            "type": "number",
-            "minimum": 0,
-            "description": "每人全程已统计估算，不含未知费用"
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "description": "每人全程已统计估算，不含未知费用"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "unknownCosts": {
-            "type": "integer",
-            "minimum": 0
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "addedPoiIds": {
             "type": "array",
@@ -1161,6 +1264,9 @@
                 "$ref": "#/components/schemas/Clarification"
               },
               {
+                "$ref": "#/components/schemas/AgentReply"
+              },
+              {
                 "type": "null"
               }
             ]
@@ -1211,6 +1317,22 @@
         "required": [
           "status",
           "version"
+        ]
+      },
+      "AgentReply": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "answer"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
         ]
       }
     },

@@ -38,6 +38,8 @@ Content-Type: application/json
 
 一次请求代表一轮用户对话。创建任务后立即返回，模型和工具查询在后台执行。
 
+当前执行采用模型驱动的 AgentLoop：先向模型发送用户原文及上下文，由模型选择工具、编辑路线/交通/时间。后端只校验数据合法性，不自动规划或判断业务可行性。实现及工具说明见 [Agent 工具循环](agent-tool-loop.md)。
+
 请求示例：
 
 ```json
@@ -85,7 +87,7 @@ Content-Type: application/json
 | `message` | string | 是 | 本轮用户需求，去除首尾空格后 1～4000 字符 |
 | `history` | Turn[] | 否 | 默认 `[]`；最多 24 条，按时间从旧到新 |
 | `currentRoute` | CurrentStop[] | 否 | 默认 `[]`；最多 20 个不同 POI，按当前游览顺序传入 |
-| `constraints` | Constraints | 否 | 默认使用下表默认值；通常传上轮返回的约束 |
+| `constraints` | Constraints | 否 | 保持缺失，由模型按需追问；通常传上轮返回的约束 |
 | `origin` | Origin 或 null | 否 | 默认 null；仅传用户授权定位得到的坐标 |
 
 除 `currentRoute` 元素外，输入对象中的未知字段会被拒绝（422）。
@@ -109,28 +111,28 @@ Content-Type: application/json
 
 ### Constraints
 
-| 字段 | 类型 | 默认值 | 范围 / 含义 |
+| 字段 | 类型 | 缺省行为 | 范围 / 含义 |
 | --- | --- | --- | --- |
-| `city` | string | `""` | 最多 80 字符；目的城市，缺少决定性信息时 Agent 追问 |
-| `date` | string 或 null | null | `YYYY-MM-DD`，行程第一天日期 |
-| `days` | integer | 1 | 1～7 天 |
-| `dailyMinutes` | integer | 480 | 每日 30～960 分钟，含已规划交通、停留、休息、等待和缓冲 |
-| `startTime` | string | `09:00` | 每天开始时间，24 小时制 `HH:mm` |
-| `finishByTime` | string 或 null | null | 每天最晚结束时间，24 小时制 `HH:mm` |
-| `budget` | number 或 null | null | 每人全程预算，0～1000000 元；null 表示未设上限 |
-| `maxWalkingMeters` | integer 或 null | null | 每日通勤步行上限，0～100000 米；不含未测得的场馆内部步行 |
-| `modes` | string[] | `["walking","transit"]` | 接受的交通方式，1～3 项；`walking`、`transit`、`driving` |
-| `mustVisit` | string[] | `[]` | 必去地点名称或 POI ID，最多 20 项，每项 1～160 字符 |
-| `avoid` | string[] | `[]` | 避开地点名称或 POI ID，同上 |
-| `interests` | string[] | `[]` | 研学兴趣，最多 12 项，每项 1～160 字符 |
-| `group` | string | `""` | 同行人及年龄信息，最多 300 字符 |
-| `accessibility` | string | `""` | 无障碍需求，最多 300 字符；设施是否满足需运营方确认 |
-| `pace` | string | `balanced` | `relaxed`、`balanced`、`intensive` |
-| `returnToStart` | boolean | false | 是否安排返回每天出发点的交通 |
+| `city` | string | 未提供时保持缺失 | 最多 80 字符；目的城市，缺少决定性信息时 Agent 追问 |
+| `date` | string 或 null | 未提供时保持缺失 | `YYYY-MM-DD`，行程第一天日期 |
+| `days` | integer | 未提供时保持缺失 | 1～7 天 |
+| `dailyMinutes` | integer | 未提供时保持缺失 | 每日 30～960 分钟，含已规划交通、停留、休息、等待和缓冲 |
+| `startTime` | string | 未提供时保持缺失 | 每天开始时间，24 小时制 `HH:mm` |
+| `finishByTime` | string 或 null | 未提供时保持缺失 | 每天最晚结束时间，24 小时制 `HH:mm` |
+| `budget` | number 或 null | 未提供时保持缺失 | 每人全程预算，0～1000000 元；null 表示未提供；是否预算不限需要结合用户原文确认 |
+| `maxWalkingMeters` | integer 或 null | 未提供时保持缺失 | 每日通勤步行上限，0～100000 米；不含未测得的场馆内部步行 |
+| `modes` | string[] | 未提供时保持缺失 | 接受的交通方式，1～3 项；`walking`、`transit`、`driving` |
+| `mustVisit` | string[] | 未提供时保持缺失 | 必去地点名称或 POI ID，最多 20 项，每项 1～160 字符 |
+| `avoid` | string[] | 未提供时保持缺失 | 避开地点名称或 POI ID，同上 |
+| `interests` | string[] | 未提供时保持缺失 | 研学兴趣，最多 12 项，每项 1～160 字符 |
+| `group` | string | 未提供时保持缺失 | 同行人及年龄信息，最多 300 字符 |
+| `accessibility` | string | 未提供时保持缺失 | 无障碍需求，最多 300 字符；设施是否满足需运营方确认 |
+| `pace` | string | 未提供时保持缺失 | `relaxed`、`balanced`、`intensive` |
+| `returnToStart` | boolean | 未提供时保持缺失 | 是否安排返回每天出发点的交通 |
 
 `message` 中的新要求优先于历史偏好。约束可以由模型通过工具提取、更新；
-当前实现还会规则提取常见中文数值时长、预算、步行上限。它并不是任意自然语言约束的形式化证明。
-预算校验针对已统计估算，存在未知费用时会警示，不能承诺实际总费用必定满足预算。
+后端不通过关键词或正则提取语义，不自动补齐缺失约束。tag/兴趣、预算等当前任务必要信息缺失时，由模型调用 `ask_user` 追问并立即结束本轮。
+路线可行性、预算和步行上限是否满足由模型判断，后端仅检查数据格式、数值范围及引用关系。
 
 ### 创建响应（HTTP 202）
 
@@ -160,7 +162,7 @@ Content-Type: application/json
 | `status` | string | `queued`、`running`、`completed`、`failed`、`cancelled` |
 | `stage` | string | 可直接展示的阶段文案，不应用作枚举判断 |
 | `events` | ToolEvent[] | 最近最多 110 条事件；每次查询返回当前列表，并非增量流 |
-| `result` | AgentPlan / Clarification / null | 完成时的方案或追问；其他状态通常为 null |
+| `result` | AgentPlan / Clarification / AgentReply / null | 完成时的方案、追问或普通回答；其他状态通常为 null |
 | `error` | string 或 null | 任务失败说明；读取接口可能 HTTP 200，但任务 `status=failed` |
 
 状态流转：
@@ -169,7 +171,7 @@ Content-Type: application/json
 flowchart LR
     Q["queued"] --> R["running"]
     Q --> X["cancelled"]
-    R --> C["completed：方案或追问"]
+    R --> C["completed：方案、追问或回答"]
     R --> F["failed"]
     R --> X
 ```
@@ -178,16 +180,28 @@ flowchart LR
 
 ```json
 {
-  "tool": "build_itinerary",
-  "label": "校验行程与约束",
+  "tool": "validate_itinerary",
+  "label": "校验数据合法性",
   "status": "needs_revision",
   "elapsedMs": 840
 }
 ```
 
 事件 `status` 为 `running`、`completed`、`failed` 或 `needs_revision`。
-单个工具失败或发现约束冲突时 Agent 可以继续调整，不能把事件失败直接当成整轮失败。
+工具参数错误或执行失败会反馈给模型，可由模型继续调整。`ask_user` 是终止型工具，成功即返回追问并停止本轮所有后续调用；同批其他调用也会跳过。
 最初的“理解需求”事件可能没有 `tool`，运行中事件可能没有 `elapsedMs`。
+模型在每个工作阶段开始时可返回一句进度说明，通过 `tool=null`、`label=说明文本`、`status=running` 的事件展示。
+同阶段连续工具调用不重复播报；阶段说明先于工具执行记录，不是最终 `result`，客户端不要把它加入对话历史。
+
+### 普通回答：`result.kind=answer`
+
+不需要规划或查询时，模型可以直接回答，不必调用工具：
+
+```json
+{"kind":"answer","message":"你好，请告诉我你想了解的研学内容。"}
+```
+
+客户端只展示回答，不修改路线。必要信息缺失时使用 `ask_user`，返回的仍是 `kind=clarification`。
 
 ### 完成方案：`result.kind=plan`
 
@@ -259,7 +273,7 @@ flowchart LR
 | `message` | 推荐理由、方案说明 |
 | `assumptions` | 非决定性缺失所采用的假设 |
 | `constraints` | 本轮更新后的完整约束，下一轮可以继续传入 |
-| `feasible` / `issues` | 已通过当前硬约束检查才可完成；正常完成方案为 true / `[]` |
+| `feasible` / `issues` | 模型给出的业务可行性判断及问题列表，允许 false；后端不做硬约束可行性判断 |
 | `warnings` | 未核实条件、天气/预约/费用等提示；可行不代表所有条件均已证实 |
 | `nodes` | 有序地点，可转换为原 `RouteNode`；`visitOrder` 从 1 开始，`recommendedDuration` 单位分钟 |
 | `days` | 每日行程、总分钟数、通勤步行米数、费用估算、交通段数、结束时间 |
@@ -272,7 +286,7 @@ flowchart LR
 `nodes.location` 为字符串 `经度,纬度`；`legs.polyline` 为二维数组 `[[经度,纬度],...]`。
 `leg.minutes` 是交通参考时间，`day.totalMinutes` 还计入每段 5 分钟缓冲、停留、休息和开放等待。
 `leg.cost` 目前仅公交返回有效费用时有值，其他情况为 null；未知不能当成零。
-`walkingMeters` 缺失时可能为 null；存在硬步行上限但必要数据缺失时，校验不会宣称满足上限。
+`walkingMeters`、费用及汇总缺失时可为 null；是否满足用户条件由模型判断并说明依据，后端不将未知值当作 0，也不自动计算或修正模型提供的日程。
 `schedule` 的地点项带 `poiId/name/learningGoal`，休息项用 `type=break` 区分。
 
 ### 需要补充：`result.kind=clarification`
@@ -394,7 +408,7 @@ Authorization: Bearer <用户token>
 | 项目 | 当前默认 |
 | --- | --- |
 | 单轮整体执行时间 | 最长 240 秒 |
-| 模型轮数 / 工具调用 | 最多 14 轮 / 48 次 |
+| 模型轮数 / 工具调用 | 最多 16 轮 / 48 次 |
 | 单轮地图请求 | 最多 90 次，重复读使用本轮缓存 |
 | 账号新建频率 | 60 秒内最多 6 次新建，幂等重复不占新增额度 |
 | 全局活跃任务 | 最多 8 个 |
