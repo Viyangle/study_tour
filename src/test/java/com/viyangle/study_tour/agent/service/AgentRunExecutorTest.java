@@ -5,8 +5,9 @@ import com.viyangle.study_tour.agent.dto.AgentPlan;
 import com.viyangle.study_tour.agent.dto.Clarification;
 import com.viyangle.study_tour.agent.dto.Constraints;
 import com.viyangle.study_tour.agent.dto.PlanRequest;
-import com.viyangle.study_tour.agent.dto.AgentReply;
-import com.viyangle.study_tour.utils.SecurityContextUtil;
+import com.viyangle.study_tour.pojo.AIRouteItem;
+import com.viyangle.study_tour.pojo.AIRoutePlan;
+import com.viyangle.study_tour.service.AiRoutePlanningService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,11 +22,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -34,7 +37,8 @@ class AgentRunExecutorTest {
 
     private AgentProperties props;
     private AgentRunStore store;
-    private AgentLoop agentLoop;
+    private AiRoutePlanningService planningService;
+    private AgentPlanAssembler assembler;
     private AgentRunExecutor executor;
 
     @BeforeEach
@@ -45,8 +49,9 @@ class AgentRunExecutorTest {
         props.setExecutionTimeout(Duration.ofSeconds(30));
         props.setSweepInterval(Duration.ofSeconds(30));
         store = new AgentRunStore(props);
-        agentLoop = mock(AgentLoop.class);
-        executor = new AgentRunExecutor(store, agentLoop, props);
+        planningService = mock(AiRoutePlanningService.class);
+        assembler = mock(AgentPlanAssembler.class);
+        executor = new AgentRunExecutor(store, planningService, assembler, props);
     }
 
     @AfterEach
@@ -68,6 +73,17 @@ class AgentRunExecutorTest {
         return request;
     }
 
+    private AIRoutePlan aiPlan() {
+        AIRouteItem item = new AIRouteItem();
+        item.setPoiId("POI_A");
+        item.setVisitOrder(1);
+        item.setRecommendedDuration(60);
+        AIRoutePlan plan = new AIRoutePlan();
+        plan.setTag("博物馆研学");
+        plan.setItems(List.of(item));
+        return plan;
+    }
+
     private AgentRunStore.RunEntry submit() {
         PlanRequest request = request();
         AgentRunStore.CreateOutcome outcome =
@@ -85,15 +101,17 @@ class AgentRunExecutorTest {
     }
 
     @Test
-    void completesWithPlanAndPropagatesAccountAndOriginalRequest() throws Exception {
+    void completesWithPlanAndPropagatesAccountAndConstraints() throws Exception {
         AtomicLong account = new AtomicLong();
-        AtomicReference<PlanRequest> received = new AtomicReference<>();
-        AgentPlan plan = new AgentPlan();
-        when(agentLoop.run(any(), anyLong(), any(), any())).thenAnswer(invocation -> {
-            account.set(SecurityContextUtil.currentAccountId());
-            received.set(invocation.getArgument(0));
-            return plan;
+        AtomicReference<String> plannerInput = new AtomicReference<>();
+        when(planningService.planRouteV2(anyString(), anyString(), anyLong())).thenAnswer(invocation -> {
+            account.set(invocation.getArgument(2));
+            plannerInput.set(invocation.getArgument(1));
+            return aiPlan();
         });
+        AgentPlan plan = new AgentPlan();
+        when(assembler.assemble(any(), any(), any(), any()))
+                .thenReturn(AgentPlanAssembler.Outcome.ofPlan(plan));
 
         AgentRunStore.RunEntry entry = submit();
         awaitTerminal(entry);
@@ -103,26 +121,18 @@ class AgentRunExecutorTest {
         assertSame(plan, entry.getResult());
         assertNull(entry.getError());
         assertEquals(1L, account.get());
-        assertEquals("南京亲子历史研学", received.get().getMessage());
-        assertEquals(List.of("南京博物院"), received.get().getConstraints().getMustVisit());
-        assertEquals(1, entry.snapshotEvents().size());
+        assertTrue(plannerInput.get().contains("【约束】"));
+        assertTrue(plannerInput.get().contains("必须去：南京博物院"));
+        assertTrue(plannerInput.get().contains("【本轮需求】南京亲子历史研学"));
+        List<String> labels = entry.snapshotEvents().stream().map(event -> event.getLabel()).toList();
+        assertTrue(labels.contains("理解需求"));
+        assertTrue(labels.contains("检索候选地点"));
         assertNull(entry.snapshotEvents().get(0).getTool());
     }
 
     @Test
-    void completesWithOrdinaryReplyWithoutInventingToolEvents() throws Exception {
-        AgentReply reply = new AgentReply("你好");
-        when(agentLoop.run(any(), anyLong(), any(), any())).thenReturn(reply);
-        AgentRunStore.RunEntry entry = submit();
-        awaitTerminal(entry);
-        assertEquals("已回复", entry.getStage());
-        assertSame(reply, entry.getResult());
-        assertEquals(1, entry.snapshotEvents().size());
-    }
-
-    @Test
     void failsWhenPlannerThrows() throws Exception {
-        when(agentLoop.run(any(), anyLong(), any(), any()))
+        when(planningService.planRouteV2(anyString(), anyString(), anyLong()))
                 .thenThrow(new IllegalStateException("地图鉴权失败"));
 
         AgentRunStore.RunEntry entry = submit();
@@ -135,26 +145,32 @@ class AgentRunExecutorTest {
     }
 
     @Test
-    void completesWithModelClarification() throws Exception {
+    void asksClarificationWhenCandidatesAreNotEnough() throws Exception {
+        when(planningService.planRouteV2(anyString(), anyString(), anyLong()))
+                .thenThrow(new IllegalArgumentException(
+                        "Candidate POIs are not enough for routing after applying constraints. 当前候选数: 0"));
         Clarification clarification = new Clarification();
-        clarification.setMessage("请补充城市");
-        clarification.setQuestions(List.of("计划在哪个城市研学？"));
-        when(agentLoop.run(any(), anyLong(), any(), any())).thenReturn(clarification);
+        clarification.setMessage("需要先确认出行城市和可用时长，才能给出方案。");
+        clarification.setQuestions(new ArrayList<>(List.of("计划在哪个城市研学？")));
+        when(assembler.clarificationForMissingContext(any(), anyString())).thenReturn(clarification);
+
         AgentRunStore.RunEntry entry = submit();
         awaitTerminal(entry);
+
         assertEquals(AgentRunStore.STATUS_COMPLETED, entry.getStatus());
         assertEquals("等待你补充需求", entry.getStage());
-        assertSame(clarification, entry.getResult());
+        assertInstanceOf(Clarification.class, entry.getResult());
+        assertNull(entry.getError());
     }
 
     @Test
     void cancelStopsRunningTask() throws Exception {
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        when(agentLoop.run(any(), anyLong(), any(), any())).thenAnswer(invocation -> {
+        when(planningService.planRouteV2(anyString(), anyString(), anyLong())).thenAnswer(invocation -> {
             started.countDown();
             release.await();
-            return new AgentPlan();
+            return aiPlan();
         });
 
         AgentRunStore.RunEntry entry = submit();

@@ -216,17 +216,9 @@ public class AgentRunStore {
         return count;
     }
 
-    public synchronized void markRunning(RunEntry entry) {
+    public void markRunning(RunEntry entry) {
         if (entry.isActive() && !entry.isCancelRequested()) {
             entry.setStatus(STATUS_RUNNING);
-        }
-    }
-
-    /** 不允许超时/取消后的迟到进度覆盖终态展示。 */
-    public synchronized void recordProgress(RunEntry entry, ToolEvent event) {
-        if (entry.isActive() && !entry.isCancelRequested()) {
-            entry.setStage(event.getLabel());
-            entry.addEvent(event, props.getMaxEvents());
         }
     }
 
@@ -235,12 +227,11 @@ public class AgentRunStore {
         if (entry.isTerminal()) {
             return;
         }
+        entry.setStatus(status);
         entry.setStage(stage);
         entry.setResult(result);
         entry.setError(error);
         entry.setFinishedAtMs(System.currentTimeMillis());
-        // 最后发布终态，轮询看到 completed 时结果已写入。
-        entry.setStatus(status);
         releaseSession(entry);
     }
 

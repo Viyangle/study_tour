@@ -8,11 +8,7 @@ import com.viyangle.study_tour.agent.service.AgentPlanAssembler;
 import com.viyangle.study_tour.agent.service.AgentRunExecutor;
 import com.viyangle.study_tour.agent.service.AgentRunStore;
 import com.viyangle.study_tour.mapper.AttractionMapper;
-import dev.langchain4j.model.chat.ChatModel;
-import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
-import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
-import com.viyangle.study_tour.service.ReferencePairService;
-import com.viyangle.study_tour.agent.service.AgentLoop;
+import com.viyangle.study_tour.service.AiRoutePlanningService;
 import com.viyangle.study_tour.utils.AmapDirectionClient;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import org.junit.jupiter.api.Test;
@@ -50,8 +46,6 @@ class AgentWiringTest {
                     "app.agent.max-events=20",
                     "app.agent.worker-threads=2",
                     "app.agent.max-direction-requests=7",
-                    "app.agent.max-model-turns=5",
-                    "app.agent.max-tool-calls=9",
                     "app.agent.sweep-interval=5s");
 
     @Test
@@ -63,7 +57,6 @@ class AgentWiringTest {
             assertThat(context).hasSingleBean(AgentRunStore.class);
             assertThat(context).hasSingleBean(AgentRunExecutor.class);
             assertThat(context).hasSingleBean(AgentPlanAssembler.class);
-            assertThat(context).hasSingleBean(AgentLoop.class);
 
             AgentProperties props = context.getBean(AgentProperties.class);
             assertThat(props.getExecutionTimeout()).isEqualTo(Duration.ofSeconds(90));
@@ -75,8 +68,6 @@ class AgentWiringTest {
             assertThat(props.getMaxEvents()).isEqualTo(20);
             assertThat(props.getWorkerThreads()).isEqualTo(2);
             assertThat(props.getMaxDirectionRequests()).isEqualTo(7);
-            assertThat(props.getMaxModelTurns()).isEqualTo(5);
-            assertThat(props.getMaxToolCalls()).isEqualTo(9);
             assertThat(props.getSweepInterval()).isEqualTo(Duration.ofSeconds(5));
         });
     }
@@ -127,16 +118,9 @@ class AgentWiringTest {
             return mock(AmapDirectionClient.class);
         }
 
-        @Bean(name = "openAiChatModel")
-        ChatModel openAiChatModel() { return mock(ChatModel.class); }
-
         @Bean
-        VectorCandidateRetrieverService retriever() { return mock(VectorCandidateRetrieverService.class); }
-
-        @Bean
-        KnowledgeGraphRecommendService graph() { return mock(KnowledgeGraphRecommendService.class); }
-
-        @Bean
-        ReferencePairService references() { return mock(ReferencePairService.class); }
+        AiRoutePlanningService aiRoutePlanningService() {
+            return mock(AiRoutePlanningService.class);
+        }
     }
 }

@@ -40,11 +40,7 @@ public class AgentProperties {
     /** 后台执行线程数。 */
     private int workerThreads = 4;
 
-    /** 模型交互轮数与实际工具调用数，均按整轮任务累计。 */
-    private int maxModelTurns = 16;
-    private int maxToolCalls = 48;
-
-    /** 单轮最多发起的路径规划请求数，编辑与校验共用额度。 */
+    /** 单轮最多发起的路径规划请求数（不计入既有规划服务内部的检索请求）。 */
     private int maxDirectionRequests = 90;
 
     /** 终态任务清理的检查间隔。 */

@@ -6,8 +6,6 @@
 
 ### Added
 
-- **模型驱动的路线 Agent**：`AgentRunExecutor` 接入 `AgentLoop`，由模型自主选择 RAG、图谱、地点详情、参考组合、交通查询与路线/交通/时间编辑工具；后端只校验数据合法性，业务可行性由模型判断。新增普通回答 `result.kind=answer`，草稿按任务隔离，不自动写入正式路线。
-- **终止型追问与阶段通知**：必要 tag/兴趣、预算等缺失时通过 `ask_user` 追问并立即结束本轮；阶段开始时返回说明文本，同阶段连续调用不重复播报。模型交互及工具调用额度可通过 `AGENT_MAX_MODEL_TURNS`、`AGENT_MAX_TOOL_CALLS` 配置。
 - **景点研学讲解**：新增 `V7__create_attraction_guides.sql` 和 `V8__attraction_guides_auto_sync.sql`，保存简介、详细讲解、知识点、思考题、参观建议、来源快照、许可证与同步状态；新增 `GET /attractions/{poiId}/guide`，只返回已发布内容，查询链路不调用 AI。
 - **讲解自动更新**：`POST /attractions/sync/{poiId}`、AI 路线兜底登记、两个高德批量入库工具都会同步讲解，另有启动后/每 6 小时定时扫描兜底；求闻百科为默认来源，中文维基百科可配置，百度百科移动页作为覆盖率 fallback，百度旧卡片接口默认关闭；名称、城市/地址与实体类型多重校验，误配或找不到资料时降级为明确标注的基础内容，不编造史实；`auto_update=0` 的人工讲解不会被覆盖。
 - **讲解来源扩充**：新增百度百科移动页适配器，只读取 meta 摘要/标题/规范 URL；当前部署库 63 个景点中 43 条有百科来源（求闻 22、百度移动 21），4 条父景点背景，16 条保留基础资料待补录；新增 `AttractionGuideBackfillTool --poiId=...` 单点回填。
