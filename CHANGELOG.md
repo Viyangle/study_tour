@@ -8,10 +8,13 @@
 
 - **模型驱动的路线 Agent**：`AgentRunExecutor` 接入 `AgentLoop`，由模型自主选择 RAG、图谱、地点详情、参考组合、交通查询与路线/交通/时间编辑工具；后端只校验数据合法性，业务可行性由模型判断。新增普通回答 `result.kind=answer`，草稿按任务隔离，不自动写入正式路线。
 - **终止型追问与阶段通知**：必要 tag/兴趣、预算等缺失时通过 `ask_user` 追问并立即结束本轮；阶段开始时返回说明文本，同阶段连续调用不重复播报。模型交互及工具调用额度可通过 `AGENT_MAX_MODEL_TURNS`、`AGENT_MAX_TOOL_CALLS` 配置。
+- **景点研学讲解**：新增 `V7__create_attraction_guides.sql` 和 `V8__attraction_guides_auto_sync.sql`，保存简介、详细讲解、知识点、思考题、参观建议、来源快照、许可证与同步状态；新增 `GET /attractions/{poiId}/guide`，只返回已发布内容，查询链路不调用 AI。
+- **讲解自动更新**：`POST /attractions/sync/{poiId}`、AI 路线兜底登记、两个高德批量入库工具都会同步讲解，另有启动后/每 6 小时定时扫描兜底；求闻百科为默认来源，中文维基百科可配置，百度百科移动页作为覆盖率 fallback，百度旧卡片接口默认关闭；名称、城市/地址与实体类型多重校验，误配或找不到资料时降级为明确标注的基础内容，不编造史实；`auto_update=0` 的人工讲解不会被覆盖。
+- **讲解来源扩充**：新增百度百科移动页适配器，只读取 meta 摘要/标题/规范 URL；当前部署库 63 个景点中 43 条有百科来源（求闻 22、百度移动 21），4 条父景点背景，16 条保留基础资料待补录；新增 `AttractionGuideBackfillTool --poiId=...` 单点回填。
 - **景点标签 15 维向量（第一版）**：新增 `V4__attraction_tag_vector.sql`（`tag_dimension`、`attraction_tag` 的先验/证据列与 `effective_weight` 生成列、反馈事件表、向量快照表）；新增 `TagVectorService` 统一加载 0~1 权重；`KnowledgeGraphRecommendServiceImpl` 在 `app.tag-vector.enabled=true` 时用 `+50·Σq_i s_i` 对候选打分并放开种子集合，关闭时保持旧逻辑；新增 `GET /tags/interests` 与 `GET /attractions/{poiId}`（详情带 `tagVector`）。
 - **景点标签自动打分**：高德同步落库后由 `TagVectorLabelService` 立即打分，LLM（`AttractionTagScorerAi`）优先、超时/失败回退 `StudyTourTagClassifier.score` 规则；历史/脚本数据由启动补标（每批 50）或 ADMIN 接口 `POST /admin/tag-vectors/backfill`、`/{poiId}/relabel` 处理；默认只保留 ≥0.4 的维度（`app.tag-vector.min-prior-weight`），过滤弱相关噪声。
 - **离线评估**：`TagVectorEvalTool` + `TagVectorMetrics`，用历史路线站点做 relevance，输出 Recall@10/NDCG@10 与 `eval_out/*.csv`。
-- **标签反馈闭环**：新增 `TagFeedbackService`/`TagFeedbackProcessor`/`FeedbackController`；`POST /feedback/events` 接收前端批量事件；处理器每 30 秒按热度公式更新 `pos/neg`，正/负证据按 90/180 天衰减，单用户单景点 30 天上限 ±2.0，显式纠正只作用于指定维度。
+- **标签反馈闭环**：新增 `TagFeedbackService`/`TagFeedbackProcessor`/`FeedbackController`；`POST /feedback/events` 接收前端批量事件；处理器每 30 秒按热度公式更新 `pos/neg`，正/负证据按 90/180 天衰减，单用户单景点 30 天上限 ±0.8，显式纠正只作用于指定维度。
 - **反馈语义调整**：点赞/点踩、收藏、加入/退出项目、评价改为 `preference-only`，只记录用户偏好，不再修改景点 tag；属性证据只保留显式纠正、路线保存/发布和路线迭代。
 - **反馈应用保护**：新增 `app.tag-vector.apply-enabled`，默认 `false`，只采集事件不自动改权重；留出路线实验显示当前正向迭代反馈会让 NDCG@3 从 0.0521 降到 0.0365，验证前不自动应用。
 - **路线会话结算**：`RouteIterationFeedbackService` 记录同一 `accountId + memoryId` 过程中出现过的景点，中间轮次不加减分；项目发布时最终路线景点 `ROUTE_STOP_CONFIRM +0.8`，过程出现但未进最终路线 `ROUTE_STOP_REJECT -0.2`。降低幅度为正向的 1/4，符合「只有最终确定的才提高」。
@@ -20,9 +23,20 @@
 - **多标签路线（V5）**：新增 `route_tag_weight(route_id, tag_id, weight)`；路线向量 = 站点景点向量按时长加权平均，保存 AI/手动路线时自动重算，`routes.tag` 回写为 argmax 主标签兼容旧字段；新增 `GET /routes/{id}/tags`，`GET /routes` 列表和 `GET /projects/{id}` 详情返回 `tagVector`。
 - **AI 输出 tagVector**：`system-route-compose.txt` 要求模型可选输出 1~3 个主题的 `tagVector`；`AIRoutePlan` 增加 `tagVector`，保存路线时按 `app.tag-vector.route-model-weight`（默认 0.3）与站点聚合向量融合，非法/空向量自动回退单标签。
 - **项目列表多标签软筛/软排序**：`GET /projects` 和 `GET /projects/filter` 支持 `tags`、`tagMatch=soft`、`minTagWeight`；软筛按路线向量任一维度达到阈值命中，软排序按所选标签权重和 + 地区分计算，`tagMatch=exact` 仍走原 `projects.tag` 逻辑。
+- **反馈 2.0（核心链路）**：新增 `V6__feedback_learning_layer.sql`，把反馈证据拆到 `attraction_tag_learned`（含 `distinct_users`）、新增 `tag_impression` 曝光日志、`tag_ranking_model` pairwise 模型、`account_tag_affinity` 用户偏好；`tag_feedback_event` 补 `source/dim_version/model_version/scene/position/exposure_id`。
+- **serve-mode**：`TagVectorService` 支持 `PRIOR_ONLY / SHADOW / BLEND / PERSONALIZED`；`BLEND` 按 `distinct_users/(distinct_users+5)` 收缩，最多拉动先验 30%，`PRIOR_ONLY` 为默认。
+- **pairwise 排序**：新增 `TagRankingScorer`（prior/learned/popularity/session/user 特征）与 `TagRankingModelService`；`TagPairwiseTrainer` 从真实曝光 + 会话结算事件训练线性 pairwise 逻辑回归并写入 `tag_ranking_model`。
+- **意图与召回**：AI 规划用 `StudyTourTagClassifier` 从自然语言提取意图标签；`getCombinedScore` 改为 `0.6·tagScore + 0.4·normalizedPPR`，不再固定 tag=1.0；推荐侧 `calcCandidateScore` 接入 `TagRankingScorer`。
+- **曝光与会话**：`RouteIterationFeedbackService.recordExposure` 写 `tag_impression`；会话结算后更新 `account_tag_affinity` 用户偏好。
 
 ### Fixed
 
+- **反馈入口可被客户端伪造属性证据**：`/feedback/events` 现在只接受 `IMPRESSION`、`ATTRACTION_DETAIL_VIEW`、`THUMBS_UP/DOWN`、`TAG_CORRECTION`；`ROUTE_STOP_*`、`ROUTE_SAVED/PUBLISH`、`PROJECT_*`、`REVIEW_SCORE` 只能由服务端内部产生；客户端不能再自定义证据强度，`TAG_CORRECTION` 只取符号，其余按事件默认权重；同时校验 `poiId` 存在、请求 `dimVersion` 与当前维度一致。
+- **反馈事件重复计分/部分写入**：`TagFeedbackProcessor` 改为每事件独立事务 + `SELECT ... FOR UPDATE` 行锁，证据写入与 `APPLIED` 状态原子提交；超过 `max-event-age-days` 的 `PENDING` 事件自动忽略，避免关闭 apply 后集中重放旧数据。
+- **自动重标删除反馈证据**：`TagVectorLabelService` 不再删除 15 维全部行，改为重置 `prior_weight/prior_strength` 后 upsert 先验；`FEEDBACK` 行的 `pos/neg/last_decay_at` 和 `MANUAL` 的证据都会保留。
+- **标签向量 reload 失败清空快照**：`TagVectorService` 加载失败时保留上一次成功快照，并增加 5 分钟定时刷新；维度下标改为按启用维度顺序映射，修复 ordinal 空洞错位。
+- **弱反馈行污染图谱**：`KnowledgeGraph` 不再把 `source='FEEDBACK'` 以及 `effective_weight < 0.5` 的弱标签边装入 PPR/旧召回/MMR。
+- **路线会话重启丢失/重复结算**：`RouteIterationFeedbackService` 的会话与 route→session 映射优先写 Redis（TTL 7 天），并增加本地 TTL/上限清理；结算使用确定性幂等键，所有事件写入成功后才移除会话，失败保留重试。
 - **领队放弃带队固定返回 500**：`project_abandon_records` 只在 `V1__baseline.sql` 里创建，存量库被 `baseline-on-migrate` 直接标记到 V1 后不会执行 V1，表因此缺失；`POST /projects/{id}/abandon` 写审计记录时抛 SQL 异常、事务整体回滚，接口返回 500「系统繁忙，请稍后再试」。新增幂等迁移 `V3__create_project_abandon_records.sql` 自动补表，`FlywayMigrationTest` 同时校验空库与存量库两条路径都能拿到该表。
 
 ## [0.0.4] - 2026-10-27

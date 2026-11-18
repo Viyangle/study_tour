@@ -11,11 +11,15 @@ import com.viyangle.study_tour.pojo.TagDimension;
 import com.viyangle.study_tour.rag.StudyTourTagClassifier;
 import com.viyangle.study_tour.service.TagVectorLabelService;
 import com.viyangle.study_tour.service.TagVectorService;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -71,11 +75,25 @@ public class TagVectorLabelServiceImpl implements TagVectorLabelService {
     @Value("${langchain4j.open-ai.chat-model.api-key:}")
     private String llmApiKey;
 
+    /** 只包住「重置先验 + 写先验」的 DB 事务，不把 LLM 调用放进事务。 */
+    @Autowired(required = false)
+    private PlatformTransactionManager transactionManager;
+
+    private TransactionTemplate transactionTemplate;
+
     private final ExecutorService llmExecutor = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "tag-vector-labeler");
         thread.setDaemon(true);
         return thread;
     });
+
+    @PostConstruct
+    void initTransactionTemplate() {
+        if (transactionManager != null) {
+            transactionTemplate = new TransactionTemplate(transactionManager);
+            transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        }
+    }
 
     @PreDestroy
     public void shutdown() {
@@ -277,6 +295,20 @@ public class TagVectorLabelServiceImpl implements TagVectorLabelService {
                         String source,
                         double priorStrength,
                         boolean force) {
+        if (transactionTemplate == null) {
+            return persistInternal(poiId, dimensions, scores, source, priorStrength, force);
+        }
+        Integer written = transactionTemplate.execute(status ->
+                persistInternal(poiId, dimensions, scores, source, priorStrength, force));
+        return written == null ? 0 : written;
+    }
+
+    private int persistInternal(String poiId,
+                                List<TagDimension> dimensions,
+                                Map<String, Double> scores,
+                                String source,
+                                double priorStrength,
+                                boolean force) {
         Set<Long> manualTagIds = Set.of();
         if (!force) {
             List<AttractionTag> existing = attractionTagMapper.selectByPoiId(poiId);
@@ -291,10 +323,11 @@ public class TagVectorLabelServiceImpl implements TagVectorLabelService {
                 .filter(tagId -> tagId != null)
                 .toList();
         if (!dimensionTagIds.isEmpty()) {
+            // 只重置先验列，保留 pos/neg/last_decay_at：自动重标不能把用户反馈证据一起删掉。
             if (force) {
-                attractionTagMapper.deleteWeightsByPoiIdAndTagIds(poiId, dimensionTagIds);
+                attractionTagMapper.resetAllPriorsByPoiIdAndTagIds(poiId, dimensionTagIds);
             } else {
-                attractionTagMapper.deleteAutoWeightsByPoiIdAndTagIds(poiId, dimensionTagIds);
+                attractionTagMapper.resetAutoPriorsByPoiIdAndTagIds(poiId, dimensionTagIds);
             }
         }
 
@@ -302,10 +335,11 @@ public class TagVectorLabelServiceImpl implements TagVectorLabelService {
         for (TagDimension dimension : dimensions) {
             Double score = scores.get(dimension.getCode());
             if (score == null || score < minPriorWeight || dimension.getTagId() == null
-                    || manualTagIds.contains(dimension.getTagId())) {
+                    || (!force && manualTagIds.contains(dimension.getTagId()))) {
                 continue;
             }
             try {
+                // upsert：已有 FEEDBACK/LLM 行只更新 prior_weight/prior_strength/source，保留 pos/neg。
                 attractionTagMapper.insertWithWeight(poiId, dimension.getTagId(), source, round(score), priorStrength);
                 written++;
             } catch (Exception e) {

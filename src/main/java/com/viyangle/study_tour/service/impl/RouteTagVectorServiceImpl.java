@@ -291,6 +291,7 @@ public class RouteTagVectorServiceImpl implements RouteTagVectorService {
                         dimension.getName(),
                         round(weight),
                         0.0,
+                        0.0,
                         0.0));
             }
         }

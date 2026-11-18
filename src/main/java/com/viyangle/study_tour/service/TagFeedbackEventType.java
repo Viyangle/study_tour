@@ -14,9 +14,9 @@ public enum TagFeedbackEventType {
     ROUTE_STOP_REMOVE(-0.60),
     /** 最终发布路线上的景点：唯一的大幅正向证据。 */
     ROUTE_STOP_CONFIRM(0.80),
-    /** 过程中出现过、但最终没进路线：轻降，幅度小于 CONFIRM。 */
+    /** 过程中出现过、但最终没进路线：只作为 pairwise 负样本，不写全局负证据。 */
     ROUTE_STOP_REJECT(-0.20),
-    /** 候选列表展示过、但从未被选进任何路线：曝光级轻降。 */
+    /** 候选列表展示过、但从未被选进任何路线：只作为 pairwise 负样本/曝光特征。 */
     ROUTE_STOP_NOT_SELECTED(-0.02),
     ROUTE_FAVORITE(0.50),
     ROUTE_UNFAVORITE(-0.30),

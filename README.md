@@ -9,21 +9,21 @@
 [![CI](https://github.com/Viyangle/study_tour/actions/workflows/ci.yml/badge.svg)](https://github.com/Viyangle/study_tour/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-17-blue)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-brightgreen)
-![Tests](https://img.shields.io/badge/tests-343%20passed-success)
-![Coverage](https://img.shields.io/badge/coverage-46.9%25-yellow)
+![Tests](https://img.shields.io/badge/tests-424%20passed-success)
+![Coverage](https://img.shields.io/badge/coverage-50%25-yellow)
 
 | 项目 | 现状 |
 |---|---|
-| 用例规模 | 343 个用例、0 失败；分布于 43 个测试类（另 1 个需本地 MySQL/Redis 的冒烟测试），JUnit 5 + Mockito + MockMvc + AssertJ |
+| 用例规模 | 424 个用例、0 失败（另需本地 MySQL 的迁移测试单独执行），JUnit 5 + Mockito + MockMvc + AssertJ |
 | CI | GitHub Actions，`mvn -B -ntp -Pci verify`，push 与 PR 触发 |
-| 覆盖率 | JaCoCo 行 46.9% / 分支 39.1%，报告随构建产出并上传为 artifact |
+| 覆盖率 | JaCoCo 行 50% / 分支 41%，报告随构建产出并上传为 artifact |
 | 覆盖率门禁 | 行 ≥ 39%、分支 ≥ 31%，低于阈值直接构建失败（棘轮阈值，防止回退） |
 | 参数校验 | Jakarta Bean Validation + `@Valid`，覆盖注册、登录、改密、改角色、加入项目、建群、发消息；失败统一返回 400 + `{code:0,msg}` |
 | 数据库迁移 | Flyway：`db/migration` 下的 V1 基线 + 增量脚本，启动时自动执行；存量库自动 baseline，不重复建表 |
 | 可观测性 | `/actuator/health`、`/actuator/info`、`/actuator/metrics`；每个请求生成 `X-Request-Id` 并写入日志 MDC |
 | 接口契约 | springdoc 从代码生成 OpenAPI 3：`/v3/api-docs`、`/swagger-ui.html` |
 
-工程约定见 [CONTRIBUTING.md](CONTRIBUTING.md)，版本变更见 [CHANGELOG.md](CHANGELOG.md)，架构与数据库设计见 [docs/](docs/README.md)。配置项通过环境变量注入，清单见 [.env.example](.env.example)。
+工程约定见 [CONTRIBUTING.md](CONTRIBUTING.md)，版本变更见 [CHANGELOG.md](CHANGELOG.md)，架构与数据库设计见 [docs/](docs/README.md)，线上部署与回滚见 [docs/deployment.md](docs/deployment.md)。配置项通过环境变量注入，清单见 [.env.example](.env.example)。
 
 ### 本地运行
 
@@ -85,7 +85,7 @@ mvn -B -ntp test -Dtest=FlywayMigrationTest   # 只验证数据库迁移（需�
 
 - 方法：`POST`
 - 路径：`/attractions/sync/{poiId}`
-- 描述：按高德 poiId 同步单个景点：高德 place/detail 取数 → 写入 `attractions` 表（upsert）→ 增量更新 Redis 向量索引。适合前端从高德选点后立即调用，让该景点马上进入后端景点库和向量检索候选。
+- 描述：按高德 poiId 同步单个景点：高德 place/detail 取数 → 写入 `attractions` 表（upsert）→ 增量更新 Redis 向量索引 → 同步 `attraction_guides` 研学讲解。适合前端从高德选点后立即调用，让该景点马上进入后端景点库、向量检索候选和讲解查询。
 - 前提：Redis 向量索引增量更新需要 Redis Stack（RediSearch），并开启 `app.rag.embedding.store-enabled=true`；向量索引更新失败不会回滚 MySQL 登记结果
 
 请求示例：
@@ -2981,6 +2981,82 @@ GET /attractions?regionCode=320100&pageNum=1&pageSize=10
 }
 ```
 
+#### 4.6.6 获取景点研学讲解
+
+- 方法：`GET`
+- 路径：`/attractions/{poiId}/guide`
+- 描述：查询景点已发布的研学讲解。**只读取 MySQL，不调用 AI，也不实时抓取外部站点**。
+
+```http
+GET /attractions/B00190BBCZ/guide
+```
+
+成功响应：
+
+```json
+{
+  "code": 1,
+  "msg": "success",
+  "data": {
+    "poiId": "B00190BBCZ",
+    "name": "玄武湖景区",
+    "address": "玄武门路1号钟山风景名胜区西侧",
+    "summary": "玄武湖位于江苏南京，六朝前称桑泊……",
+    "content": "玄武湖，又名桑泊、秣陵湖……",
+    "studyPoints": ["梳理玄武湖景区的基本概况与主要特色"],
+    "questions": ["玄武湖景区最值得关注的特色是什么？"],
+    "visitTips": "请以景点官方开放信息和现场指引为准；遵守参观秩序，不触碰展品、文物或遗址。",
+    "coverUrl": null,
+    "audioUrl": null,
+    "sourceName": "求闻百科",
+    "sourceUrl": "https://www.qiuwenbaike.cn/wiki/玄武湖",
+    "sourceType": "QIUWEN",
+    "sourceRevision": "6616009",
+    "sourceLicense": "CC BY-SA 4.0",
+    "sourceAttribution": "求闻百科编者；内容经整理或 AI 改写，依 CC BY-SA 4.0 提供",
+    "syncStatus": "SOURCED",
+    "syncedAt": "2026-11-18T00:27:19",
+    "updatedAt": "2026-11-18T00:27:19"
+  }
+}
+```
+
+- `studyPoints`、`questions` 在数据库中为 JSON 字符串数组，接口直接返回数组；没有内容时返回空数组。
+- 景点没有讲解或讲解仍为 `DRAFT` 时，返回 HTTP 404 和 `{code:0,msg:"景点研学讲解不存在或未发布, poiId=..."}`。
+- `sourceName`、`sourceUrl`、`sourceType`、`sourceRevision`、`sourceLicense`、`sourceAttribution` 用于标注和追溯资料；前端展示时建议保留来源链接与许可证。百度移动页的 `sourceLicense` 会明确标注批量再利用需确认授权。
+- `syncStatus`：`SOURCED` 为通过相关性校验的百科资料，`PARENT` 为明确标注的所属景点背景，`FALLBACK` 为仅高德字段的基础资料（待人工补录）。
+- `sourceText`、`sourceHash`、`syncError`、`autoUpdate` 是内部同步字段，不返回给前端。
+
+**自动更新触发点：**
+
+1. `POST /attractions/sync/{poiId}`：高德景点落库后立即同步讲解；外部资料或模型失败不影响景点同步。
+2. 批量工具 `AmapAttractionJsonDbSync`、`AmapAttractionBatchExporter --syncDb=true`：景点入库后立即调用讲解回填。
+3. 定时扫描：启动 5 分钟后、之后每 6 小时处理缺失/已变化/超过 30 天的讲解，兜底绕过 Spring 直接写库的脚本。
+4. ADMIN 增量补录：`POST /admin/attraction-guides/backfill?limit=50`。
+5. ADMIN 强制重算：`POST /admin/attraction-guides/resync?limit=50`。启用/更换 `CHAT_MODEL_KEY` 或调整来源规则后用它立即刷新；人工 `auto_update=0` 的条目仍跳过。
+
+首次或手动全量回填：
+
+```bash
+mvn -B -ntp -DskipTests compile exec:java \
+  "-Dexec.mainClass=com.viyangle.study_tour.utils.AttractionGuideBackfillTool"
+```
+
+**来源与降级：**
+
+- 默认来源顺序：
+  1. [求闻百科](https://www.qiuwenbaike.cn/) MediaWiki API（国内可直连，文字 CC BY-SA 4.0）；
+  2. 中文维基百科（默认关闭，海外部署可打开）；
+  3. 百度百科移动页（默认开启，只读取页面 meta 的标题/摘要/规范链接）；
+  4. 百度百科旧卡片接口（默认关闭，需自有 APPID 和授权）。
+- 百度移动页作为覆盖率补充，没有可核实的现行开放 SLA，**公开上线前需部署方确认内容再许可**；可通过 `app.guide.sources.baidu-mobile-enabled=false` 关闭。
+- 名称匹配必须同时通过标题相似度、城市/区县/地址和实体类型校验；同名异地、行政区词条、用父馆文章冒充独立纪念碑等情况会被拒绝。
+- 当前部署库 63 个景点中，43 条来自百科正文（求闻 22、百度移动 21），4 条明确标注为父景点背景，16 条仅高德基础资料并标记待补录。百科没有可靠条目时不会为了避免 `FALLBACK` 而强行匹配。设计细节见 [docs/attraction-guide-design.md](docs/attraction-guide-design.md)。
+- 找不到可靠资料时仍返回基础讲解，但 `content` 为空、`syncStatus=FALLBACK`，只生成现场观察类任务，不补写历史事实。
+- 配置 `CHAT_MODEL_KEY` 时，AI 根据已校验资料生成知识点、思考题和参观建议；无 Key、超时或失败时回退保守模板，不阻断同步。
+- 人工维护某条讲解时把 `attraction_guides.auto_update` 设为 `0`，自动任务不会覆盖它。
+- 前端接入、字段可空性和降级展示建议见 [docs/attraction-guide-frontend-notice.md](docs/attraction-guide-frontend-notice.md)。
+
 ### 4.7 标签向量（0.0.5）
 
 景点标签从「标签名集合」升级为 15 维向量：15 个维度对应 `tags.type = 'INTEREST'` 的 15 个研学兴趣标签，每维取值 `0~1`。设计说明见 [docs/attraction-tag-vector-design.md](docs/attraction-tag-vector-design.md)。
@@ -3030,7 +3106,7 @@ GET /attractions/B00190513A
       "weights": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
       "share": [0.3333, 0.0, 0.0, 0.0, 0.3333, 0.0, 0.0, 0.0, 0.0, 0.3333, 0.0, 0.0, 0.0, 0.0, 0.0],
       "dims": [
-        {"code": "HISTORY_HUMANITIES", "name": "历史人文", "weight": 1.0, "prior": 1.0, "support": 0.0}
+        {"code": "HISTORY_HUMANITIES", "name": "历史人文", "weight": 1.0, "prior": 1.0, "learned": 0.0, "support": 0.0}
       ]
     }
   }
@@ -3039,10 +3115,10 @@ GET /attractions/B00190513A
 
 字段说明：
 
-- `weights`：15 个有效值，按 `dimVersion` 的 `ordinal` 排序，0~1；
+- `weights`：15 个有效值，按 `dimVersion` 的 `ordinal` 排序，0~1，按 `serve-mode` 合成；
 - `share`：`weights / Σweights`，用于展示主题构成；
 - `dims`：只包含 `weight ≥ 0.05` 的维度，按权重降序；
-- `prior` / `support`：初始先验与已积累的反馈证据量，当前反馈未接入时 `support` 为 0。
+- `prior`：语义先验 `p`；`learned`：全局学习层 `h`；`support`：近 30 天贡献证据的不同用户数。
 
 #### 4.7.3 自动打分
 
@@ -3050,7 +3126,7 @@ GET /attractions/B00190513A
 
 1. 有模型 Key 时调用 LLM，按 15 维输出 0~1 分（`source=LLM_V2`，先验强度 3）；
 2. LLM 不可用、超时或返回不合法时回退关键词规则（`source=RULE`，先验强度 1.5）；
-3. 只覆盖 `LLM/LLM_V2/RULE` 旧行，`MANUAL` 人工权重不会被覆盖。
+3. 自动打分只覆盖 `LLM/LLM_V2/RULE` 旧行，`MANUAL` 人工权重不会被覆盖；ADMIN 的 `force` 重算可以重设 MANUAL 的先验，但只重置 `prior_weight/prior_strength`，不会删除 `pos/neg` 反馈证据。
 
 历史数据或脚本导入的景点，启动后由 `KnowledgeGraphAutoInitializer` 在后台补标（默认每批 50 个）。也可以手动触发：
 
@@ -3096,6 +3172,7 @@ LLM 分级后的向量在当前「路线站点」评估口径下仍低于精确�
 - 描述：批量提交用户行为，服务端异步折算成 `tag_feedback_event`。**反馈分两类**：
   - 属性证据：显式 `TAG_CORRECTION`、路线反复生成时的保留/新增/删除、路线保存/发布；只有这些会更新景点 tag 的 `pos/neg`；
   - 偏好信号：`THUMBS_UP` / `THUMBS_DOWN`、收藏、加入/退出项目、评价等只记录用户偏好，**不再修改景点 tag**。
+- 客户端只能上报 `IMPRESSION`、`ATTRACTION_DETAIL_VIEW`、`THUMBS_UP/DOWN`、`TAG_CORRECTION`；`ROUTE_STOP_*`、`ROUTE_SAVED/PUBLISH`、`PROJECT_*`、`REVIEW_SCORE` 属于服务端派生事件，客户端直接上报会被忽略。
 
 ```json
 {
@@ -3116,13 +3193,15 @@ LLM 分级后的向量在当前「路线站点」评估口径下仍低于精确�
 
 规则：
 
-- 单次最多 50 条；`idempotencyKey` 相同按重复处理；
-- 未知类型、`TAG_CORRECTION` 缺 `tagCode`/维度不存在时计入 `ignored`；
+- 单次最多 50 条；`idempotencyKey` 相同按重复处理；请求 `dimVersion` 与当前维度不一致时整批忽略；
+- 未知类型、`TAG_CORRECTION` 缺 `tagCode`/维度不存在、`poiId` 不存在时计入 `ignored`；
 - `THUMBS_UP` / `THUMBS_DOWN` / 收藏 / 加入项目 / 评价只保留为偏好事件，处理结果记为 `preference-only`，不产生 `pos/neg`；
-- 事件由 `TagFeedbackProcessor` 每 30 秒处理一批：`s_i = clamp((κ·p_i + pos_i)/(κ + pos_i + neg_i), 0, 1)`，正/负证据按 90/180 天半衰期衰减；
-- **默认 `apply-enabled=false`：只采集事件，不自动改权重**；设 `true` 后才应用，便于先验证效果；
+- 事件由 `TagFeedbackProcessor` 每 30 秒处理一批：`apply-enabled=true` 时写入 `attraction_tag_learned`（`pos/neg/distinct_users`），不再直接改 `attraction_tag` 的语义先验；正/负证据按 90/180 天半衰期在事件应用时惰性衰减；
+- 事件带 `source`（CLIENT/SERVER）、`dim_version`、`scene`、`position`，客户端不能伪造服务端事件，维度不一致的整批忽略；
+- 每条事件在独立事务里写证据并标记 `APPLIED`，失败整体回滚；多实例用行锁避免重复应用；超过 `max-event-age-days`（默认 7 天）的 `PENDING` 事件自动标为 `IGNORED`；
+- **默认 `apply-enabled=false`：只采集事件，不自动改权重**；设 `true` 后才写学习层，且默认 `serve-mode=PRIOR_ONLY`，学习层只入库、不参与线上排序；
 - 单用户单景点 30 天最多贡献 ±0.8（超出部分按剩余额度截断）；显式纠正只作用于指定维度；
-- 处理成功后刷新 `TagVectorService`，下一次推荐/召回立即使用新权重。
+- 处理成功后刷新 `TagVectorService`，下一次推荐/召回立即使用新向量；另有 5 分钟定时刷新兜底。
 
 > 本地评估：旧版「每轮 ADD 立即计分」在 59 条留出路线 NDCG@3 从 0.0521 降到 0.0365；改成「最终结算」后 5 折交叉验证出现分化：最终站点 vs 过程淘汰站点的 pairwise accuracy 从 0.090 提升到 0.313（+0.223，5/5 折正向），但整体 NDCG@5 仍从 0.0980 降到 0.0881（95% CI 跨 0），graded NDCG 和常见度也没有提升。因此 `apply-enabled` 默认 `false`，只采集不应用。完整数据见 `eval_feedback/CV_REPORT.md` 与 `eval_feedback/feedback_evaluation.xlsx`。
 
@@ -3130,22 +3209,24 @@ LLM 分级后的向量在当前「路线站点」评估口径下仍低于精确�
 
 | 最终结果 | 事件 | 权重 |
 |---|---|---:|
-| 进入最终路线 | `ROUTE_STOP_CONFIRM` | **+0.80** |
-| 过程出现过、但未进最终路线 | `ROUTE_STOP_REJECT` | **-0.20** |
-| 候选列表展示过、但从未被选进任何路线 | `ROUTE_STOP_NOT_SELECTED` | **-0.02** |
+| 进入最终路线 | `ROUTE_STOP_CONFIRM` | **+0.80（写学习层）** |
+| 过程出现过、但未进最终路线 | `ROUTE_STOP_REJECT` | **0（仅 pairwise 负样本）** |
+| 候选列表展示过、但从未被选进任何路线 | `ROUTE_STOP_NOT_SELECTED` | **0（仅 pairwise 负样本/曝光特征）** |
 
-降低幅度只有提高的 1/4 以下，符合「只有最终确定的才提高」；最终路线上的景点即使中间被删过，也只按最终结果正向计算。用户手动提交/编辑路线时，`RouteIterationFeedbackService.recordSubmission` 也会把手动增删纳入同一会话。候选曝光在生成路线后由 `recordExposure` 记录，只对当前 tag 得分 >0 的候选生效，避免把零分候选也重罚。
+只有最终确认进入路线才会写正向学习证据；过程淘汰和展示未选不再直接写 `neg`，而是保留为 `TagPairwiseTrainer` 的 chosen vs shown-not-chosen 样本。AI 规划 v2 的「提交/优化」路径会调用 `RouteIterationFeedbackService.recordSubmission`，把手动增删纳入同一会话；`/routes/manual` 没有 tag 意图，暂不建立会话（后续方案见 [tag-feedback-v2-design.md](docs/tag-feedback-v2-design.md)）。候选曝光在生成路线后由 `recordExposure` 记录，只对当前 tag 得分 >0 的候选生效，避免把零分候选也重罚。
 
-**单用户影响边界**（当前 225 条权重，κ=3）：
+> 会话现在优先写 Redis（`tag:vector:session:*`，TTL 7 天），Redis 不可用时退化为进程内缓存；进程重启不再必然丢失未结算会话。
 
-| 证据 | 单事件最大权重 | 单用户 30 天总上限 | 对 `effective_weight` 的最大绝对变化 |
+**单用户影响边界**（学习层 `κ=3`，`serve-mode=BLEND` 时最多拉动先验 30%）：
+
+| 证据 | 单事件最大权重 | 单用户 30 天总上限 | 对 `h` 的最大绝对变化 |
 |---|---:|---:|---:|
-| `ROUTE_STOP_CONFIRM` | +0.80 | 0.80 | 约 +0.13 |
-| `ROUTE_STOP_REJECT` | -0.20 | 0.80 | 约 -0.06 |
-| `ROUTE_STOP_NOT_SELECTED` | -0.02 | 0.80 | 约 -0.006 |
-| `TAG_CORRECTION` | ±2.0（按剩余额度截断） | 0.80 | 约 +0.13 / -0.21 |
+| `ROUTE_STOP_CONFIRM` | +0.80 | 0.80 | 约 +0.21 |
+| `ROUTE_STOP_REJECT` | 0（仅 pairwise） | — | 0 |
+| `ROUTE_STOP_NOT_SELECTED` | 0（仅 pairwise） | — | 0 |
+| `TAG_CORRECTION` | ±2.0（按剩余额度截断） | 0.80 | 约 +0.21 / -0.21 |
 
-一个人最多只能影响自己路线里出现过的景点，每个景点 30 天内最多 ±0.8 证据；不会改全库，也不会把一个景点从 0.4 直接推到 1.0。当前真实反馈数据仍是 0，所以「现在的影响」实际为 0。
+一个人最多只能影响自己路线里出现过的景点，每个景点 30 天内最多 ±0.8 学习证据；`PRIOR_ONLY` 下连 `h` 都不参与服务，`BLEND` 下最多把先验拉动 30%。
 
 配置：
 
@@ -3158,6 +3239,31 @@ LLM 分级后的向量在当前「路线站点」评估口径下仍低于精确�
 | `app.tag-vector.pos-half-life-days` | `90` | 正向证据半衰期 |
 | `app.tag-vector.neg-half-life-days` | `180` | 负向证据半衰期 |
 | `app.tag-vector.user-cap-30d` | `0.8` | 单用户单景点 30 天证据上限 |
+| `app.tag-vector.max-event-age-days` | `7` | 超过该天数的 `PENDING` 事件不再应用 |
+| `app.tag-vector.refresh-interval-ms` | `300000` | 标签向量定时刷新周期 |
+| `app.tag-vector.session-ttl-hours` | `168` | 路线会话 TTL |
+| `app.tag-vector.min-graph-weight` | `0.5` | 向量模式下图谱标签边的最低 `effective_weight` |
+| `app.tag-vector.learned-write-enabled` | `true` | 反馈证据写学习层还是旧 `attraction_tag.pos/neg` |
+| `app.tag-vector.serve-mode` | `PRIOR_ONLY` | `PRIOR_ONLY / SHADOW / BLEND / PERSONALIZED` |
+| `app.tag-vector.learned-max-weight` | `0.3` | 学习层最多拉动先验的比例 |
+| `app.tag-vector.support-shrink-kappa` | `5.0` | `distinct_users` 支持度收缩参数 |
+
+**反馈 2.0 的排序模式**：
+
+- `PRIOR_ONLY`：只用语义先验，学习层只入库，默认；
+- `SHADOW`：线上仍用先验，`TagRankingScorer.shadowScore` 记录带学习层的反事实分数；
+- `BLEND`：`s = (1-w)p + w·h`，`w = min(0.3, distinct_users/(distinct_users+5))`；
+- `PERSONALIZED`：`BLEND` + `account_tag_affinity` 用户偏好。
+
+事件表现在还补了 `source/dim_version/model_version/scene/position/exposure_id`；曝光写入 `tag_impression`，可在 `TagPairwiseTrainer` 中构造 chosen vs shown-not-chosen 样本：
+
+```bash
+mvn -DskipTests exec:java -Dexec.mainClass="com.viyangle.study_tour.utils.TagPairwiseTrainer"
+```
+
+训练结果写入 `tag_ranking_model`，由 `TagRankingModelService` 每 5 分钟加载一次 active 模型。没有模型时 `TagRankingScorer` 使用配置里的默认权重。
+
+> 2.0 的算法方案（把语义先验、全局学习层、会话偏好拆开）见 [tag-feedback-v2-design.md](docs/tag-feedback-v2-design.md)。
 
 #### 4.7.5 多标签路线
 

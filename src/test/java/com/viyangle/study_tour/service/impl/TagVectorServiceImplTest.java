@@ -1,10 +1,13 @@
 package com.viyangle.study_tour.service.impl;
 
+import com.viyangle.study_tour.mapper.AttractionTagLearnedMapper;
 import com.viyangle.study_tour.mapper.AttractionTagMapper;
 import com.viyangle.study_tour.mapper.TagDimensionMapper;
 import com.viyangle.study_tour.pojo.AttractionTag;
+import com.viyangle.study_tour.pojo.AttractionTagLearned;
 import com.viyangle.study_tour.pojo.AttractionTagVector;
 import com.viyangle.study_tour.pojo.TagDimension;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -37,8 +41,16 @@ class TagVectorServiceImplTest {
     @Mock
     private AttractionTagMapper attractionTagMapper;
 
+    @Mock
+    private AttractionTagLearnedMapper learnedMapper;
+
     @InjectMocks
     private TagVectorServiceImpl service;
+
+    @BeforeEach
+    void setUp() {
+        when(learnedMapper.selectAll()).thenReturn(List.of());
+    }
 
     // ==================== 测试数据 ====================
 
@@ -97,14 +109,15 @@ class TagVectorServiceImplTest {
     private void load(List<AttractionTag> edges) {
         when(tagDimensionMapper.selectAll()).thenReturn(dimensions());
         when(attractionTagMapper.selectAll()).thenReturn(edges);
+        when(learnedMapper.selectAll()).thenReturn(List.of());
         service.reload();
     }
 
     // ==================== 用例 ====================
 
     @Test
-    @DisplayName("加载带权边：生成列优先，缺失时用热度公式兜底")
-    void loadsWeightedVectorWithFallbackFormula() {
+    @DisplayName("先验向量只认 prior_weight，历史 pos/neg 不直接抬高先验")
+    void loadsPriorVectorFromPriorWeightOnly() {
         load(List.of(
                 edge(POI, 1L, 1.0, 3.0, 0.0, 0.0, 1.0),
                 edge(POI, 2L, 0.2, 3.0, 3.0, 0.0, null)
@@ -117,22 +130,70 @@ class TagVectorServiceImplTest {
         double[] vector = service.vector(POI);
         assertEquals(15, vector.length);
         assertEquals(1.0, vector[0], 1e-9);
-        // (3 * 0.2 + 3) / (3 + 3) = 0.6
-        assertEquals(0.6, vector[1], 1e-9);
+        assertEquals(0.2, vector[1], 1e-9);
         assertEquals(0.0, vector[2], 1e-9);
     }
 
     @Test
-    @DisplayName("生成列越界时仍钳在 0~1")
-    void clampsEffectiveWeightToUnitInterval() {
+    @DisplayName("先验权重越界时钳在 0~1")
+    void clampsPriorWeightToUnitInterval() {
         load(List.of(
-                edge(POI, 1L, 1.0, 3.0, 0.0, 0.0, 1.6),
-                edge(POI, 2L, 0.5, 3.0, 0.0, 0.0, -0.3)
+                edge(POI, 1L, 1.6, 3.0, 0.0, 0.0, 1.6),
+                edge(POI, 2L, -0.3, 3.0, 0.0, 0.0, -0.3)
         ));
 
         double[] vector = service.vector(POI);
         assertEquals(1.0, vector[0], 1e-9);
         assertEquals(0.0, vector[1], 1e-9);
+    }
+
+    @Test
+    @DisplayName("PRIOR_ONLY 下学习层只进入 shadow，不影响线上向量")
+    void priorOnlyKeepsLearnedOutOfOnlineVector() {
+        when(tagDimensionMapper.selectAll()).thenReturn(dimensions());
+        when(attractionTagMapper.selectAll()).thenReturn(List.of(
+                edge(POI, 1L, 0.2, 3.0, 0.0, 0.0, 0.2)));
+        AttractionTagLearned learned = new AttractionTagLearned();
+        learned.setPoiId(POI);
+        learned.setTagId(1L);
+        learned.setPosCount(5.0);
+        learned.setNegCount(0.0);
+        learned.setDistinctUsers(10);
+        when(learnedMapper.selectAll()).thenReturn(List.of(learned));
+
+        service.reload();
+
+        assertEquals(0.2, service.vector(POI)[0], 1e-9);
+        assertEquals(0.35, service.shadowVector(POI)[0], 1e-9);
+        assertEquals("PRIOR_ONLY", service.serveMode());
+    }
+
+    @Test
+    @DisplayName("BLEND 模式按 distinct_users 收缩学习层，且最多拉动先验 30%")
+    void blendsLearnedVectorWithSupportShrinkage() {
+        ReflectionTestUtils.setField(service, "serveMode", "BLEND");
+        ReflectionTestUtils.setField(service, "learnedMaxWeight", 0.3);
+        ReflectionTestUtils.setField(service, "supportShrinkKappa", 5.0);
+        when(tagDimensionMapper.selectAll()).thenReturn(dimensions());
+        when(attractionTagMapper.selectAll()).thenReturn(List.of(
+                edge(POI, 1L, 0.2, 3.0, 0.0, 0.0, 0.2)));
+
+        AttractionTagLearned learned = new AttractionTagLearned();
+        learned.setPoiId(POI);
+        learned.setTagId(1L);
+        learned.setPosCount(5.0);
+        learned.setNegCount(0.0);
+        learned.setDistinctUsers(10);
+        when(learnedMapper.selectAll()).thenReturn(List.of(learned));
+
+        service.reload();
+
+        // h=(5+3*0.2)/(5+0+3)=0.7；w=min(0.3,10/(10+5))=0.3；s=0.7*0.2+0.3*0.7=0.35
+        assertEquals(0.35, service.vector(POI)[0], 1e-9);
+        assertEquals(0.2, service.priorVector(POI)[0], 1e-9);
+        assertEquals(0.7, service.learnedVector(POI)[0], 1e-9);
+        assertEquals(0.35, service.shadowVector(POI)[0], 1e-9);
+        assertEquals(10.0, service.learnedSupport(POI)[0], 1e-9);
     }
 
     @Test
@@ -231,6 +292,35 @@ class TagVectorServiceImplTest {
         assertNull(service.view("unknown"));
         assertArrayEquals(new double[15], service.vector("unknown"));
         assertEquals(0.0, service.match("unknown", service.intentVector(List.of("历史人文"))), 1e-9);
+    }
+
+    @Test
+    @DisplayName("刷新失败时保留上一次成功快照，不把向量能力清空")
+    void keepsLastGoodSnapshotWhenReloadFails() {
+        load(List.of(edge(POI, 1L, 1.0, 3.0, 0.0, 0.0, 1.0)));
+
+        when(tagDimensionMapper.selectAll()).thenThrow(new IllegalStateException("db down"));
+        service.reload();
+
+        assertTrue(service.isReady());
+        assertEquals(1.0, service.vector(POI)[0], 1e-9);
+    }
+
+    @Test
+    @DisplayName("维度 ordinal 有空洞时按启用维度顺序映射，不丢维不错位")
+    void mapsDimensionsByEnabledOrderWhenOrdinalHasGap() {
+        TagDimension first = dim(1, "HISTORY_HUMANITIES", "历史人文", 1L);
+        TagDimension third = dim(3, "NATURE_ECOLOGY", "自然生态", 3L);
+        when(tagDimensionMapper.selectAll()).thenReturn(List.of(first, third));
+        when(attractionTagMapper.selectAll()).thenReturn(List.of(
+                edge(POI, 1L, 1.0, 3.0, 0.0, 0.0, 1.0),
+                edge(POI, 3L, 0.5, 3.0, 0.0, 0.0, 0.5)));
+        service.reload();
+
+        assertEquals(2, service.dimensions().size());
+        double[] vector = service.vector(POI);
+        assertEquals(1.0, vector[0], 1e-9);
+        assertEquals(0.5, vector[1], 1e-9);
     }
 
     @Test

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.AttractionGuideMapper">
+
+    <sql id="guideColumns">
+        g.poi_id, a.name, a.address, g.summary, g.content, g.study_points, g.questions,
+        g.visit_tips, g.cover_url, g.audio_url, g.source_name, g.source_url, g.source_type,
+        g.source_revision, g.source_license, g.source_attribution, g.sync_status, g.synced_at,
+        g.updated_at, g.source_text, g.source_hash, g.sync_error, g.auto_update, g.status
+    </sql>
+
+    <resultMap id="attractionGuideResultMap" type="com.viyangle.study_tour.pojo.AttractionGuide">
+        <id property="poiId" column="poi_id"/>
+        <result property="name" column="name"/>
+        <result property="address" column="address"/>
+        <result property="summary" column="summary"/>
+        <result property="content" column="content"/>
+        <result property="studyPoints" column="study_points" javaType="java.util.List"
+                typeHandler="com.viyangle.study_tour.handler.StringListJsonTypeHandler"/>
+        <result property="questions" column="questions" javaType="java.util.List"
+                typeHandler="com.viyangle.study_tour.handler.StringListJsonTypeHandler"/>
+        <result property="visitTips" column="visit_tips"/>
+        <result property="coverUrl" column="cover_url"/>
+        <result property="audioUrl" column="audio_url"/>
+        <result property="sourceName" column="source_name"/>
+        <result property="sourceUrl" column="source_url"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="sourceRevision" column="source_revision"/>
+        <result property="sourceLicense" column="source_license"/>
+        <result property="sourceAttribution" column="source_attribution"/>
+        <result property="syncStatus" column="sync_status"/>
+        <result property="syncedAt" column="synced_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="sourceText" column="source_text"/>
+        <result property="sourceHash" column="source_hash"/>
+        <result property="syncError" column="sync_error"/>
+        <result property="autoUpdate" column="auto_update"/>
+        <result property="status" column="status"/>
+    </resultMap>
+
+    <select id="selectPublishedByPoiId" resultMap="attractionGuideResultMap">
+        SELECT <include refid="guideColumns"/>
+        FROM attraction_guides g
+        INNER JOIN attractions a ON a.poi_id = g.poi_id
+        WHERE g.poi_id = #{poiId}
+          AND g.status = 'PUBLISHED'
+    </select>
+
+    <select id="selectByPoiId" resultMap="attractionGuideResultMap">
+        SELECT <include refid="guideColumns"/>
+        FROM attraction_guides g
+        INNER JOIN attractions a ON a.poi_id = g.poi_id
+        WHERE g.poi_id = #{poiId}
+    </select>
+
+    <insert id="upsert" parameterType="com.viyangle.study_tour.pojo.AttractionGuide">
+        INSERT INTO attraction_guides (
+            poi_id, summary, content, study_points, questions, visit_tips, cover_url, audio_url,
+            source_name, source_url, source_type, source_text, source_revision, source_license,
+            source_attribution, source_hash, sync_status, sync_error, auto_update, synced_at, status
+        ) VALUES (
+            #{poiId}, #{summary}, #{content},
+            #{studyPoints, jdbcType=VARCHAR, typeHandler=com.viyangle.study_tour.handler.StringListJsonTypeHandler},
+            #{questions, jdbcType=VARCHAR, typeHandler=com.viyangle.study_tour.handler.StringListJsonTypeHandler},
+            #{visitTips}, #{coverUrl}, #{audioUrl}, #{sourceName}, #{sourceUrl}, #{sourceType},
+            #{sourceText}, #{sourceRevision}, #{sourceLicense}, #{sourceAttribution}, #{sourceHash},
+            #{syncStatus}, #{syncError}, #{autoUpdate}, #{syncedAt}, #{status}
+        )
+        ON DUPLICATE KEY UPDATE
+            summary = VALUES(summary),
+            content = VALUES(content),
+            study_points = VALUES(study_points),
+            questions = VALUES(questions),
+            visit_tips = VALUES(visit_tips),
+            cover_url = VALUES(cover_url),
+            audio_url = VALUES(audio_url),
+            source_name = VALUES(source_name),
+            source_url = VALUES(source_url),
+            source_type = VALUES(source_type),
+            source_text = VALUES(source_text),
+            source_revision = VALUES(source_revision),
+            source_license = VALUES(source_license),
+            source_attribution = VALUES(source_attribution),
+            source_hash = VALUES(source_hash),
+            sync_status = VALUES(sync_status),
+            sync_error = VALUES(sync_error),
+            auto_update = VALUES(auto_update),
+            synced_at = VALUES(synced_at),
+            status = VALUES(status)
+    </insert>
+
+    <select id="selectPoiIdsNeedingSync" resultType="java.lang.String">
+        SELECT a.poi_id
+        FROM attractions a
+        LEFT JOIN attraction_guides g ON g.poi_id = a.poi_id
+        WHERE (a.status IS NULL OR a.status = 'ACTIVE')
+          AND (
+              g.poi_id IS NULL
+              OR (
+                  g.auto_update = 1
+                  AND (
+                      g.synced_at IS NULL
+                      OR a.updated_at &gt; g.synced_at
+                      OR g.synced_at &lt; DATE_SUB(NOW(), INTERVAL #{refreshDays} DAY)
+                      OR (g.sync_status = 'FALLBACK'
+                          AND g.synced_at &lt; DATE_SUB(NOW(), INTERVAL 1 DAY))
+                  )
+              )
+          )
+        ORDER BY (g.poi_id IS NULL) DESC, g.synced_at ASC, a.poi_id ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectActivePoiIds" resultType="java.lang.String">
+        SELECT poi_id
+        FROM attractions
+        WHERE (status IS NULL OR status = 'ACTIVE')
+        ORDER BY updated_at DESC, poi_id ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

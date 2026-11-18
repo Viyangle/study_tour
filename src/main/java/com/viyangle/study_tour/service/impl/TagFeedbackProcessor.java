@@ -14,28 +14,35 @@ import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.pojo.TagDimension;
 import com.viyangle.study_tour.pojo.TagFeedbackEvent;
 import com.viyangle.study_tour.service.TagFeedbackEventType;
+import com.viyangle.study_tour.service.TagLearnedService;
 import com.viyangle.study_tour.service.TagVectorService;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * 反馈事件处理器：把 PENDING 事件转成 {@code pos/neg} 证据，并按热度公式更新权重。
+ * 反馈事件处理器：把 PENDING 事件转成学习层证据。
  *
- * <p>每批处理一次，成功后刷新 {@link TagVectorService}；单条失败最多重试 3 次。
- * 单用户单景点 30 天证据上限只对直接挂在 poi_id 上的事件生效，路线/项目事件按站点展开，
- * 不逐一做上限查询，避免一次事件产生几十次 SQL。</p>
+ * <p>反馈 2.0 默认写 {@code attraction_tag_learned}，不再直接改景点语义先验；
+ * 只有 {@code learned-write-enabled=false} 时才回退到旧的 {@code attraction_tag.pos/neg}。
+ * 每批处理一次，成功后刷新 {@link TagVectorService}；单条失败最多重试 3 次。</p>
  */
 @Slf4j
 @Service
@@ -64,6 +71,16 @@ public class TagFeedbackProcessor {
     @Autowired
     private TagVectorService tagVectorService;
 
+    /** V6 学习层；没有迁移/单测环境下退化为旧 attraction_tag 证据。 */
+    @Autowired(required = false)
+    private TagLearnedService tagLearnedService;
+
+    /** 每个事件单独开事务；测试环境没有事务管理器时退化为直接执行。 */
+    @Autowired(required = false)
+    private PlatformTransactionManager transactionManager;
+
+    private TransactionTemplate transactionTemplate;
+
     @Value("${app.tag-vector.feedback-enabled:true}")
     private boolean enabled = true;
 
@@ -74,6 +91,10 @@ public class TagFeedbackProcessor {
     @Value("${app.tag-vector.apply-batch-size:100}")
     private int batchSize = 100;
 
+    /** 超过该天数的 PENDING 事件不再应用，避免关闭 apply 一段时间后集中重放旧数据。 */
+    @Value("${app.tag-vector.max-event-age-days:7}")
+    private int maxEventAgeDays = 7;
+
     @Value("${app.tag-vector.pos-half-life-days:90}")
     private double posHalfLifeDays = 90.0;
 
@@ -83,11 +104,24 @@ public class TagFeedbackProcessor {
     @Value("${app.tag-vector.user-cap-30d:0.8}")
     private double userCap30d = 0.8;
 
+    /** true：写 attraction_tag_learned；false：保留旧的 attraction_tag.pos/neg 写入。 */
+    @Value("${app.tag-vector.learned-write-enabled:true}")
+    private boolean learnedWriteEnabled = true;
+
+    @PostConstruct
+    void initTransactionTemplate() {
+        if (transactionManager != null) {
+            transactionTemplate = new TransactionTemplate(transactionManager);
+            transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        }
+    }
+
     @Scheduled(fixedDelayString = "${app.tag-vector.apply-interval-ms:30000}")
     public void processPending() {
         if (!enabled || !applyEnabled || tagVectorService == null || !tagVectorService.isReady()) {
             return;
         }
+        markExpiredPending();
         List<TagFeedbackEvent> events = feedbackEventMapper.selectPending(batchSize);
         if (events == null || events.isEmpty()) {
             return;
@@ -96,11 +130,10 @@ public class TagFeedbackProcessor {
         int applied = 0;
         for (TagFeedbackEvent event : events) {
             try {
-                ApplyResult result = apply(event);
+                ApplyResult result = applyInTransaction(event);
                 if (result.applied()) {
-                    feedbackEventMapper.markApplied(event.getId());
                     applied++;
-                } else {
+                } else if (result.ignored()) {
                     feedbackEventMapper.markIgnored(event.getId(), result.note());
                 }
             } catch (Exception e) {
@@ -121,29 +154,83 @@ public class TagFeedbackProcessor {
         }
     }
 
+    /**
+     * 定期把过期 PENDING 事件标成 IGNORED，避免 apply 关闭期间的事件无限堆积。
+     */
+    @Scheduled(fixedDelayString = "${app.tag-vector.expire-interval-ms:3600000}")
+    public void expirePending() {
+        if (!enabled || feedbackEventMapper == null) {
+            return;
+        }
+        markExpiredPending();
+    }
+
+    private void markExpiredPending() {
+        if (maxEventAgeDays <= 0) {
+            return;
+        }
+        try {
+            feedbackEventMapper.markExpiredPendingIgnored(
+                    LocalDateTime.now().minusDays(maxEventAgeDays));
+        } catch (Exception e) {
+            log.warn("标记过期反馈事件失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 在独立事务里锁住事件行再应用，保证「写证据 + 标记 APPLIED」原子提交；
+     * 多实例同时处理同一事件时，后拿到锁的实例会看到 APPLIED 并跳过。
+     */
+    private ApplyResult applyInTransaction(TagFeedbackEvent event) {
+        if (transactionTemplate == null || event.getId() == null) {
+            return apply(event);
+        }
+        ApplyResult result = transactionTemplate.execute(status -> {
+            TagFeedbackEvent locked = feedbackEventMapper.selectByIdForUpdate(event.getId());
+            if (locked == null || !"PENDING".equals(locked.getStatus())) {
+                return new ApplyResult(false, false, "not pending");
+            }
+            return apply(locked);
+        });
+        return result == null ? new ApplyResult(false, false, "no transaction result") : result;
+    }
+
     private ApplyResult apply(TagFeedbackEvent event) {
         TagFeedbackEventType type = TagFeedbackEventType.from(event.getEventType());
         if (type == null) {
-            return new ApplyResult(false, "unknown event type");
+            return new ApplyResult(false, true, "unknown event type");
         }
         if (!type.affectsAttractionTags()) {
             // 点赞/点踩/收藏/加入项目/评价只代表用户偏好，不改变景点-标签属性
-            return new ApplyResult(false, "preference-only");
+            return new ApplyResult(false, true, "preference-only");
         }
 
         double value = event.getEventValue() == null ? 0.0 : event.getEventValue();
         if (Math.abs(value) < 1e-9) {
-            return new ApplyResult(true, "no-op");
+            return new ApplyResult(false, true, "no-op");
+        }
+        if (maxEventAgeDays > 0 && event.getOccurredAt() != null
+                && event.getOccurredAt().isBefore(LocalDateTime.now().minusDays(maxEventAgeDays))) {
+            return new ApplyResult(false, true, "expired");
+        }
+        // 过程淘汰/展示未选只作为 pairwise 样本，不直接写全局负证据：
+        // 用户没选的原因可能是距离、时间、同行人，而不是 tag 不匹配。
+        if (type == TagFeedbackEventType.ROUTE_STOP_REJECT
+                || type == TagFeedbackEventType.ROUTE_STOP_NOT_SELECTED) {
+            if (feedbackEventMapper.markApplied(event.getId()) == 0) {
+                throw new IllegalStateException("event not marked applied: id=" + event.getId());
+            }
+            return new ApplyResult(true, false, "pairwise-only");
         }
 
         Set<String> targets = resolveTargets(event);
         if (targets.isEmpty()) {
-            return new ApplyResult(false, "no target attraction");
+            return new ApplyResult(false, true, "no target attraction");
         }
 
         List<TagDimension> dimensions = tagVectorService.dimensions();
         if (dimensions.isEmpty()) {
-            return new ApplyResult(false, "tag dimensions unavailable");
+            return new ApplyResult(false, true, "tag dimensions unavailable");
         }
 
         double[] intent = resolveIntent(event, dimensions);
@@ -169,11 +256,52 @@ public class TagFeedbackProcessor {
                 continue;
             }
 
-            double[] vector = tagVectorService.vector(poiId);
-            double[] credit = credit(vector, intent, dimensions.size(), explicitOrdinal);
-            Map<Long, AttractionTag> rows = loadRows(poiId);
+            boolean useLearned = learnedWriteEnabled && tagLearnedService != null;
+            // 学习层开启时用先验做归因，避免「已经学到的维度继续吸证据」的自我强化。
+            double[] attributionVector = useLearned
+                    ? tagVectorService.priorVector(poiId)
+                    : tagVectorService.vector(poiId);
+            if (attributionVector == null) {
+                attributionVector = new double[dimensions.size()];
+            }
+            // 没有意图、没有先验、也不是显式纠正时，不要给 15 维均匀写证据。
+            if (useLearned && explicitOrdinal == null
+                    && sum(intent) <= 1e-9 && sum(attributionVector) <= 1e-9) {
+                continue;
+            }
+            double[] credit = credit(attributionVector, intent, dimensions.size(), explicitOrdinal);
             LocalDateTime now = LocalDateTime.now();
 
+            if (useLearned) {
+                Map<Long, double[]> evidence = new LinkedHashMap<>();
+                List<Long> touchedTags = new ArrayList<>();
+                for (int i = 0; i < dimensions.size(); i++) {
+                    if (credit[i] < MIN_CREDIT) {
+                        continue;
+                    }
+                    TagDimension dimension = dimensions.get(i);
+                    if (dimension.getTagId() == null) {
+                        continue;
+                    }
+                    double delta = Math.abs(targetValue) * credit[i];
+                    double[] counts = evidence.computeIfAbsent(dimension.getTagId(), key -> new double[2]);
+                    if (targetValue > 0) {
+                        counts[0] += delta;
+                    } else {
+                        counts[1] += delta;
+                    }
+                    touchedTags.add(dimension.getTagId());
+                }
+                if (!evidence.isEmpty()) {
+                    tagLearnedService.applyEvidence(poiId, evidence, now);
+                    tagLearnedService.touchUsers(poiId, touchedTags, event.getAccountId(), now);
+                    applied = true;
+                }
+                continue;
+            }
+
+            // 兼容路径：还没有 V6 学习层时继续写 attraction_tag 的历史证据。
+            Map<Long, AttractionTag> rows = loadRows(poiId);
             for (int i = 0; i < dimensions.size(); i++) {
                 if (credit[i] < MIN_CREDIT) {
                     continue;
@@ -202,9 +330,13 @@ public class TagFeedbackProcessor {
             }
         }
         if (applied) {
-            return new ApplyResult(true, "applied");
+            // 与证据写入同一事务：要么证据和 APPLIED 一起提交，要么一起回滚。
+            if (feedbackEventMapper.markApplied(event.getId()) == 0) {
+                throw new IllegalStateException("event not marked applied: id=" + event.getId());
+            }
+            return new ApplyResult(true, false, "applied");
         }
-        return new ApplyResult(false, capHit ? "user cap reached" : "no evidence");
+        return new ApplyResult(false, true, capHit ? "user cap reached" : "no evidence");
     }
 
     private Map<Long, AttractionTag> loadRows(String poiId) {
@@ -347,10 +479,20 @@ public class TagFeedbackProcessor {
         return count * Math.pow(0.5, days / halfLifeDays);
     }
 
+    private static double sum(double[] values) {
+        double total = 0.0;
+        if (values != null) {
+            for (double value : values) {
+                total += value;
+            }
+        }
+        return total;
+    }
+
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }
 
-    private record ApplyResult(boolean applied, String note) {
+    private record ApplyResult(boolean applied, boolean ignored, String note) {
     }
 }

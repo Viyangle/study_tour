@@ -34,6 +34,7 @@ public class AttractionTagVector {
         private String name;
         private Double weight;
         private Double prior;
+        private Double learned;
         private Double support;
     }
 }

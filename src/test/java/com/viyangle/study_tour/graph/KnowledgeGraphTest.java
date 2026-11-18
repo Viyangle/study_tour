@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.*;
 
@@ -274,6 +275,32 @@ class KnowledgeGraphTest {
         assertEquals(Set.of("P1", "P2", "P3"), graph.expandNeighbors(List.of("P1"), 10),
                 "环路下多跳扩展应终止并去重");
         assertEquals(Set.of("P1"), graph.expandNeighbors(List.of("P1"), 0), "0 跳只返回种子节点");
+    }
+
+    @Test
+    @DisplayName("向量模式下图谱忽略 FEEDBACK 行和弱标签边")
+    void vectorModeIgnoresFeedbackAndWeakEdges() {
+        ReflectionTestUtils.setField(graph, "tagVectorEnabled", true);
+        ReflectionTestUtils.setField(graph, "minGraphWeight", 0.5);
+        stubEmptyGraph();
+        when(attractionMapper.selectAll()).thenReturn(List.of(attraction("P1", "320102")));
+        when(tagMapper.selectAll()).thenReturn(List.of(
+                tag(1L, "历史人文"), tag(2L, "博物馆研学"), tag(3L, "自然生态")));
+
+        AttractionTag manual = attractionTag("P1", 1L);
+        manual.setSource("MANUAL");
+        manual.setEffectiveWeight(1.0);
+        AttractionTag feedback = attractionTag("P1", 2L);
+        feedback.setSource("FEEDBACK");
+        feedback.setEffectiveWeight(1.0);
+        AttractionTag weak = attractionTag("P1", 3L);
+        weak.setSource("LLM_V2");
+        weak.setEffectiveWeight(0.2);
+        when(attractionTagMapper.selectAll()).thenReturn(List.of(manual, feedback, weak));
+
+        graph.reload();
+
+        assertEquals(List.of("历史人文"), graph.getAttractionTags("P1"));
     }
 
     // ==================== 脏数据与降级 ====================

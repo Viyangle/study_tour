@@ -151,7 +151,7 @@ class TagVectorLabelServiceImplTest {
         int written = service.autoLabel(attraction());
 
         assertEquals(2, written);
-        verify(attractionTagMapper).deleteAutoWeightsByPoiIdAndTagIds(eq(POI), anyList());
+        verify(attractionTagMapper).resetAutoPriorsByPoiIdAndTagIds(eq(POI), anyList());
         verify(attractionTagMapper).insertWithWeight(POI, 1L, "RULE", 0.8, 1.5);
         verify(attractionTagMapper).insertWithWeight(POI, 2L, "RULE", 0.6, 1.5);
         verify(tagVectorService).reload();
@@ -246,7 +246,7 @@ class TagVectorLabelServiceImplTest {
         int labeled = service.backfillMissing(10);
 
         assertEquals(1, labeled);
-        verify(attractionTagMapper).deleteWeightsByPoiIdAndTagIds(eq(POI), anyList());
+        verify(attractionTagMapper).resetAllPriorsByPoiIdAndTagIds(eq(POI), anyList());
         verify(attractionTagMapper).insertWithWeight(POI, 1L, "RULE", 0.8, 1.5);
     }
 

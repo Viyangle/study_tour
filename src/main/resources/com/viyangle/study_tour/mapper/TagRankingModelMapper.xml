@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.TagRankingModelMapper">
+
+    <sql id="rankingColumns">
+        model_version, coefficients, intercept, sample_count, active, trained_at
+    </sql>
+
+    <select id="selectActive" resultType="com.viyangle.study_tour.pojo.TagRankingModel">
+        select <include refid="rankingColumns"/>
+        from tag_ranking_model
+        where active = 1
+        order by trained_at desc
+        limit 1
+    </select>
+
+    <update id="deactivateAll">
+        update tag_ranking_model set active = 0 where active = 1
+    </update>
+
+    <insert id="insert">
+        insert into tag_ranking_model
+            (model_version, coefficients, intercept, sample_count, active, trained_at)
+        values
+            (#{modelVersion}, #{coefficients}, #{intercept}, #{sampleCount}, #{active}, now())
+        on duplicate key update
+            coefficients = values(coefficients),
+            intercept = values(intercept),
+            sample_count = values(sample_count),
+            active = values(active),
+            trained_at = now()
+    </insert>
+
+    <delete id="deleteByVersion">
+        delete from tag_ranking_model where model_version = #{modelVersion}
+    </delete>
+
+</mapper>

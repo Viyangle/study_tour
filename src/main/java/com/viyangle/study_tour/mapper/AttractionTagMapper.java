@@ -37,7 +37,19 @@ public interface AttractionTagMapper {
                                       @Param("tagIds") List<Long> tagIds);
 
     /**
-     * 写入自动生成的先验权重；调用前应先删掉同景点的自动权重。
+     * 重新打标前把自动来源的先验列重置为 0，保留 pos/neg/last_decay_at。
+     */
+    int resetAutoPriorsByPoiIdAndTagIds(@Param("poiId") String poiId,
+                                        @Param("tagIds") List<Long> tagIds);
+
+    /**
+     * 强制重算时把自动 + MANUAL 的先验列重置为 0，保留反馈证据。
+     */
+    int resetAllPriorsByPoiIdAndTagIds(@Param("poiId") String poiId,
+                                       @Param("tagIds") List<Long> tagIds);
+
+    /**
+     * 写入自动生成的先验权重；已有行只更新先验列，不覆盖 pos/neg。
      */
     int insertWithWeight(@Param("poiId") String poiId,
                          @Param("tagId") Long tagId,

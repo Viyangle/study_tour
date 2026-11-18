@@ -18,7 +18,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +30,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -38,6 +44,8 @@ class RouteIterationFeedbackServiceTest {
     @Mock private TagFeedbackService tagFeedbackService;
     @Mock private TagVectorService tagVectorService;
     @Mock private RouteAttractionMapper routeAttractionMapper;
+    @Mock private StringRedisTemplate redisTemplate;
+    @Mock private ValueOperations<String, String> valueOperations;
 
     @InjectMocks
     private RouteIterationFeedbackService service;
@@ -46,7 +54,9 @@ class RouteIterationFeedbackServiceTest {
     void setUp() {
         when(tagVectorService.isReady()).thenReturn(true);
         when(tagVectorService.dimensions()).thenReturn(dimensions());
+        when(tagFeedbackService.isEnabled()).thenReturn(true);
         when(tagFeedbackService.record(any())).thenReturn(1);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 
     private static List<TagDimension> dimensions() {
@@ -142,6 +152,25 @@ class RouteIterationFeedbackServiceTest {
     }
 
     @Test
+    @DisplayName("结算失败保留会话，重试使用确定性幂等键")
+    void finalizeRetryKeepsSessionAndUsesDeterministicKey() {
+        service.recordPlan(1L, "m1", plan("历史人文", "p1"));
+        when(tagFeedbackService.record(any()))
+                .thenThrow(new RuntimeException("db down"))
+                .thenReturn(1);
+
+        service.finalizeSession(1L, "m1", List.of("p1"),
+                Map.of("历史人文", 1.0), "历史人文");
+        service.finalizeSession(1L, "m1", List.of("p1"),
+                Map.of("历史人文", 1.0), "历史人文");
+
+        ArgumentCaptor<TagFeedbackEvent> captor = ArgumentCaptor.forClass(TagFeedbackEvent.class);
+        verify(tagFeedbackService, times(2)).record(captor.capture());
+        assertEquals(captor.getAllValues().get(0).getIdempotencyKey(),
+                captor.getAllValues().get(1).getIdempotencyKey());
+    }
+
+    @Test
     @DisplayName("项目发布时按 routeId 找到会话并结算")
     void finalizeByRouteIdUsesSessionBinding() {
         service.recordPlan(1L, "m1", plan("历史人文", "p1", "p2"));
@@ -168,6 +197,25 @@ class RouteIterationFeedbackServiceTest {
         service.recordPlan(1L, "m1", plan("历史人文", "p1", "p2"));
 
         verify(tagFeedbackService, never()).record(any());
+    }
+
+    @Test
+    @DisplayName("会话写入 Redis，进程重启后可恢复并结算")
+    void sessionIsPersistedToRedisAndCanBeRestored() {
+        service.recordPlan(1L, "m1", plan("历史人文", "p1"));
+
+        ArgumentCaptor<String> json = ArgumentCaptor.forClass(String.class);
+        verify(valueOperations).set(startsWith("tag:vector:session:"), json.capture(), any(Duration.class));
+        when(valueOperations.get(anyString())).thenReturn(json.getValue());
+
+        RouteIterationFeedbackService restored = new RouteIterationFeedbackService();
+        ReflectionTestUtils.setField(restored, "tagFeedbackService", tagFeedbackService);
+        ReflectionTestUtils.setField(restored, "tagVectorService", tagVectorService);
+        ReflectionTestUtils.setField(restored, "redisTemplate", redisTemplate);
+
+        restored.finalizeSession(1L, "m1", List.of("p1"), null, "历史人文");
+
+        verify(tagFeedbackService).record(any(TagFeedbackEvent.class));
     }
 
     @Test

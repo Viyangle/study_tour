@@ -5,6 +5,7 @@ import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.RecommendedProject;
 import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
+import com.viyangle.study_tour.service.TagRankingScorer;
 import com.viyangle.study_tour.service.TagVectorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +57,9 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
 
     @Autowired
     private TagVectorService tagVectorService;
+
+    @Autowired(required = false)
+    private TagRankingScorer tagRankingScorer;
 
     /** 关闭时保持旧的「标签名精确命中 +50」逻辑，便于灰度和回滚。 */
     @Value("${app.tag-vector.enabled:false}")
@@ -609,10 +613,15 @@ public class KnowledgeGraphRecommendServiceImpl implements KnowledgeGraphRecomme
             }
         }
 
-        // 标签匹配：向量开启时用加权匹配度，关闭时保持旧的精确命中
+        // 标签匹配：向量开启时用加权匹配度 + 学习层/热度/会话特征，关闭时保持旧的精确命中
         if (tagNames != null && !tagNames.isEmpty()) {
             if (vectorScoring && intent != null) {
-                score += 50.0 * tagVectorService.score(poiId, intent);
+                if (tagRankingScorer != null) {
+                    TagRankingScorer.RankingScore ranking = tagRankingScorer.score(poiId, intent);
+                    score += 50.0 * Math.max(0.0, ranking.total());
+                } else {
+                    score += 50.0 * tagVectorService.score(poiId, intent);
+                }
             } else {
                 List<String> attractionTags = graph.getAttractionTags(poiId);
                 for (String tag : tagNames) {

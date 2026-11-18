@@ -3,6 +3,7 @@ package com.viyangle.study_tour.service.impl;
 import com.viyangle.study_tour.mapper.AttractionMapper;
 import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.rag.AmapAttractionRagDocumentLoader;
+import com.viyangle.study_tour.service.AttractionGuideSyncService;
 import com.viyangle.study_tour.service.AttractionSyncService;
 import com.viyangle.study_tour.service.TagVectorLabelService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
@@ -46,6 +47,10 @@ public class AttractionSyncServiceImpl implements AttractionSyncService {
     @Autowired(required = false)
     private TagVectorLabelService tagVectorLabelService;
 
+    /** 景点落库后同步研学讲解；外部资料或模型失败不阻断景点本身同步。 */
+    @Autowired(required = false)
+    private AttractionGuideSyncService attractionGuideSyncService;
+
     @Value("${app.rag.embedding.sync-vector-enabled:true}")
     private boolean syncVectorEnabled;
 
@@ -86,6 +91,14 @@ public class AttractionSyncServiceImpl implements AttractionSyncService {
         }
 
         indexAttraction(attraction);
+        try {
+            if (attractionGuideSyncService != null) {
+                boolean synced = attractionGuideSyncService.syncGuide(attraction);
+                log.info("Attraction guide sync completed, poiId={}, changed={}", normalizedPoiId, synced);
+            }
+        } catch (Exception e) {
+            log.warn("Attraction guide sync failed, poiId={}, {}", normalizedPoiId, e.getMessage());
+        }
         return attraction;
     }
 

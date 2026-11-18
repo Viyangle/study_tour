@@ -151,6 +151,37 @@ app:
     apply-enabled: false
     apply-interval-ms: 30000
     apply-batch-size: 100
+    # 过期 PENDING 事件不再应用；避免关闭 apply 一段时间后集中重放旧数据
+    max-event-age-days: 7
+    # 标签向量定时刷新，兜底 reload 失败/进程在 reload 前退出
+    refresh-interval-ms: 300000
+    # 路线会话 TTL 与上限；Redis 可用时会话持久化，否则退化为进程内存储
+    session-ttl-hours: 168
+    max-sessions: 10000
+    session-cleanup-interval-ms: 600000
+    expire-interval-ms: 3600000
+    # 向量模式下图谱只收 effective_weight >= 该阈值的标签边
+    min-graph-weight: 0.5
+    # 反馈 2.0：语义先验 / 学习层 / 会话偏好分离
+    serve-mode: PRIOR_ONLY
+    learned-write-enabled: true
+    learned-max-weight: 0.3
+    support-shrink-kappa: 5.0
+    learned-prior-pseudo-count: 3.0
+    affinity-alpha: 0.2
+    popularity-window-days: 30
+    popularity-refresh-ms: 300000
+    impression-retention-days: 180
+    impression-cleanup-interval-ms: 86400000
+    ranking-model-refresh-ms: 300000
+    ranking:
+      prior-match-weight: 0.45
+      learned-match-weight: 0.20
+      popularity-weight: 0.15
+      session-match-weight: 0.15
+      user-match-weight: 0.10
+      quality-weight: 0.05
+      distance-weight: -0.10
     pos-half-life-days: 90
     neg-half-life-days: 180
     user-cap-30d: 0.8
@@ -196,6 +227,35 @@ app:
       splitter-max-overlap-size: 20
       min-score: 0.4
       max-results: 30
+  # 景点研学讲解：单景点同步立即更新，批量脚本通过定时扫描兜底
+  guide:
+    enabled: true
+    # 配置了 CHAT_MODEL_KEY 时用模型加工知识点/思考题；失败或无 Key 时使用保守模板
+    ai-enabled: true
+    ai-timeout-seconds: 45
+    scheduled-sync-enabled: true
+    # 启动后延迟 5 分钟开始扫描，之后每 6 小时处理一批
+    initial-delay-ms: 300000
+    sync-interval-ms: 21600000
+    backfill-batch-size: 50
+    batch-pause-ms: 200
+    # 已同步内容超过该天数会重新抓取来源
+    refresh-days: 30
+    sources:
+      # 国内可直连的 MediaWiki 开放内容源（CC BY-SA 4.0），默认第一优先
+      qiuwen-endpoint: https://www.qiuwenbaike.cn/api.php
+      # 中国大陆服务器通常无法直连维基百科；海外部署可打开作为第二来源
+      wikipedia-enabled: false
+      wikipedia-endpoint: https://zh.wikipedia.org/w/api.php
+      timeout-seconds: 12
+      request-interval-ms: 150
+      # 百度百科旧接口缺少可核实的现行开放授权，默认关闭；取得授权后自行配置 APPID
+      baidu-enabled: false
+      baidu-app-id: ${BAIDU_BAIKE_APP_ID:}
+      baidu-endpoint: https://baike.baidu.com/api/openapi/BaikeLemmaCardApi
+      # 百度移动页只读取 meta 摘要；适合作为覆盖率补充，生产上线前请确认内容再许可
+      baidu-mobile-enabled: ${BAIDU_BAIKE_MOBILE_ENABLED:true}
+      baidu-mobile-endpoint: https://wapbaike.baidu.com/item/
   https:
     # Enable HTTP(8080) -> HTTPS(8443) redirect
     redirect-enabled: true

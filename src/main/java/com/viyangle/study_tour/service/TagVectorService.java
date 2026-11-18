@@ -26,8 +26,25 @@ public interface TagVectorService {
     /** 当前版本的维度列表，按 ordinal 升序。 */
     List<TagDimension> dimensions();
 
-    /** 景点的 15 维向量；未知景点返回全 0，不会返回 null。 */
+    /** 景点的 15 维有效向量；未知景点返回全 0，不会返回 null。 */
     double[] vector(String poiId);
+
+    /** 语义先验向量（不包含反馈学习层）。 */
+    double[] priorVector(String poiId);
+
+    /** 全局学习层向量（未经 serve-mode 混合）。 */
+    double[] learnedVector(String poiId);
+
+    /** SHADOW 模式使用的混合向量；PRIOR_ONLY 时与 {@link #vector(String)} 相同。 */
+    double[] shadowVector(String poiId);
+
+    /** 当前服务模式：PRIOR_ONLY / SHADOW / BLEND / PERSONALIZED。 */
+    String serveMode();
+
+    /**
+     * 学习层在每个维度上的支持用户数，供解释和调试；未知景点返回全 0。
+     */
+    double[] learnedSupport(String poiId);
 
     /**
      * 把标签名列表转成意图向量：命中维置 1，不归一化（{@link #match} 会按意图总和折算）。

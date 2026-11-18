@@ -70,9 +70,18 @@ public class AmapAttractionJsonDbSync {
                 int routeFlagsRefreshed = RouteOutdatedAttractionStatusUpdater.refreshAll(conn);
                 conn.commit();
 
-                System.out.printf("Done: input=%s, activeSource=%d, upserted=%d, staleMarked=%d, routeFlagsRefreshed=%d%n",
+                int guidesSynced = 0;
+                try {
+                    guidesSynced = AttractionGuideBackfillTool.run(
+                            config.dbUrl, config.dbUser, config.dbPassword, source.size(), false);
+                } catch (Exception e) {
+                    System.err.printf("Guide sync after attraction import failed: %s%n", e.getMessage());
+                }
+
+                System.out.printf("Done: input=%s, activeSource=%d, upserted=%d, staleMarked=%d, "
+                                + "routeFlagsRefreshed=%d, guidesSynced=%d%n",
                         Paths.get(config.inputFile).toAbsolutePath(), source.size(), upserted, staleMarked,
-                        routeFlagsRefreshed);
+                        routeFlagsRefreshed, guidesSynced);
             }
         } finally {
             shutdownMysqlCleanupThread();

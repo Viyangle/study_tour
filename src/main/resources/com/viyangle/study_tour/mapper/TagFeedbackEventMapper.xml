@@ -5,19 +5,22 @@
 <mapper namespace="com.viyangle.study_tour.mapper.TagFeedbackEventMapper">
 
     <sql id="feedbackColumns">
-        id, account_id, session_key, event_type, poi_id, route_id, project_id, tag_id,
-        event_value, intent_vector, context, occurred_at, received_at,
+        id, account_id, session_key, source, event_type, poi_id, route_id, project_id, tag_id,
+        event_value, intent_vector, dim_version, model_version, scene, position, exposure_id,
+        context, occurred_at, received_at,
         idempotency_key, status, attempts, applied_at, apply_note
     </sql>
 
     <insert id="insertIgnore" parameterType="com.viyangle.study_tour.pojo.TagFeedbackEvent">
         insert ignore into tag_feedback_event
-        (account_id, session_key, event_type, poi_id, route_id, project_id, tag_id,
-         event_value, intent_vector, context, occurred_at, received_at,
+        (account_id, session_key, source, event_type, poi_id, route_id, project_id, tag_id,
+         event_value, intent_vector, dim_version, model_version, scene, position, exposure_id,
+         context, occurred_at, received_at,
          idempotency_key, status, attempts)
         values
-        (#{accountId}, #{sessionKey}, #{eventType}, #{poiId}, #{routeId}, #{projectId}, #{tagId},
-         #{eventValue}, #{intentVector}, #{context}, #{occurredAt}, now(),
+        (#{accountId}, #{sessionKey}, coalesce(#{source}, 'SERVER'), #{eventType}, #{poiId}, #{routeId}, #{projectId}, #{tagId},
+         #{eventValue}, #{intentVector}, #{dimVersion}, #{modelVersion}, #{scene}, #{position}, #{exposureId},
+         #{context}, #{occurredAt}, now(),
          #{idempotencyKey}, 'PENDING', 0)
     </insert>
 
@@ -27,6 +30,13 @@
         where status = 'PENDING'
         order by id asc
         limit #{limit}
+    </select>
+
+    <select id="selectByIdForUpdate" resultType="com.viyangle.study_tour.pojo.TagFeedbackEvent">
+        select <include refid="feedbackColumns"/>
+        from tag_feedback_event
+        where id = #{id}
+        for update
     </select>
 
     <update id="markApplied">
@@ -39,6 +49,13 @@
         update tag_feedback_event
         set status = 'IGNORED', applied_at = now(), attempts = attempts + 1, apply_note = #{note}
         where id = #{id}
+    </update>
+
+    <update id="markExpiredPendingIgnored">
+        update tag_feedback_event
+        set status = 'IGNORED', applied_at = now(), apply_note = 'expired'
+        where status = 'PENDING'
+          and occurred_at &lt; #{cutoff}
     </update>
 
     <update id="incrementAttempts">

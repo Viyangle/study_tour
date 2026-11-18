@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.TagImpressionMapper">
+
+    <insert id="batchInsert">
+        insert into tag_impression
+            (account_id, session_key, scene, poi_id, position, model_version, shown_at)
+        values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.accountId}, #{item.sessionKey}, #{item.scene}, #{item.poiId},
+             #{item.position}, #{item.modelVersion}, #{item.shownAt})
+        </foreach>
+    </insert>
+
+    <select id="selectPopularitySince" resultType="com.viyangle.study_tour.pojo.TagPopularity">
+        select poi_id as poiId, count(distinct account_id) as userCount
+        from tag_impression
+        where shown_at &gt;= #{since}
+          and account_id is not null
+        group by poi_id
+    </select>
+
+    <delete id="deleteBefore">
+        delete from tag_impression where shown_at &lt; #{cutoff}
+    </delete>
+
+</mapper>

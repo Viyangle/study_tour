@@ -67,9 +67,43 @@
           </foreach>
     </delete>
 
+    <update id="resetAutoPriorsByPoiIdAndTagIds">
+        update attraction_tag
+        set prior_weight = 0.000,
+            prior_strength = 3.00,
+            vector_version = vector_version + 1,
+            updated_at = now()
+        where poi_id = #{poiId}
+          and tag_id in
+          <foreach collection="tagIds" item="tagId" open="(" separator="," close=")">
+              #{tagId}
+          </foreach>
+          and source in ('LLM', 'LLM_V2', 'RULE')
+    </update>
+
+    <update id="resetAllPriorsByPoiIdAndTagIds">
+        update attraction_tag
+        set prior_weight = 0.000,
+            prior_strength = 3.00,
+            vector_version = vector_version + 1,
+            updated_at = now()
+        where poi_id = #{poiId}
+          and tag_id in
+          <foreach collection="tagIds" item="tagId" open="(" separator="," close=")">
+              #{tagId}
+          </foreach>
+          and source in ('LLM', 'LLM_V2', 'RULE', 'MANUAL')
+    </update>
+
     <insert id="insertWithWeight">
         insert into attraction_tag(poi_id, tag_id, source, prior_weight, prior_strength, created_at)
         values (#{poiId}, #{tagId}, #{source}, #{priorWeight}, #{priorStrength}, now())
+        on duplicate key update
+            prior_weight = values(prior_weight),
+            prior_strength = values(prior_strength),
+            source = values(source),
+            vector_version = vector_version + 1,
+            updated_at = now()
     </insert>
 
     <insert id="upsertEvidence">

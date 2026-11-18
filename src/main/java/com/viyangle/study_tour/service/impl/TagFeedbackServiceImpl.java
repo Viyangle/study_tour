@@ -91,6 +91,7 @@ public class TagFeedbackServiceImpl implements TagFeedbackService {
     private TagFeedbackEvent baseEvent(TagFeedbackEventType type, Long accountId) {
         TagFeedbackEvent event = new TagFeedbackEvent();
         event.setEventType(type.name());
+        event.setSource("SERVER");
         event.setAccountId(accountId);
         event.setOccurredAt(LocalDateTime.now());
         return event;

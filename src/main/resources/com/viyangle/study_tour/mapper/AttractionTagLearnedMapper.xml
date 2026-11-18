@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.AttractionTagLearnedMapper">
+
+    <sql id="learnedColumns">
+        poi_id, tag_id, pos_count, neg_count, distinct_users, last_decay_at, vector_version, updated_at
+    </sql>
+
+    <select id="selectAll" resultType="com.viyangle.study_tour.pojo.AttractionTagLearned">
+        select <include refid="learnedColumns"/>
+        from attraction_tag_learned
+    </select>
+
+    <select id="selectByPoiAndTag" resultType="com.viyangle.study_tour.pojo.AttractionTagLearned">
+        select <include refid="learnedColumns"/>
+        from attraction_tag_learned
+        where poi_id = #{poiId}
+          and tag_id = #{tagId}
+    </select>
+
+    <insert id="upsertEvidence">
+        insert into attraction_tag_learned
+            (poi_id, tag_id, pos_count, neg_count, distinct_users, last_decay_at)
+        values
+            (#{poiId}, #{tagId}, #{posCount}, #{negCount}, 0, now())
+        on duplicate key update
+            pos_count = #{posCount},
+            neg_count = #{negCount},
+            last_decay_at = now(),
+            vector_version = vector_version + 1
+    </insert>
+
+    <update id="updateDistinctUsers">
+        update attraction_tag_learned
+        set distinct_users = #{distinctUsers},
+            vector_version = vector_version + 1
+        where poi_id = #{poiId}
+          and tag_id = #{tagId}
+    </update>
+
+</mapper>

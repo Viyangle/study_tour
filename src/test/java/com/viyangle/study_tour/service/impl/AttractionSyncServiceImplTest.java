@@ -3,6 +3,7 @@ package com.viyangle.study_tour.service.impl;
 import com.viyangle.study_tour.mapper.AttractionMapper;
 import com.viyangle.study_tour.pojo.Attraction;
 import com.viyangle.study_tour.rag.AmapAttractionRagDocumentLoader;
+import com.viyangle.study_tour.service.AttractionGuideSyncService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
 import dev.langchain4j.community.store.embedding.redis.RedisEmbeddingStore;
 import dev.langchain4j.data.document.Document;
@@ -54,6 +55,9 @@ class AttractionSyncServiceImplTest {
     @Mock
     private EmbeddingModel embeddingModel;
 
+    @Mock
+    private AttractionGuideSyncService attractionGuideSyncService;
+
     @InjectMocks
     private AttractionSyncServiceImpl service;
 
@@ -98,6 +102,7 @@ class AttractionSyncServiceImplTest {
         verify(attractionMapper).upsert(any(Attraction.class));
         verify(redisEmbeddingStore).removeAll(any(Filter.class));
         verify(redisEmbeddingStore).addAll(anyList(), anyList());
+        verify(attractionGuideSyncService).syncGuide(any(Attraction.class));
     }
 
     @Test

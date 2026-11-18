@@ -16,10 +16,13 @@ import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.pojo.RouteConstraintState;
 import com.viyangle.study_tour.pojo.Tag;
 import com.viyangle.study_tour.pojo.VectorRetrievalResult;
+import com.viyangle.study_tour.rag.StudyTourTagClassifier;
 import com.viyangle.study_tour.service.AiRoutePlanningService;
+import com.viyangle.study_tour.service.AttractionGuideSyncService;
 import com.viyangle.study_tour.service.AttractionSyncService;
 import com.viyangle.study_tour.service.KnowledgeGraphRecommendService;
 import com.viyangle.study_tour.service.ReferencePairService;
+import com.viyangle.study_tour.service.TagRankingScorer;
 import com.viyangle.study_tour.service.TagVectorService;
 import com.viyangle.study_tour.service.VectorCandidateRetrieverService;
 import com.viyangle.study_tour.utils.AmapTransitClient;
@@ -80,6 +83,9 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     @Autowired
     private AttractionSyncService attractionSyncService;
 
+    @Autowired(required = false)
+    private AttractionGuideSyncService attractionGuideSyncService;
+
     @Autowired
     private AmapTransitClient amapTransitClient;
 
@@ -103,6 +109,12 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
 
     @Autowired(required = false)
     private TagVectorService tagVectorService;
+
+    @Autowired(required = false)
+    private TagRankingScorer tagRankingScorer;
+
+    @Autowired(required = false)
+    private StudyTourTagClassifier studyTourTagClassifier;
 
     @Value("${app.tag-vector.enabled:false}")
     private boolean tagVectorEnabled;
@@ -162,11 +174,13 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         Map<String, Double> pprScores = computePPRScores(message, accountId);
         
         List<Attraction> candidates = loadCandidateAttractions(candidatePoiIds);
-        
+        double[] planIntent = buildIntentVector(message, state, accountId);
+
         // 用迭代 PPR 进行去重排序（替代 MMR）
         if (!pprScores.isEmpty()) {
             log.info("使用迭代 PPR 对候选景点进行多样性排序，目标数量：10");
-            candidates = iterativePPRSelection(candidates, pprScores, 10, state.getExcludePoiIds());
+            candidates = iterativePPRSelection(candidates, pprScores, 10,
+                    state.getExcludePoiIds(), planIntent, accountId);
             log.info("AI 路线规划调试：经迭代 PPR 排序后候选数量={}", candidates.size());
         }
         
@@ -447,6 +461,14 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
                     registered.setPoiId(poiId);
                     registered.setStatus("ACTIVE");
                     attractionMapper.upsert(registered);
+                    try {
+                        if (attractionGuideSyncService != null) {
+                            attractionGuideSyncService.syncGuide(registered);
+                        }
+                    } catch (Exception e) {
+                        log.warn("Guide sync failed for route fallback attraction, poiId={}: {}",
+                                poiId, e.getMessage());
+                    }
                 }
                 result.add(registered);
             } else {
@@ -1286,30 +1308,9 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
         try {
             // 1. 确定个人节点集合（本次意图 + 长期偏好）
             Set<String> personalNodes = new HashSet<>();
-            Set<String> intentTags = new LinkedHashSet<>();
-
-            // 本次意图匹配的景点
-            for (String tag : ALLOWED_TAGS) {
-                if (message != null && message.contains(tag)) {
-                    intentTags.add(tag);
-                    Set<String> tagAttractions = knowledgeGraph.getAttractionsByTags(List.of(tag));
-                    personalNodes.addAll(tagAttractions);
-                }
-            }
-
-            // 长期偏好匹配的景点
-            if (accountId != null) {
-                List<AccountTagPref> userPrefs = accountTagPrefMapper.selectByAccountId(accountId);
-                if (userPrefs != null && !userPrefs.isEmpty()) {
-                    for (AccountTagPref pref : userPrefs) {
-                        Tag tag = tagMapper.selectById(pref.getTagId());
-                        if (tag != null && ALLOWED_TAGS.contains(tag.getName())) {
-                            intentTags.add(tag.getName());
-                            Set<String> tagAttractions = knowledgeGraph.getAttractionsByTags(List.of(tag.getName()));
-                            personalNodes.addAll(tagAttractions);
-                        }
-                    }
-                }
+            List<String> intentTags = extractIntentTags(message, null, accountId);
+            for (String tag : intentTags) {
+                personalNodes.addAll(knowledgeGraph.getAttractionsByTags(List.of(tag)));
             }
 
             if (personalNodes.isEmpty()) {
@@ -1359,21 +1360,24 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     }
 
     /**
-     * 综合打分：标签匹配度（基础分）+ PPR 分数（多跳相关性）
-     * @param poiId 景点ID
-     * @param pprScores PPR 分数映射
-     * @return 综合分数（越高越相关）
+     * 综合打分：标签匹配度（prior + learned + 热度/会话特征）+ 归一化 PPR。
      */
-    private double getCombinedScore(String poiId, Map<String, Double> pprScores) {
-        // 标签匹配度作为基础分（这里简化为 1.0，实际可以从 retrieveCandidatesFromGraph 里传过来）
-        double tagMatchScore = 1.0;
-        
-        // PPR 分数（可能为空）
-        double pprScore = pprScores.getOrDefault(poiId, 0.0);
-        
-        // 融合：60% 标签匹配 + 40% PPR
-        double lambda = 0.6;
-        return lambda * tagMatchScore + (1 - lambda) * pprScore * 10; // PPR 放大 10 倍以平衡量级
+    private double getCombinedScore(String poiId,
+                                    Map<String, Double> pprScores,
+                                    double[] intent,
+                                    double maxPpr,
+                                    Long accountId) {
+        double tagMatchScore = 0.0;
+        if (intent != null && intent.length > 0) {
+            if (tagRankingScorer != null) {
+                tagMatchScore = Math.max(0.0,
+                        tagRankingScorer.score(poiId, intent, intent, accountId, 0.0).total());
+            } else if (tagVectorService != null) {
+                tagMatchScore = tagVectorService.match(poiId, intent);
+            }
+        }
+        double pprScore = maxPpr > 0 ? pprScores.getOrDefault(poiId, 0.0) / maxPpr : 0.0;
+        return 0.6 * tagMatchScore + 0.4 * pprScore;
     }
 
     /**
@@ -1383,10 +1387,14 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
     private List<Attraction> iterativePPRSelection(List<Attraction> candidates,
                                                     Map<String, Double> pprScores,
                                                     int targetSize,
-                                                    List<String> excludePoiIds) {
+                                                    List<String> excludePoiIds,
+                                                    double[] intent,
+                                                    Long accountId) {
         if (candidates == null || candidates.isEmpty() || targetSize <= 0) {
             return List.of();
         }
+        double maxPpr = pprScores == null ? 0.0
+                : pprScores.values().stream().filter(Objects::nonNull).mapToDouble(Double::doubleValue).max().orElse(0.0);
 
         Set<String> excluded = normalizeSet(excludePoiIds);
         Map<String, Attraction> remaining = new LinkedHashMap<>();
@@ -1405,7 +1413,7 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             String bestKey = null;
             double bestScore = Double.NEGATIVE_INFINITY;
             for (Map.Entry<String, Attraction> entry : remaining.entrySet()) {
-                double score = getCombinedScore(entry.getValue().getPoiId(), pprScores);
+                double score = getCombinedScore(entry.getValue().getPoiId(), pprScores, intent, maxPpr, accountId);
                 if (bestKey == null || score > bestScore) {
                     bestKey = entry.getKey();
                     bestScore = score;
@@ -1426,43 +1434,11 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             return List.of();
         }
         try {
-            // 从消息中提取匹配的研学标签
-            List<String> matchedTags = new ArrayList<>();
-            for (String tag : ALLOWED_TAGS) {
-                if (message != null && message.contains(tag)) {
-                    matchedTags.add(tag);
-                }
-            }
-
-            // 从历史消息中也提取标签
-            if (state.getUserMessages() != null) {
-                for (String msg : state.getUserMessages()) {
-                    for (String tag : ALLOWED_TAGS) {
-                        if (msg.contains(tag) && !matchedTags.contains(tag)) {
-                            matchedTags.add(tag);
-                        }
-                    }
-                }
-            }
-
-            // 融合用户个人偏好标签
-            if (accountId != null) {
-                List<AccountTagPref> userPrefs = accountTagPrefMapper.selectByAccountId(accountId);
-                if (userPrefs != null && !userPrefs.isEmpty()) {
-                    for (AccountTagPref pref : userPrefs) {
-                        Tag tag = tagMapper.selectById(pref.getTagId());
-                        if (tag != null && ALLOWED_TAGS.contains(tag.getName()) && !matchedTags.contains(tag.getName())) {
-                            matchedTags.add(tag.getName());
-                        }
-                    }
-                    log.info("用户{}有{}个偏好标签，已融合到matchedTags", accountId, userPrefs.size());
-                }
-            }
-
+            List<String> matchedTags = extractIntentTags(message, state, accountId);
             // 地区暂时从消息中简单提取（后续可扩展）
             String regionCode = null;
 
-            if (matchedTags.isEmpty() && regionCode == null) {
+            if (matchedTags.isEmpty()) {
                 return List.of();
             }
 
@@ -1475,5 +1451,61 @@ public class AiRoutePlanningServiceImpl implements AiRoutePlanningService {
             log.warn("KG candidate retrieval failed: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * 从当前消息 + 历史消息 + 规则分类器 + 账号偏好中提取意图标签。
+     * 这是 tag vector 真正进入 AI 规划召回的第一步，替代只认完整标签名的 contains。
+     */
+    private List<String> extractIntentTags(String message, RouteConstraintState state, Long accountId) {
+        Set<String> tags = new LinkedHashSet<>();
+        addExactTags(tags, message);
+        if (state != null && state.getUserMessages() != null) {
+            for (String history : state.getUserMessages()) {
+                addExactTags(tags, history);
+            }
+        }
+        if (studyTourTagClassifier != null && message != null) {
+            Map<String, Double> classified = studyTourTagClassifier.score(message);
+            classified.entrySet().stream()
+                    .filter(entry -> entry.getKey() != null && entry.getValue() != null && entry.getValue() >= 0.4)
+                    .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                    .limit(3)
+                    .forEach(entry -> tags.add(entry.getKey()));
+        }
+        if (accountId != null) {
+            try {
+                List<AccountTagPref> userPrefs = accountTagPrefMapper.selectByAccountId(accountId);
+                if (userPrefs != null) {
+                    for (AccountTagPref pref : userPrefs) {
+                        Tag tag = tagMapper.selectById(pref.getTagId());
+                        if (tag != null && ALLOWED_TAGS.contains(tag.getName())) {
+                            tags.add(tag.getName());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("读取用户偏好标签失败: accountId={}, {}", accountId, e.getMessage());
+            }
+        }
+        return new ArrayList<>(tags);
+    }
+
+    private void addExactTags(Set<String> tags, String text) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        for (String tag : ALLOWED_TAGS) {
+            if (text.contains(tag)) {
+                tags.add(tag);
+            }
+        }
+    }
+
+    private double[] buildIntentVector(String message, RouteConstraintState state, Long accountId) {
+        if (tagVectorService == null || !tagVectorService.isReady()) {
+            return new double[0];
+        }
+        return tagVectorService.intentVector(extractIntentTags(message, state, accountId));
     }
 }

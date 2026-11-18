@@ -1,6 +1,10 @@
 # 反馈闭环留出实验（合成数据）
 
 > 这是本地实验，不是真实用户数据。实验结束后已清空 `tag_feedback_event`，并把 `attraction_tag.pos/neg` 恢复为 0；本文档保留过程和结果。
+>
+> 反馈 2.0 已把学习层拆到 `attraction_tag_learned`，新的 pairwise 训练工具是
+> `mvn -DskipTests exec:java -Dexec.mainClass="com.viyangle.study_tour.utils.TagPairwiseTrainer"`。
+> 本文档记录的是 1.0 全局更新语义下的历史实验，不能直接代表 2.0 的效果。
 
 ## 协议
 

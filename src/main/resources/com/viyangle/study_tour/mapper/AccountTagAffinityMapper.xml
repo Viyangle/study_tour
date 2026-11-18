@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.viyangle.study_tour.mapper.AccountTagAffinityMapper">
+
+    <select id="selectByAccountId" resultType="com.viyangle.study_tour.pojo.AccountTagAffinity">
+        select account_id, tag_id, affinity, updated_at
+        from account_tag_affinity
+        where account_id = #{accountId}
+    </select>
+
+    <insert id="upsert">
+        insert into account_tag_affinity(account_id, tag_id, affinity)
+        values (#{accountId}, #{tagId}, #{affinity})
+        on duplicate key update
+            affinity = values(affinity),
+            updated_at = now()
+    </insert>
+
+</mapper>

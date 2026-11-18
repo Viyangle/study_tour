@@ -10,6 +10,7 @@ import com.viyangle.study_tour.pojo.Project;
 import com.viyangle.study_tour.pojo.RouteAttraction;
 import com.viyangle.study_tour.pojo.TagDimension;
 import com.viyangle.study_tour.pojo.TagFeedbackEvent;
+import com.viyangle.study_tour.service.TagLearnedService;
 import com.viyangle.study_tour.service.TagVectorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +29,8 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,6 +46,7 @@ class TagFeedbackProcessorTest {
     @Mock private ProjectMapper projectMapper;
     @Mock private AccountTagPrefMapper accountTagPrefMapper;
     @Mock private TagVectorService tagVectorService;
+    @Mock private TagLearnedService tagLearnedService;
 
     @InjectMocks
     private TagFeedbackProcessor processor;
@@ -52,11 +56,15 @@ class TagFeedbackProcessorTest {
         ReflectionTestUtils.setField(processor, "enabled", true);
         ReflectionTestUtils.setField(processor, "applyEnabled", true);
         ReflectionTestUtils.setField(processor, "batchSize", 100);
+        ReflectionTestUtils.setField(processor, "learnedWriteEnabled", false);
         when(tagVectorService.isReady()).thenReturn(true);
         when(tagVectorService.dimensions()).thenReturn(dimensions());
         when(tagVectorService.vector("p1")).thenReturn(vector(1.0));
         when(tagVectorService.vector("p2")).thenReturn(vector(0.5));
+        when(tagVectorService.priorVector("p1")).thenReturn(vector(1.0));
+        when(tagVectorService.priorVector("p2")).thenReturn(vector(0.5));
         when(accountTagPrefMapper.selectByAccountId(1L)).thenReturn(List.of());
+        when(feedbackEventMapper.markApplied(any())).thenReturn(1);
         when(feedbackEventMapper.sumAppliedWeightByAccountAndPoiSince(eq(1L), eq("p1"), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(0.0);
     }
@@ -127,6 +135,19 @@ class TagFeedbackProcessorTest {
         verify(attractionTagMapper).upsertEvidence("p1", 1L, 0.6, 0.0);
         verify(feedbackEventMapper).markApplied(1L);
         verify(tagVectorService).reload();
+    }
+
+    @Test
+    @DisplayName("过程淘汰/展示未选只标 APPLIED，不写负证据")
+    void implicitNegativeOnlyFeedsPairwise() {
+        pending(event(1L, "ROUTE_STOP_REJECT", "p1", -0.2));
+
+        processor.processPending();
+
+        verify(feedbackEventMapper).markApplied(1L);
+        verify(attractionTagMapper, never())
+                .upsertEvidence(eq("p1"), anyLong(), anyDouble(), anyDouble());
+        verify(tagLearnedService, never()).applyEvidence(any(), anyMap(), any());
     }
 
     @Test
@@ -250,6 +271,22 @@ class TagFeedbackProcessorTest {
 
         verify(feedbackEventMapper).markIgnored(1L, "failed: boom");
         verify(feedbackEventMapper, never()).markApplied(1L);
+    }
+
+    @Test
+    @DisplayName("学习层开启时写 attraction_tag_learned，不再写旧 pos/neg")
+    void writesLearnedLayerWhenEnabled() {
+        ReflectionTestUtils.setField(processor, "learnedWriteEnabled", true);
+        TagFeedbackEvent event = event(1L, "ROUTE_STOP_ADD", "p1", 0.6);
+        event.setAccountId(1L);
+        pending(event);
+
+        processor.processPending();
+
+        verify(tagLearnedService).applyEvidence(eq("p1"), anyMap(), any());
+        verify(tagLearnedService).touchUsers(eq("p1"), any(), eq(1L), any());
+        verify(attractionTagMapper, never())
+                .upsertEvidence(eq("p1"), anyLong(), anyDouble(), anyDouble());
     }
 
     @Test

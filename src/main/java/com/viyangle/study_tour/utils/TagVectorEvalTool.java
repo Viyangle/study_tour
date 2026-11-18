@@ -111,7 +111,8 @@ public final class TagVectorEvalTool {
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
-                result.put(rs.getString("name"), rs.getInt("ordinal") - 1);
+                // 用排序后的位置做下标，避免中间禁用维度造成 ordinal 空洞后错位。
+                result.put(rs.getString("name"), result.size());
             }
         }
         return result;
@@ -122,7 +123,8 @@ public final class TagVectorEvalTool {
                                            int dimension,
                                            Map<String, double[]> vectors,
                                            Map<String, Set<String>> tagNames) throws Exception {
-        String sql = "select at.poi_id, t.name, at.effective_weight "
+        // 反馈 2.0 后，反馈证据在 attraction_tag_learned；这里评估的是语义先验向量本身。
+        String sql = "select at.poi_id, t.name, at.prior_weight "
                 + "from attraction_tag at join tags t on t.id = at.tag_id";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
@@ -132,7 +134,7 @@ public final class TagVectorEvalTool {
                     continue;
                 }
                 String poiId = rs.getString("poi_id");
-                double weight = Math.max(0.0, Math.min(1.0, rs.getDouble("effective_weight")));
+                double weight = Math.max(0.0, Math.min(1.0, rs.getDouble("prior_weight")));
                 vectors.computeIfAbsent(poiId, key -> new double[dimension])[ordinal] = weight;
                 tagNames.computeIfAbsent(poiId, key -> new LinkedHashSet<>()).add(rs.getString("name"));
             }

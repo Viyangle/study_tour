@@ -6,6 +6,7 @@ import com.viyangle.study_tour.service.TagVectorService;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -70,6 +71,13 @@ public class KnowledgeGraph {
     /** 向量 PPR：同标签边的最低相似度与每个节点的邻居上限。 */
     private static final double MIN_VECTOR_EDGE_SIMILARITY = 0.2;
     private static final int VECTOR_NEIGHBOR_LIMIT = 8;
+
+    /** 向量模式下图谱只收「强语义标签」；反馈证据属于排序信号，不应变成硬标签边。 */
+    @Value("${app.tag-vector.enabled:false}")
+    private boolean tagVectorEnabled = false;
+
+    @Value("${app.tag-vector.min-graph-weight:0.5}")
+    private double minGraphWeight = 0.5;
 
     // ========== 节点存储 ==========
     private final Map<String, Attraction> attractions = new ConcurrentHashMap<>();           // poiId → Attraction
@@ -580,6 +588,12 @@ public class KnowledgeGraph {
         if (list != null) {
             for (AttractionTag at : list) {
                 if (at == null || at.getPoiId() == null || at.getTagId() == null) continue;
+                // 反馈行只参与 TagVectorService 打分，不进入 PPR/旧召回/MMR 的标签边。
+                if ("FEEDBACK".equalsIgnoreCase(at.getSource())) continue;
+                if (tagVectorEnabled) {
+                    Double effective = at.getEffectiveWeight();
+                    if (effective == null || effective < minGraphWeight) continue;
+                }
                 Tag tag = tags.get(at.getTagId());
                 if (tag == null) continue;
                 String tagName = tag.getName();

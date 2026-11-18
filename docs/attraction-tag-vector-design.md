@@ -1,6 +1,7 @@
 # 景点标签向量化与反馈闭环方案
 
 > 更新时间：2026-10-29　适用版本：`0.0.5`（拟）　状态：第一版已实现（向量只读 + 匹配打分 + 查询接口）
+> 2026-11 补充：反馈部分的 2.0 方案（先验/学习层/会话偏好分离）见 [tag-feedback-v2-design.md](./tag-feedback-v2-design.md)。
 > 关联代码：`graph/KnowledgeGraph`、`rag/`、`service/impl/KnowledgeGraphRecommendServiceImpl`、`service/impl/AiRoutePlanningServiceImpl`、`db/migration/`
 
 ## 0. 结论摘要
@@ -1009,7 +1010,7 @@ MVP = P0–P3，约 15 人日（后端 11.5、前端 1、数据 2）；完整方
 | 打分接入 | `KnowledgeGraphRecommendServiceImpl.retrieveCandidatesByGraph`：`+50·Σ q_i s_i`，由 `app.tag-vector.enabled` 控制；关闭时逐字节保持旧逻辑 |
 | 离线评估 | `TagVectorEvalTool` + `TagVectorMetrics`：用历史路线站点做 relevance，输出 Recall@10 / NDCG@10 对比 CSV 到 `eval_out/` |
 | 配置 | `app.tag-vector.enabled=true`（application.yaml；代码回退默认 false）；自动打分、反馈相关见 §8.6 |
-| 测试 | 343 个用例通过，JaCoCo 行 46.9% / 分支 39.1%，门禁通过；`FlywayMigrationTest` 在空库与存量库均通过 |
+| 测试 | 424 个用例通过，JaCoCo 行 50% / 分支 41%，门禁通过；`FlywayMigrationTest` 在空库与存量库均通过 |
 
 本地端到端验证（MySQL 8，62 个景点、167 条边）：`/tags/interests` 返回 15 维；自动打分先用规则把 50 个 ACTIVE 景点重算为 `RULE`，再用真实模型跑 LLM 分级，50/50 成功，最终 `attraction_tag` 为 188 条 `LLM_V2`（仅保留 ≥0.4 的维度）+ 37 条 `MANUAL`（12 个 `STALE` 景点）；`/attractions/B00190513A` 返回分级后的 `tagVector`，列表接口不返回该字段。另插入临时景点验证单景点自动打分，再用临时景点验证反馈：`TAG_CORRECTION` 写入 `pos=2`、`effective=0.4`，重复键被幂等拦截。多标签路线用一条临时 manual 路线（国防园 + 科技馆）验证：`route_tag_weight` 写入 6 个维度，历史人文 0.82、科技探索 0.78、红色教育 0.34，`routes.tag` 回写为「历史人文」，`GET /routes/{id}/tags` 同步返回；测试数据均已删除。
 

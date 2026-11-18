@@ -15,11 +15,17 @@ public interface TagFeedbackEventMapper {
 
     List<TagFeedbackEvent> selectPending(@Param("limit") int limit);
 
+    /** 事务内锁定单条事件，保证多实例不会重复应用。 */
+    TagFeedbackEvent selectByIdForUpdate(@Param("id") Long id);
+
     int markApplied(@Param("id") Long id);
 
     int markIgnored(@Param("id") Long id, @Param("note") String note);
 
     int incrementAttempts(@Param("id") Long id);
+
+    /** 把超过保留期的 PENDING 事件标为 IGNORED，避免关闭 apply 后集中重放。 */
+    int markExpiredPendingIgnored(@Param("cutoff") LocalDateTime cutoff);
 
     /** 单账号单景点近 N 天已应用的正负证据绝对值之和，用于单用户上限。 */
     double sumAppliedWeightByAccountAndPoiSince(@Param("accountId") Long accountId,

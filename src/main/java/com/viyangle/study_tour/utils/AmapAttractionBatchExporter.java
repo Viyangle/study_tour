@@ -146,8 +146,15 @@ public class AmapAttractionBatchExporter {
         }
 
         int dbSynced = 0;
+        int guidesSynced = 0;
         if (config.syncDb) {
             dbSynced = upsertAttractions(config, mergedPois);
+            try {
+                guidesSynced = AttractionGuideBackfillTool.run(
+                        config.dbUrl, config.dbUser, config.dbPassword, mergedPois.size(), false);
+            } catch (Exception e) {
+                System.err.printf("Guide sync after attraction import failed: %s%n", e.getMessage());
+            }
         }
 
         if (config.writeSummary) {
@@ -155,8 +162,9 @@ public class AmapAttractionBatchExporter {
                     detailUpdated, dbSynced, mergedFile, importSqlFile);
         }
 
-        System.out.printf("完成: pages=%d, totalCount=%d, uniquePois=%d, detailUpdated=%d, dbSynced=%d, mergedFile=%s, importSql=%s%n",
-                fetchedPages, totalCount, mergedPois.size(), detailUpdated, dbSynced,
+        System.out.printf("完成: pages=%d, totalCount=%d, uniquePois=%d, detailUpdated=%d, dbSynced=%d, "
+                        + "guidesSynced=%d, mergedFile=%s, importSql=%s%n",
+                fetchedPages, totalCount, mergedPois.size(), detailUpdated, dbSynced, guidesSynced,
                 mergedFile == null ? "(disabled)" : mergedFile.toAbsolutePath(),
                 importSqlFile == null ? "(disabled)" : importSqlFile.toAbsolutePath());
     }

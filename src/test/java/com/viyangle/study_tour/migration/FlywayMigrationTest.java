@@ -64,7 +64,7 @@ class FlywayMigrationTest {
     }
 
     @Test
-    @DisplayName("空库：执行 V1–V5，角色枚举、放弃记录、标签向量与路线向量表存在")
+    @DisplayName("空库：执行 V1–V8，角色枚举、放弃记录、标签向量、学习层与研学讲解表存在")
     void migratesEmptySchemaToLatest() throws Exception {
         recreateSchema();
         try {
@@ -77,22 +77,32 @@ class FlywayMigrationTest {
 
             MigrateResult result = flyway.migrate();
 
-            assertEquals(5, result.migrationsExecuted, "空库应执行 V1–V5");
-            assertEquals(24, countTables(), "基线 20 张业务表 + V4 的 3 张 + V5 的 1 张");
+            assertEquals(8, result.migrationsExecuted, "空库应执行 V1–V8");
+            assertEquals(30, countTables(), "基线 20 张业务表 + V4 的 3 张 + V5 的 1 张 + V6 的 5 张 + V7 的 1 张");
             assertTrue(roleColumnType().contains("ADMIN"), roleColumnType());
             assertTrue(tableExists("project_abandon_records"), "放弃带队审计表应存在");
             assertTrue(tableExists("tag_dimension"), "标签维度表应存在");
             assertTrue(tableExists("tag_feedback_event"), "反馈事件表应存在");
             assertTrue(tableExists("route_tag_weight"), "路线标签向量表应存在");
+            assertTrue(tableExists("attraction_tag_learned"), "学习层表应存在");
+            assertTrue(tableExists("tag_impression"), "曝光表应存在");
+            assertTrue(tableExists("tag_ranking_model"), "排序模型表应存在");
+            assertTrue(tableExists("account_tag_affinity"), "用户偏好表应存在");
+            assertTrue(tableExists("attraction_guides"), "景点研学讲解表应存在");
+            assertTrue(hasColumn("attraction_guides", "source_url"), "研学讲解应保留资料来源链接");
+            assertTrue(hasColumn("attraction_guides", "source_revision"), "研学讲解应保存来源版本");
+            assertTrue(hasColumn("attraction_guides", "auto_update"), "研学讲解应支持人工退出自动更新");
             assertTrue(hasColumn("attraction_tag", "effective_weight"),
                     "attraction_tag 应有生成列 effective_weight");
+            assertTrue(hasColumn("tag_feedback_event", "source"),
+                    "tag_feedback_event 应有 source 列");
         } finally {
             dropSchema();
         }
     }
 
     @Test
-    @DisplayName("存量库：baseline-on-migrate 跳过 V1，仅执行 V2–V5，并补出向量表")
+    @DisplayName("存量库：baseline-on-migrate 跳过 V1，仅执行 V2–V8，并补出向量/学习层/研学讲解表")
     void baselinesExistingSchemaAndAppliesIncrement() throws Exception {
         recreateSchema();
         try {
@@ -121,6 +131,11 @@ class FlywayMigrationTest {
                         + "PRIMARY KEY (id),"
                         + "UNIQUE KEY name (name)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                statement.execute("CREATE TABLE attractions ("
+                        + "poi_id VARCHAR(32) NOT NULL,"
+                        + "name VARCHAR(128) NOT NULL,"
+                        + "PRIMARY KEY (poi_id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
                 statement.execute("CREATE TABLE attraction_tag ("
                         + "poi_id VARCHAR(32) NOT NULL,"
                         + "tag_id BIGINT NOT NULL,"
@@ -139,7 +154,7 @@ class FlywayMigrationTest {
 
             MigrateResult result = flyway.migrate();
 
-            assertEquals(4, result.migrationsExecuted, "存量库只应执行 V2–V5");
+            assertEquals(7, result.migrationsExecuted, "存量库只应执行 V2–V8");
             assertTrue(roleColumnType().contains("ADMIN"), roleColumnType());
             assertTrue(tableExists("project_abandon_records"),
                     "存量库跳过 V1 后，V3 必须补出放弃带队审计表");
@@ -147,6 +162,14 @@ class FlywayMigrationTest {
                     "存量库跳过 V1 后，V4 必须补出标签维度表");
             assertTrue(tableExists("route_tag_weight"),
                     "存量库跳过 V1 后，V5 必须补出路线标签向量表");
+            assertTrue(tableExists("attraction_tag_learned"),
+                    "存量库跳过 V1 后，V6 必须补出学习层表");
+            assertTrue(tableExists("tag_impression"),
+                    "存量库跳过 V1 后，V6 必须补出曝光表");
+            assertTrue(tableExists("attraction_guides"),
+                    "存量库跳过 V1 后，V7 必须补出景点研学讲解表");
+            assertTrue(hasColumn("attraction_guides", "sync_status"),
+                    "存量库跳过 V1 后，V8 必须补出同步元数据");
             assertTrue(hasColumn("attraction_tag", "effective_weight"),
                     "存量库的 attraction_tag 应补上 effective_weight");
         } finally {

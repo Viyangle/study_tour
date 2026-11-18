@@ -1,13 +1,13 @@
 # 数据库设计说明
 
-> 更新时间：2026-10-26　适用版本：`0.0.3`　以 `scripts/full_schema.sql` 为准。
+> 更新时间：2026-11-18　适用版本：`0.0.4`　以 `src/main/resources/db/migration` 为准。
 
 ## 1. 概况
 
 - 数据库：MySQL 8，InnoDB，`utf8mb4` / `utf8mb4_0900_ai_ci`。
-- 规模：24 张表（V4 新增 `tag_dimension`、`tag_feedback_event`、`attraction_tag_vector_history`，V5 新增 `route_tag_weight`），主键以自增 `bigint` 为主，景点相关表用高德 `poi_id`（`varchar(32)`）作主键。
+- 规模：30 张表（V4 新增 `tag_dimension`、`tag_feedback_event`、`attraction_tag_vector_history`，V5 新增 `route_tag_weight`，V6 新增 `attraction_tag_learned`、`attraction_tag_learned_account`、`tag_impression`、`tag_ranking_model`、`account_tag_affinity`，V7 新增 `attraction_guides`），主键以自增 `bigint` 为主，景点相关表用高德 `poi_id`（`varchar(32)`）作主键。
 - 设计取向：核心业务（账号、项目、路线、评价）保持强约束与级联；推荐与知识图谱相关的表（`attraction_tag`、`attraction_adjacency`、`reference_pairs`）以「可批量重建」为目标，允许由脚本重新灌入。
-- 完整的建库/示例数据脚本是 `scripts/full_schema.sql`（由 mysqldump 导出，包含演示数据）；存量库使用 `scripts/` 下的增量脚本，见第 5 节。
+- 新环境建库与存量库升级统一使用 Flyway；`scripts/full_schema.sql` 是包含演示数据的历史快照，不再随新表变更，见第 5 节。
 
 ## 2. ER 图
 
@@ -18,6 +18,7 @@ erDiagram
     TAGS ||--o{ ACCOUNT_TAG_PREFS : "被偏好"
     TAGS ||--o{ ATTRACTION_TAG : "标注"
     ATTRACTIONS ||--o{ ATTRACTION_TAG : "拥有标签"
+    ATTRACTIONS ||--o| ATTRACTION_GUIDES : "研学讲解"
     ATTRACTIONS ||--o{ ATTRACTION_ADJACENCY : "起点"
     ATTRACTIONS ||--o{ ROUTE_ATTRACTIONS : "被收录"
     ROUTES ||--o{ ROUTE_ATTRACTIONS : "包含节点"
@@ -71,6 +72,14 @@ erDiagram
         varchar location
         varchar status
     }
+    ATTRACTION_GUIDES {
+        varchar poi_id PK
+        varchar summary
+        json study_points
+        json questions
+        varchar status
+        varchar source_url
+    }
     TAGS {
         bigint id PK
         varchar name UK
@@ -98,6 +107,7 @@ erDiagram
 | `account_tag_prefs` | 用户标签偏好 | 用户兴趣画像，推荐与 AI 规划的用户上下文 | 联合主键 `(account_id, tag_id)` |
 | `region` | 行政区划 | 省/市/区三级 `adcode`，支持虚拟节点 | 主键 `adcode`；`parent_adcode` 自关联 |
 | `attractions` | 景点 | 高德 POI 字段 + 业务字段（`status` 标记失效景点） | 主键 `poi_id`；`uk_attractions_poi_id` |
+| `attraction_guides` | 景点研学讲解 | 自动/人工整理的简介、详细讲解、研学知识点、思考题、参观建议、媒体地址与来源快照；单景点同步、批量入库后回填和定时任务会刷新，查询接口只返回 `PUBLISHED` | 与景点 1:1；主键/外键 `poi_id`，级联删除；`study_points/questions` 为 JSON 字符串数组；`auto_update=0` 时退出自动更新 |
 | `attraction_tag` | 景点-标签 | 知识图谱「景点→标签」带权边：`prior_weight`/`prior_strength` 是先验，`pos_count`/`neg_count` 是反馈证据，`effective_weight` 是后验（0~1）；`source` 为 `MANUAL/LLM/LLM_V2/RULE` | 联合主键 `(poi_id, tag_id)`；`idx_attraction_tag_weight(tag_id, effective_weight)` |
 | `attraction_adjacency` | 景点相邻 | 地理邻近（`GEOGRAPHIC`）与语义相似（`THEMATIC`）两类边，带通勤时间与距离 | 联合主键 `(from_poi_id, to_poi_id, relation_type)` |
 | `reference_pairs` | 参考景点对 | 按标签/地区沉淀的「可串联景点对」及说明，供路线生成参考 | 主键 `id`；`poi_id` 不作强外键，可批量重建 |
@@ -113,7 +123,12 @@ erDiagram
 | `chat_group_members` | 群成员 | 群内角色 `USER/LEADER/SYSTEM`，记录加入/离开时间 | 联合主键 `(session_id, account_id)` |
 | `chat_messages` | 群消息 | 文本/图片/系统消息 | 外键指向 `chat_sessions`、`accounts` |
 | `tag_dimension` | 标签向量维度 | 15 个 `INTEREST` 标签的稳定编码、顺序与版本 | 联合主键 `(dim_version, ordinal)`；`code` 唯一；外键指向 `tags` |
-| `tag_feedback_event` | 标签反馈事件 | 收藏/发布/加入/退出/评价等行为事件，append-only | 主键 `id`；`idempotency_key` 唯一；外键指向 `accounts`（`SET NULL`） |
+| `tag_feedback_event` | 标签反馈事件 | 客户端/服务端反馈事件，append-only；含 `source/dim_version/scene/position` | 主键 `id`；`idempotency_key` 唯一；外键指向 `accounts`（`SET NULL`） |
+| `attraction_tag_learned` | 标签全局学习层 | 每个 `(poi, tag)` 的 `pos/neg/distinct_users`，与语义先验分离 | 联合主键 `(poi_id, tag_id)` |
+| `attraction_tag_learned_account` | 学习层用户贡献 | 记录哪些用户贡献过证据，用于计算 `distinct_users` | 联合主键 `(poi_id, tag_id, account_id)` |
+| `tag_impression` | 候选曝光日志 | 记录展示给用户的景点、场景、位置；用于区分「没选」和「没看到」 | 主键 `id`；按 session/poi/account 查询 |
+| `tag_ranking_model` | pairwise 排序模型 | `coefficients` JSON + intercept，active 模型供 `TagRankingModelService` 加载 | 主键 `model_version`；`idx_ranking_model_active` |
+| `account_tag_affinity` | 用户标签偏好 | 用户长期的标签亲和度，只参与该用户排序 | 联合主键 `(account_id, tag_id)` |
 | `attraction_tag_vector_history` | 标签向量快照 | 重建/人工覆盖/回滚时的 15 维快照 | 主键 `id`；按 `poi_id` 查询 |
 
 ## 4. 关键约束与索引
@@ -136,10 +151,13 @@ erDiagram
 | V3 | `V3__create_project_abandon_records.sql` | 幂等补建 `project_abandon_records`：该表只写进 V1，存量库 baseline 时跳过 V1 会缺表，导致放弃带队 500 |
 | V4 | `V4__attraction_tag_vector.sql` | 景点标签向量化：`tag_dimension`、`attraction_tag` 权重与 `effective_weight` 生成列、反馈事件表、向量快照表 |
 | V5 | `V5__route_tag_vector.sql` | 路线标签向量化：`route_tag_weight(route_id, tag_id, weight)`，支持一条路线同时属于多个主题 |
+| V6 | `V6__feedback_learning_layer.sql` | 反馈 2.0：学习层、学习层用户贡献、曝光日志、pairwise 排序模型、用户标签偏好；`tag_feedback_event` 补来源/维度/场景/位置 |
+| V7 | `V7__create_attraction_guides.sql` | 景点研学讲解内容表，与 `attractions` 一一对应，保存资料来源与发布状态 |
+| V8 | `V8__attraction_guides_auto_sync.sql` | 讲解自动同步元数据：来源类型/正文/修订号/许可证/署名、内容哈希、同步状态与降级原因、自动更新开关、同步时间 |
 
 启动行为（`spring.flyway.*`）：
 
-- `baseline-on-migrate=true`、`baseline-version=1`：**已有结构的库**首次启动时把 V1 记为已执行，只执行 V2 及之后的增量；**空库**会执行 V1 建表，再执行 V2–V5。
+- `baseline-on-migrate=true`、`baseline-version=1`：**已有结构的库**首次启动时把 V1 记为已执行，只执行 V2 及之后的增量；**空库**会执行 V1 建表，再执行 V2–V8。
 - ⚠️ 由此产生一个陷阱：**只在 V1 里新增的表/字段不会出现在存量库**（V1 被跳过）；表在 `scripts/full_schema.sql` 里有、但存量库没有时，必须再补一条幂等增量（见 V3）。
 - `validate-on-migrate=true`：已执行脚本被修改会导致启动失败，因此不要改历史脚本，变更一律新增版本。
 - `FLYWAY_ENABLED=false` 可临时关闭迁移，仅用于排查问题，不建议在生产使用。
@@ -175,7 +193,7 @@ erDiagram
 
 - **两套建库入口**：`V1__baseline.sql` 与 `scripts/full_schema.sql` 内容同源但用途不同——前者用于版本管理，后者保留演示数据供本地导入。V1 已冻结，新结构变更只新增 `V*.sql`，不要再改 `full_schema.sql`，否则两边会漂移。
 - **`routes.tag` 是 ENUM**：只包含 15 个 `INTEREST` 标签，现在作为 `route_tag_weight` 的 argmax 主标签保留；多标签以 `route_tag_weight` 为准，如果要支持 `ROUTE_STYLE/CROWD/SCENIC` 类标签，仍需要改成 `varchar` 或外键到 `tags`。
-- **`attraction_tag` 自 V4 起是带权边**：`effective_weight` 是生成列（`(κ·p + pos)/(κ + pos + neg)`，0~1），改先验/证据列会自动更新；软筛可以走 `tag_id + effective_weight` 索引，精确排序仍以 Java 端有效值为准。
+- **`attraction_tag` 自 V4 起是带权边**：`effective_weight` 是生成列（`(κ·p + pos)/(κ + pos + neg)`，0~1），改先验/证据列会自动更新；**反馈 2.0 起反馈证据写在 `attraction_tag_learned`，`attraction_tag.pos/neg` 只保留历史兼容数据**；软筛可以走 `tag_id + effective_weight` 索引，精确排序仍以 Java 端有效值为准。
 - **`full_schema.sql` 含演示数据**：导入后账号、项目、评价都是示例数据，生产环境不要直接使用。
 - **向量索引不在 MySQL**：`Redis Stack` 中的景点向量与 `attractions` 表非强一致，需通过重建索引或增量同步修复，见 README「定期同步与向量索引重建」。
 - 新增/修改表结构时：新增 `db/migrations/V*.sql`，不要修改已执行的版本；本地跑 `FlywayMigrationTest` 验证后，同步本文件的表清单（约定见 [CONTRIBUTING.md](../CONTRIBUTING.md)）。

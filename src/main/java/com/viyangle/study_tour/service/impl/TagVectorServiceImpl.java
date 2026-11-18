@@ -1,14 +1,18 @@
 package com.viyangle.study_tour.service.impl;
 
+import com.viyangle.study_tour.mapper.AttractionTagLearnedMapper;
 import com.viyangle.study_tour.mapper.AttractionTagMapper;
 import com.viyangle.study_tour.mapper.TagDimensionMapper;
 import com.viyangle.study_tour.pojo.AttractionTag;
+import com.viyangle.study_tour.pojo.AttractionTagLearned;
 import com.viyangle.study_tour.pojo.AttractionTagVector;
 import com.viyangle.study_tour.pojo.TagDimension;
 import com.viyangle.study_tour.service.TagVectorService;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -20,20 +24,22 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 标签向量加载与查询实现。
  *
- * <p>权重公式与 docs/attraction-tag-vector-design.md §7.1 对齐：
- * {@code s_i = clamp((κ_i·p_i + pos_i) / (κ_i + pos_i + neg_i), 0, 1)}。
- * 数据库的 {@code effective_weight} 生成列已经算了同一套值，优先直接使用。</p>
+ * <p>反馈 2.0 起向量由两层组成：{@code attraction_tag.prior_weight} 的语义先验，
+ * 以及 {@code attraction_tag_learned} 的全局学习层。服务时按 {@code serve-mode}
+ * 合成：PRIOR_ONLY 只用先验；BLEND/PERSONALIZED 用
+ * {@code s = (1-w)p + w·h}，{@code w = min(maxWeight, distinct_users/(distinct_users+κ))}；
+ * SHADOW 线上仍用先验，但保留 shadow 向量供反事实评估。</p>
  */
 @Slf4j
 @Service
 public class TagVectorServiceImpl implements TagVectorService {
 
     private static final double DEFAULT_PRIOR_WEIGHT = 1.0;
-    private static final double DEFAULT_PRIOR_STRENGTH = 3.0;
     private static final double MIN_VIEW_WEIGHT = 0.05;
 
     @Autowired
@@ -41,6 +47,22 @@ public class TagVectorServiceImpl implements TagVectorService {
 
     @Autowired
     private AttractionTagMapper attractionTagMapper;
+
+    /** V6 之前/单元测试可能没有学习层 Mapper；缺失时按 PRIOR_ONLY 处理。 */
+    @Autowired(required = false)
+    private AttractionTagLearnedMapper learnedMapper;
+
+    @Value("${app.tag-vector.serve-mode:PRIOR_ONLY}")
+    private String serveMode = "PRIOR_ONLY";
+
+    @Value("${app.tag-vector.learned-max-weight:0.3}")
+    private double learnedMaxWeight = 0.3;
+
+    @Value("${app.tag-vector.support-shrink-kappa:5.0}")
+    private double supportShrinkKappa = 5.0;
+
+    @Value("${app.tag-vector.learned-prior-pseudo-count:3.0}")
+    private double learnedPriorPseudoCount = 3.0;
 
     private volatile Snapshot snapshot = Snapshot.empty();
 
@@ -82,20 +104,17 @@ public class TagVectorServiceImpl implements TagVectorService {
 
             Map<Long, Integer> ordinalByTagId = new HashMap<>();
             Map<String, Integer> ordinalByTagName = new HashMap<>();
-            for (TagDimension dimension : current) {
-                int ordinal = dimension.getOrdinal() - 1;
-                if (ordinal < 0 || ordinal >= current.size()) {
-                    log.warn("标签维度 ordinal 越界，已忽略: code={}, ordinal={}", dimension.getCode(), dimension.getOrdinal());
-                    continue;
-                }
+            for (int ordinal = 0; ordinal < current.size(); ordinal++) {
+                TagDimension dimension = current.get(ordinal);
+                // 用「启用维度的排序位置」做下标，而不是 ordinal-1：
+                // 中间禁用一维后 ordinal 会出现空洞，直接用 ordinal 会导致错位/丢维。
                 ordinalByTagId.put(dimension.getTagId(), ordinal);
                 ordinalByTagName.put(dimension.getName(), ordinal);
             }
 
             List<AttractionTag> edges = attractionTagMapper.selectAll();
-            Map<String, double[]> vectors = new HashMap<>();
             Map<String, double[]> priors = new HashMap<>();
-            Map<String, double[]> supports = new HashMap<>();
+            Map<String, double[]> priorEvidence = new HashMap<>();
             Map<String, Integer> vectorVersions = new HashMap<>();
             Map<String, LocalDateTime> updatedAt = new HashMap<>();
 
@@ -108,21 +127,15 @@ public class TagVectorServiceImpl implements TagVectorService {
                     if (ordinal == null) {
                         continue;
                     }
-                    double[] vector = vectors.computeIfAbsent(edge.getPoiId(), k -> new double[current.size()]);
                     double[] prior = priors.computeIfAbsent(edge.getPoiId(), k -> new double[current.size()]);
-                    double[] support = supports.computeIfAbsent(edge.getPoiId(), k -> new double[current.size()]);
+                    double[] evidence = priorEvidence.computeIfAbsent(edge.getPoiId(), k -> new double[current.size()]);
 
                     double priorWeight = valueOrDefault(edge.getPriorWeight(), DEFAULT_PRIOR_WEIGHT);
-                    double priorStrength = valueOrDefault(edge.getPriorStrength(), DEFAULT_PRIOR_STRENGTH);
                     double pos = valueOrDefault(edge.getPosCount(), 0.0);
                     double neg = valueOrDefault(edge.getNegCount(), 0.0);
-                    double weight = edge.getEffectiveWeight() != null
-                            ? edge.getEffectiveWeight()
-                            : heat(priorWeight, priorStrength, pos, neg);
-
-                    vector[ordinal] = Math.max(vector[ordinal], clamp(weight, 0.0, 1.0));
+                    // 语义先验只认 prior_weight；pos/neg 是 V4/V5 的历史证据，仅用于兼容展示。
                     prior[ordinal] = Math.max(prior[ordinal], clamp(priorWeight, 0.0, 1.0));
-                    support[ordinal] = Math.max(support[ordinal], Math.max(0.0, pos + neg));
+                    evidence[ordinal] = Math.max(evidence[ordinal], Math.max(0.0, pos + neg));
 
                     int version = edge.getVectorVersion() == null ? 1 : edge.getVectorVersion();
                     vectorVersions.merge(edge.getPoiId(), version, Math::max);
@@ -132,22 +145,99 @@ public class TagVectorServiceImpl implements TagVectorService {
                 }
             }
 
+            Map<String, double[]> learned = new HashMap<>();
+            Map<String, double[]> learnedSupport = new HashMap<>();
+            if (learnedMapper != null) {
+                try {
+                    List<AttractionTagLearned> learnedRows = learnedMapper.selectAll();
+                    if (learnedRows != null) {
+                        for (AttractionTagLearned row : learnedRows) {
+                            if (row == null || row.getPoiId() == null || row.getTagId() == null) {
+                                continue;
+                            }
+                            Integer ordinal = ordinalByTagId.get(row.getTagId());
+                            if (ordinal == null) {
+                                continue;
+                            }
+                            double[] prior = priors.getOrDefault(row.getPoiId(), new double[current.size()]);
+                            double[] vector = learned.computeIfAbsent(row.getPoiId(), k -> new double[current.size()]);
+                            double[] support = learnedSupport.computeIfAbsent(row.getPoiId(), k -> new double[current.size()]);
+                            double pos = valueOrDefault(row.getPosCount(), 0.0);
+                            double neg = valueOrDefault(row.getNegCount(), 0.0);
+                            double priorWeight = clamp(prior[ordinal], 0.0, 1.0);
+                            double value = (pos + learnedPriorPseudoCount * priorWeight)
+                                    / (pos + neg + learnedPriorPseudoCount);
+                            vector[ordinal] = Math.max(vector[ordinal], clamp(value, 0.0, 1.0));
+                            support[ordinal] = Math.max(support[ordinal],
+                                    row.getDistinctUsers() == null ? 0.0 : Math.max(0, row.getDistinctUsers()));
+                            int learnedVersion = row.getVectorVersion() == null ? 1 : row.getVectorVersion();
+                            vectorVersions.merge(row.getPoiId(), learnedVersion, Math::max);
+                            if (row.getUpdatedAt() != null) {
+                                updatedAt.merge(row.getPoiId(), row.getUpdatedAt(), TagVectorServiceImpl::maxTime);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // V6 尚未执行时仍然要让先验向量可用。
+                    log.warn("学习层加载失败，按 PRIOR_ONLY 处理: {}", e.getMessage());
+                }
+            }
+
+            Set<String> allPoiIds = new java.util.LinkedHashSet<>();
+            allPoiIds.addAll(priors.keySet());
+            allPoiIds.addAll(learned.keySet());
+            Map<String, double[]> serveVectors = new HashMap<>();
+            Map<String, double[]> shadowVectors = new HashMap<>();
+            String mode = normalizeServeMode(serveMode);
+            for (String poiId : allPoiIds) {
+                double[] prior = priors.getOrDefault(poiId, new double[current.size()]);
+                double[] learnedVector = learned.getOrDefault(poiId, new double[current.size()]);
+                double[] support = learnedSupport.getOrDefault(poiId, new double[current.size()]);
+                double[] serve = new double[current.size()];
+                double[] shadow = new double[current.size()];
+                for (int i = 0; i < current.size(); i++) {
+                    double blended = blend(prior[i], learnedVector[i], support[i]);
+                    shadow[i] = blended;
+                    serve[i] = switch (mode) {
+                        case "BLEND", "PERSONALIZED" -> blended;
+                        default -> prior[i];
+                    };
+                }
+                serveVectors.put(poiId, serve);
+                shadowVectors.put(poiId, shadow);
+            }
+
             snapshot = new Snapshot(
                     true,
                     dimVersion,
+                    mode,
                     List.copyOf(current),
                     Collections.unmodifiableMap(ordinalByTagName),
-                    Collections.unmodifiableMap(vectors),
+                    Collections.unmodifiableMap(serveVectors),
+                    Collections.unmodifiableMap(shadowVectors),
                     Collections.unmodifiableMap(priors),
-                    Collections.unmodifiableMap(supports),
+                    Collections.unmodifiableMap(learned),
+                    Collections.unmodifiableMap(learnedSupport),
+                    Collections.unmodifiableMap(priorEvidence),
                     Collections.unmodifiableMap(vectorVersions),
                     Collections.unmodifiableMap(updatedAt));
 
-            log.info("标签向量加载完成: dimVersion={}, 维度={}, 景点={}", dimVersion, current.size(), vectors.size());
+            log.info("标签向量加载完成: dimVersion={}, 维度={}, 景点={}, serveMode={}",
+                    dimVersion, current.size(), allPoiIds.size(), mode);
         } catch (Exception e) {
-            snapshot = Snapshot.empty();
-            log.warn("标签向量加载失败，按未启用处理: {}", e.getMessage());
+            // 保留上一次成功快照：DB 抖动时宁可短暂用旧向量，也不要把整个向量能力清空。
+            log.error("标签向量加载失败，保留上一次快照: {}", e.getMessage(), e);
         }
+    }
+
+    /**
+     * 定时刷新，兜底「事件已提交但进程在 reload 前退出」以及 reload 失败后的自愈。
+     */
+    @Scheduled(
+            fixedDelayString = "${app.tag-vector.refresh-interval-ms:300000}",
+            initialDelayString = "${app.tag-vector.refresh-interval-ms:300000}")
+    public void scheduledReload() {
+        reload();
     }
 
     @Override
@@ -173,6 +263,31 @@ public class TagVectorServiceImpl implements TagVectorService {
             return new double[size];
         }
         return vector.clone();
+    }
+
+    @Override
+    public double[] priorVector(String poiId) {
+        return copy(snapshot.priors().get(poiId), snapshot.dimensions().size());
+    }
+
+    @Override
+    public double[] learnedVector(String poiId) {
+        return copy(snapshot.learned().get(poiId), snapshot.dimensions().size());
+    }
+
+    @Override
+    public double[] shadowVector(String poiId) {
+        return copy(snapshot.shadowVectors().get(poiId), snapshot.dimensions().size());
+    }
+
+    @Override
+    public String serveMode() {
+        return snapshot.serveMode();
+    }
+
+    @Override
+    public double[] learnedSupport(String poiId) {
+        return copy(snapshot.learnedSupport().get(poiId), snapshot.dimensions().size());
     }
 
     @Override
@@ -267,7 +382,8 @@ public class TagVectorServiceImpl implements TagVectorService {
         List<TagDimension> dimensions = snapshot.dimensions();
         int size = dimensions.size();
         double[] prior = snapshot.priors().getOrDefault(poiId, new double[size]);
-        double[] support = snapshot.supports().getOrDefault(poiId, new double[size]);
+        double[] learned = snapshot.learned().getOrDefault(poiId, new double[size]);
+        double[] support = snapshot.learnedSupport().getOrDefault(poiId, new double[size]);
 
         double total = 0.0;
         for (double value : vector) {
@@ -295,6 +411,7 @@ public class TagVectorServiceImpl implements TagVectorService {
                         dimension.getName(),
                         round(weight),
                         round(clamp(i < prior.length ? prior[i] : 0.0, 0.0, 1.0)),
+                        round(clamp(i < learned.length ? learned[i] : 0.0, 0.0, 1.0)),
                         round(Math.max(0.0, i < support.length ? support[i] : 0.0))));
             }
         }
@@ -319,12 +436,33 @@ public class TagVectorServiceImpl implements TagVectorService {
                 dims);
     }
 
-    private static double heat(double prior, double kappa, double pos, double neg) {
-        double denominator = kappa + pos + neg;
-        if (denominator <= 0.0) {
+    private double blend(double prior, double learned, double support) {
+        if (support <= 0.0) {
             return clamp(prior, 0.0, 1.0);
         }
-        return clamp((kappa * prior + pos) / denominator, 0.0, 1.0);
+        double weight = support / (support + Math.max(0.0, supportShrinkKappa));
+        weight = Math.min(Math.max(0.0, learnedMaxWeight), weight);
+        return clamp((1.0 - weight) * prior + weight * learned, 0.0, 1.0);
+    }
+
+    private static String normalizeServeMode(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return "PRIOR_ONLY";
+        }
+        String normalized = mode.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "SHADOW", "BLEND", "PERSONALIZED", "PRIOR_ONLY" -> normalized;
+            default -> "PRIOR_ONLY";
+        };
+    }
+
+    private static double[] copy(double[] source, int size) {
+        if (source == null || size <= 0) {
+            return new double[Math.max(0, size)];
+        }
+        double[] target = new double[size];
+        System.arraycopy(source, 0, target, 0, Math.min(size, source.length));
+        return target;
     }
 
     private static double valueOrDefault(Double value, double fallback) {
@@ -347,16 +485,21 @@ public class TagVectorServiceImpl implements TagVectorService {
     private record Snapshot(
             boolean ready,
             int dimVersion,
+            String serveMode,
             List<TagDimension> dimensions,
             Map<String, Integer> ordinalByTagName,
             Map<String, double[]> vectors,
+            Map<String, double[]> shadowVectors,
             Map<String, double[]> priors,
-            Map<String, double[]> supports,
+            Map<String, double[]> learned,
+            Map<String, double[]> learnedSupport,
+            Map<String, double[]> priorEvidence,
             Map<String, Integer> vectorVersions,
             Map<String, LocalDateTime> updatedAt) {
 
         private static Snapshot empty() {
-            return new Snapshot(false, 0, List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+            return new Snapshot(false, 0, "PRIOR_ONLY", List.of(), Map.of(),
+                    Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
         }
     }
 }
